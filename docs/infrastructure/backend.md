@@ -49,11 +49,78 @@ The zkCoins backend is a Rust/Axum REST API server that manages account state, g
 | `/api/balance` | GET | Query account balance |
 | `/api/proof/:id` | GET | Download a coin proof (binary) |
 
+## Bitcoin Node Requirement
+
+:::warning Bitcoin node required
+The zkCoins server **requires a Bitcoin node** to operate. The server continuously scans the blockchain for Taproot Inscriptions containing nullifiers. Without a node, no transactions can be verified or published.
+:::
+
+### What the server needs from the node
+
+- **RPC access** — to query blocks, transactions, and broadcast inscriptions
+- **`txindex=1`** — full transaction indexing must be enabled
+- **`rest=1`** — REST API for health checks and block queries
+- **`server=1`** — RPC server must be active
+
+### Node options
+
+| Option | Use case | Setup |
+|---|---|---|
+| **Local Bitcoin Core** (recommended) | Production, self-hosting | Run `bitcoind` with `txindex=1`, expose RPC on port 8332 |
+| **Docker Bitcoin Core** | Containerized deployment | Use `lightninglabs/bitcoin-core` image in shared Docker network |
+| **Public Esplora API** | Development, quick start | Point to `https://mutinynet.com/api` or `https://mempool.space/api` |
+
+### Docker setup (recommended for production)
+
+The server connects to the Bitcoin node via a shared Docker network. Both containers join the same network, and the server reaches the node by hostname:
+
+```
+┌──────────────────────────────────────┐
+│         Docker Network: bitcoin      │
+│                                      │
+│  ┌──────────────┐  ┌─────────────┐  │
+│  │ bitcoind     │  │ zkcoins     │  │
+│  │ Port 8332    │◀─│ server      │  │
+│  │ txindex=1    │  │ Port 4242   │  │
+│  └──────────────┘  └─────────────┘  │
+└──────────────────────────────────────┘
+```
+
+The server connects to `http://bitcoind:8332/` within the Docker network — no port forwarding needed.
+
+### Bitcoin Core configuration
+
+Minimum `bitcoin.conf` for zkCoins:
+
+```ini
+server=1
+rest=1
+txindex=1
+rpcallowip=0.0.0.0/0
+rpcbind=0.0.0.0
+rpcport=8332
+rpcuser=<your-rpc-user>
+rpcpassword=<your-rpc-password>
+```
+
+### Network choice
+
+| Network | Port | Data size | Use case |
+|---|---|---|---|
+| **Mainnet** | 8332 | ~850+ GB | Production |
+| **Testnet4** | 18443 | ~14 GB | Integration testing |
+| **Signet** | 38332 | ~83 MB | Fast development |
+
+For development, **Signet** is recommended — it's small, fast to sync, and has predictable block times.
+
 ## Running locally
 
 ```bash
-cd rust
-SP1_PROVER=mock cargo run -p server
+# Start the server (requires Bitcoin node access)
+SP1_PROVER=mock \
+ESPLORA_URL=http://localhost:8332 \
+RUST_LOG=info \
+cargo run -p server
 ```
 
 The server starts on `http://127.0.0.1:4242`.
@@ -64,6 +131,8 @@ The server starts on `http://127.0.0.1:4242`.
 |---|---|---|
 | `SP1_PROVER` | `mock` | Prover mode: `mock` (dummy proofs) or `local` (real proofs) |
 | `ESPLORA_URL` | `https://mutinynet.com/api` | Bitcoin node API endpoint |
+| `BITCOIN_RPC_USER` | — | Bitcoin Core RPC username |
+| `BITCOIN_RPC_PASSWORD` | — | Bitcoin Core RPC password |
 | `PUBLISHER_KEY` | Hardcoded | Private key for inscription publishing |
 | `RUST_LOG` | `info` | Log level |
 
@@ -111,14 +180,39 @@ Thread-safe shared state (`Arc<Mutex<State>>`):
 
 ## Self-hosting
 
+### Prerequisites
+
+1. **Bitcoin Core node** with `txindex=1` and `rest=1` (see above)
+2. **Rust 1.81+** toolchain
+3. ~2 GB RAM for the server + SP1 prover
+
+### From source
+
 ```bash
-# Build the server
-cd rust
+# Build
 cargo build --release -p server
 
-# Run with real Bitcoin testnet
+# Run (connect to local Bitcoin node)
 SP1_PROVER=mock \
-ESPLORA_URL=https://mutinynet.com/api \
+ESPLORA_URL=http://localhost:8332 \
+BITCOIN_RPC_USER=myuser \
+BITCOIN_RPC_PASSWORD=mypassword \
 RUST_LOG=info \
 ./target/release/server
 ```
+
+### With Docker
+
+```bash
+# Run server container, join Bitcoin node's Docker network
+docker run -p 4242:4242 \
+  --network bitcoin \
+  -e SP1_PROVER=mock \
+  -e ESPLORA_URL=http://bitcoind:8332 \
+  -e BITCOIN_RPC_USER=myuser \
+  -e BITCOIN_RPC_PASSWORD=mypassword \
+  -v server-data:/data \
+  zkcoins-server:latest
+```
+
+The `--network bitcoin` flag connects the server to the same Docker network as the Bitcoin node, allowing access via hostname `bitcoind`.
