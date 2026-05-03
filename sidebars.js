@@ -11,6 +11,7 @@ const sidebars = {
         'architecture/nullifier-design',
         'architecture/transaction-flow',
         'architecture/key-management',
+        'architecture/signup-flow',
         'architecture/proof-system',
       ],
     },
