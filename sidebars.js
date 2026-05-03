@@ -24,6 +24,17 @@ const sidebars = {
     },
     'comparisons',
     'tech-decisions',
+    {
+      type: 'category',
+      label: 'Research',
+      items: [
+        'research/index',
+        'research/protocol-analysis',
+        'research/authors',
+        'research/community',
+        'research/sources',
+      ],
+    },
     'risks',
   ],
 };
