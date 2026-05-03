@@ -183,10 +183,10 @@ Every technology choice has trade-offs. This page documents what we chose, why, 
 
 **Why:**
 - **No public IP needed** — servers are LAN-only, Cloudflare Tunnel provides secure ingress
-- **Existing infrastructure** — dfxdev and dfxprd already run 20+ containers for DFX projects
-- **ARM64 native** — Apple Silicon Mac Studios, no emulation overhead
-- **Consistent with all DFX projects** — same deploy pattern, same Traefik setup, same monitoring
-- **Bitcoin node co-location** — server connects to `bitcoind-mainnet` via shared Docker network, no network latency
+- **Existing infrastructure** — dedicated servers already run 20+ containers
+- **ARM64 native** — Apple Silicon, no emulation overhead
+- **Consistent deploy pattern** — same Traefik setup, same monitoring across all services
+- **Bitcoin node co-location** — server connects to Bitcoin node via shared Docker network, no network latency
 
 **Considered:**
 - **Cloudflare Workers** — serverless, but can't run Rust/Axum natively or maintain state (SMT/MMR)
@@ -209,7 +209,7 @@ Every technology choice has trade-offs. This page documents what we chose, why, 
 **Deploy flow:**
 ```
 Push to develop → GitHub Actions → Docker build (ARM64) → Push zkcoin/app:beta
-                                                        → SSH to dfxdev → deploy.sh zkcoins-app
+                                                        → SSH to DEV server → deploy.sh zkcoins-app
                                                         → docker compose pull + up -d
 ```
 
@@ -217,7 +217,7 @@ Push to develop → GitHub Actions → Docker build (ARM64) → Push zkcoin/app:
 
 ## Monitoring: Uptime Kuma
 
-**Chosen:** Uptime Kuma on dfx01, 6 monitors, 2 status pages
+**Chosen:** Uptime Kuma (self-hosted), 6 monitors, 2 status pages
 
 **Why:**
 - **Already running** — central monitoring for all DFX projects
