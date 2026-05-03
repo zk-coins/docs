@@ -45,7 +45,7 @@ docs/
 | `develop` | Default, active development | Cloudflare Pages preview (dev-docs.zkcoins.app) |
 | `main` | Production | Cloudflare Pages production (docs.zkcoins.app) |
 
-- **Push directly to `develop`**
+- **Push to `develop` via feature branch + PR** (branch ruleset active)
 - **`main` is protected** — changes only via PR
 
 ## Writing Docs
