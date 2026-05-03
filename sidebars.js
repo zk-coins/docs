@@ -11,6 +11,7 @@ const sidebars = {
         'architecture/nullifier-design',
         'architecture/transaction-flow',
         'architecture/key-management',
+        'architecture/signup-flow',
         'architecture/proof-system',
       ],
     },
@@ -22,6 +23,18 @@ const sidebars = {
       items: ['infrastructure/backend', 'infrastructure/deployment'],
     },
     'comparisons',
+    'tech-decisions',
+    {
+      type: 'category',
+      label: 'Research',
+      items: [
+        'research/index',
+        'research/protocol-analysis',
+        'research/authors',
+        'research/community',
+        'research/sources',
+      ],
+    },
     'risks',
   ],
 };
