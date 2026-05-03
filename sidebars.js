@@ -22,6 +22,7 @@ const sidebars = {
       items: ['infrastructure/backend', 'infrastructure/deployment'],
     },
     'comparisons',
+    'tech-decisions',
     'risks',
   ],
 };
