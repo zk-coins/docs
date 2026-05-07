@@ -7,75 +7,100 @@ title: Addressing
 
 zkCoins uses human-readable addresses in the format `user@zkcoins.app` instead of raw cryptographic hashes. The addressing system is designed in three phases, each building on the previous one.
 
-## Current state
+## Phase 1 — Auto-derived address with LNURL-pay endpoint
 
-Today, the wallet displays a raw 32-byte SHA-256 hash as the account address:
+Every account automatically gets a human-readable address derived from its cryptographic identity. No manual registration is needed. The server implements the LNURL-pay endpoint structure (LUD-16) from day one so the format is forward-compatible with Lightning wallets.
 
-```
-Address: a7f3b2c1d4e5f6...28 bytes more...9a0b1c2d
-```
+### Default address
 
-This is unfriendly, error-prone, and impossible to remember. The addressing system replaces this with human-readable identifiers while maintaining full protocol compatibility.
-
-## Phase 1 — Human-readable alias with LNURL-pay endpoint
-
-The primary goal is replacing cryptographic hashes with readable names. Even though Phase 1 does not yet handle Lightning payments, the server already implements the LNURL-pay endpoint structure (LUD-16) so the address format is forward-compatible.
-
-### Address format
+The first 8 hex characters of the account's SHA-256 hash become the address:
 
 ```
-alice@zkcoins.app
+sha256(pubkey_0) = 553c0958e85e016b...
+                   ^^^^^^^^
+                   └── 553c0958@zkcoins.app
 ```
+
+This happens automatically — users see their address immediately after creating a wallet.
+
+### Custom usernames
+
+Users can optionally claim a human-readable username to replace the hash-based default:
+
+```
+553c0958@zkcoins.app  →  alice@zkcoins.app
+```
+
+Claiming requires a Schnorr signature with the account's identity key (pubkey at index 0), proving ownership. Usernames are unique and immutable once claimed. One username per account.
 
 - Lowercase alphanumeric, plus `-`, `_`, `.`
 - Max 64 characters
-- Case-insensitive (normalized to lowercase)
-- Unique per user
 
-### Server endpoint
+### Server endpoints
+
+**Address resolution:**
 
 ```
-GET https://api.zkcoins.app/.well-known/lnurlp/{username}
+GET https://api.zkcoins.app/api/username/resolve/{identifier}
 ```
 
-Phase 1 response (LNURL-pay compatible structure, Lightning not yet functional):
+The server resolves identifiers in two ways:
+1. Custom username lookup (exact match)
+2. Hex prefix lookup against known account addresses (fallback)
+
+Response:
+
+```json
+{
+  "username": "553c0958",
+  "address": "0x553c0958e85e016b131d214b96ce7dc28b0aa89a2d0675c13ef610b86b31312a"
+}
+```
+
+**LNURL-pay discovery (LUD-16 compatible):**
+
+```
+GET https://api.zkcoins.app/.well-known/lnurlp/{identifier}
+```
+
+Response:
 
 ```json
 {
   "tag": "payRequest",
-  "callback": "https://api.zkcoins.app/v1/lnurlp/callback/{username}",
+  "callback": "https://api.zkcoins.app/lnurl/pay/{identifier}",
   "minSendable": 1000,
-  "maxSendable": 100000000,
-  "metadata": "[[\"text/plain\",\"Pay {username} on zkCoins\"],[\"text/identifier\",\"{username}@zkcoins.app\"]]"
+  "maxSendable": 1000000000000,
+  "metadata": "[[\"text/plain\",\"Pay 553c0958 on zkCoins\"],[\"text/identifier\",\"553c0958@zkcoins.app\"]]"
 }
 ```
 
-### Address resolution
+**Username claim:**
 
 ```
-alice@zkcoins.app
-       │
-       ▼
-GET /.well-known/lnurlp/alice
-       │
-       ▼
-Server looks up username "alice"
-       │
-       ▼
-Returns internal address: sha256(pubkey_0) = a7f3b2c1d4e5f6...
+POST https://api.zkcoins.app/api/username/claim
 ```
 
-The wallet UI displays only the human-readable alias. The cryptographic address is used internally for protocol operations but never shown to users.
+Body (JSON):
 
-### Registration
-
-Users claim a username during or after signup. The server stores a mapping:
-
+```json
+{
+  "username": "alice",
+  "address": "0x553c0958...",
+  "public_key": "02abc...",
+  "signature": "hex...",
+  "timestamp": 1715100000
+}
 ```
-username  →  account_address (32-byte hash)
-```
 
-Usernames are immutable once claimed. One username per account.
+The signature covers `sha256("zkcoins:claim_username" || address || username || timestamp)` using the identity key at HD index 0.
+
+### How the wallet uses addresses
+
+- **Display**: always shows `{username}@zkcoins.app` or `{8-hex}@zkcoins.app`
+- **Copy**: copies the zkcoins address, not the raw hash
+- **QR code**: encodes the zkcoins address
+- **Send**: accepts `alice@zkcoins.app`, `alice`, or raw `0x...` hex — resolves via API before sending
 
 ## Phase 2 — Lightning Address compatibility
 
@@ -120,13 +145,15 @@ Sender (any Lightning wallet)          zkCoins Server              Recipient
 
 ## Phase 3 — UMA compatibility (USDT → WUSDT)
 
-The address gains a `$` prefix and becomes a valid UMA address (Universal Money Address). This enables cross-currency payments including stablecoins.
+The address becomes compatible with UMA (Universal Money Address). This enables cross-currency payments including stablecoins from wallets like Tether Wallet.
 
 ### Address format
 
+UMA uses a `$` prefix. Both formats work:
+
 ```
-$alice@zkcoins.app    (UMA address)
- alice@zkcoins.app    (Lightning Address — still works)
+alice@zkcoins.app     (Lightning Address — Phase 2+)
+$alice@zkcoins.app    (UMA address — Phase 3)
 ```
 
 ### Flow
@@ -169,44 +196,8 @@ Sender (Tether Wallet / UMA wallet)    zkCoins Server              Recipient
 ```
 GET  /.well-known/lnurlpubkey          → signing + encryption certificates
 GET  /.well-known/uma-configuration    → VASP capabilities
-POST /v1/lnurlp/payreq/{username}      → payment request with compliance data
-POST /v1/lnurlp/utxocallback           → post-transaction compliance hook
-```
-
-### Currencies advertised
-
-```json
-{
-  "currencies": [
-    {
-      "code": "SAT",
-      "name": "Satoshis",
-      "symbol": "₿",
-      "multiplier": 1000,
-      "decimals": 0,
-      "convertible": { "min": 1, "max": 10000000 }
-    },
-    {
-      "code": "USDT",
-      "name": "Tether USD",
-      "symbol": "$",
-      "multiplier": 23400,
-      "decimals": 6,
-      "convertible": { "min": 1000000, "max": 1000000000000 }
-    }
-  ]
-}
-```
-
-### Settlement options
-
-```json
-{
-  "settlementOptions": [
-    { "settlementLayer": "ln", "assets": [{ "identifier": "BTC" }] },
-    { "settlementLayer": "ethereum", "assets": [{ "identifier": "USDT" }] }
-  ]
-}
+POST /api/lnurlp/payreq/{username}     → payment request with compliance data
+POST /api/lnurlp/utxocallback          → post-transaction compliance hook
 ```
 
 ## Backward compatibility
