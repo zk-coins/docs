@@ -13,6 +13,7 @@ const sidebars = {
         'architecture/key-management',
         'architecture/signup-flow',
         'architecture/proof-system',
+        'architecture/addressing',
       ],
     },
     'protocol',
