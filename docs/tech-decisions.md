@@ -105,7 +105,7 @@ Every technology choice has trade-offs. This page documents what we chose, why, 
 
 ## ZK Proofs: SP1 zkVM (Succinct)
 
-**Chosen:** SP1 with mock prover for MVP
+**Chosen:** SP1 with CPU prover (production)
 
 **Why:**
 - **Write proofs in standard Rust** — no DSL, no Circom, no custom language
@@ -114,10 +114,10 @@ Every technology choice has trade-offs. This page documents what we chose, why, 
 - **Active development** — Succinct is well-funded, rapid iteration
 - **Used by ZeroSync prototype** — proven to work for this use case
 
-**Why mock mode:**
-- Real SP1 proving requires GPU (CUDA) or the Succinct network
-- Mock mode allows full end-to-end testing without expensive compute
-- Production proving is a deployment concern, not an architecture concern
+**Prover modes:**
+- **CPU** (current production) — runs on ARM64 (Apple Silicon M3 Ultra), generates real compressed STARK proofs
+- **Mock** (development only) — dummy proofs for local testing via `SP1_PROVER=mock`
+- **GPU / Network** (future scaling) — CUDA or Succinct Prover Network for lower latency
 
 **Considered:**
 - **Circom + Groth16** — used in Shade Protocol. Excellent for EVM verification but poor fit for Bitcoin (no on-chain verifier). Also requires a trusted setup

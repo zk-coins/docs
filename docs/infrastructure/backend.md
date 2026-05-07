@@ -44,10 +44,14 @@ The zkCoins backend is a Rust/Axum REST API server that manages account state, g
 
 | Endpoint | Method | Description |
 |---|---|---|
+| `/health` | GET | Health check (returns `ok`) |
+| `/api/info` | GET | Network name (Mainnet/Mutinynet) |
+| `/api/balance` | GET | Query account balance by address |
+| `/api/address` | GET | List all known account addresses |
 | `/api/mint` | POST | Mint coins from the minting account |
-| `/api/send` | POST | Transfer coins between accounts |
-| `/api/balance` | GET | Query account balance |
-| `/api/proof/:id` | GET | Download a coin proof (binary) |
+| `/api/send` | POST | Transfer coins (with optional Schnorr signature auth) |
+| `/api/receive` | POST | Submit a received coin proof (binary) |
+| `/api/proof/{id}` | GET | Download a coin proof (binary) |
 
 ## Bitcoin Node Requirement
 
@@ -129,11 +133,11 @@ The server starts on `http://127.0.0.1:4242`.
 
 | Variable | Default | Description |
 |---|---|---|
-| `SP1_PROVER` | `mock` | Prover mode: `mock` (dummy proofs) or `local` (real proofs) |
-| `ESPLORA_URL` | `https://mutinynet.com/api` | Bitcoin node API endpoint |
-| `BITCOIN_RPC_USER` | — | Bitcoin Core RPC username |
-| `BITCOIN_RPC_PASSWORD` | — | Bitcoin Core RPC password |
-| `PUBLISHER_KEY` | Hardcoded | Private key for inscription publishing |
+| `SP1_PROVER` | `mock` | Prover mode: `mock` (testing), `cpu` (production), `cuda` (GPU), `network` (Succinct) |
+| `ESPLORA_URL` | `https://mutinynet.com/api` | Bitcoin blockchain API endpoint |
+| `IS_MAINNET` | `false` | Set `true` for Bitcoin mainnet |
+| `NETWORK_NAME` | Auto | Display name (auto-detected from IS_MAINNET) |
+| `PUBLISHER_KEY` | Test key | Private key for inscription publishing (required on mainnet) |
 | `RUST_LOG` | `info` | Log level |
 
 ## Key components
