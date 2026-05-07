@@ -14,6 +14,7 @@ const sidebars = {
         'architecture/signup-flow',
         'architecture/proof-system',
         'architecture/addressing',
+        'architecture/bridging',
       ],
     },
     'protocol',
