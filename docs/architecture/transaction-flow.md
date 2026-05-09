@@ -16,7 +16,7 @@ Browser (WASM)                    Backend                     Bitcoin
  │                                  │                           │
  │  Generate BIP32 master key       │                           │
  │  Derive address from pubkey[0]   │                           │
- │  Store account in localStorage   │                           │
+ │  Store encrypted in IndexedDB    │                           │
  │                                  │                           │
  │  POST /api/mint {address}        │                           │
  │─────────────────────────────────>│                           │
@@ -35,12 +35,13 @@ Browser (WASM)                    Backend                     Bitcoin
 
 **Steps:**
 
-1. WASM module generates a random 256-bit seed
-2. BIP32 master key (Xpriv) is derived
-3. Address is derived from the first public key, blinded with random bytes for privacy
-4. Account is stored in localStorage: `{address, numPubkeys, xpriv}`
-5. Backend mints initial coins from its minting account
-6. Commitment is published as a Bitcoin Taproot Inscription
+1. User chooses auth method: **Passkey** (biometric) or **Seed Phrase** (12 words)
+2. BIP-39 mnemonic is generated (or derived from Passkey PRF via HKDF)
+3. BIP32 master key (Xpriv) is derived from the mnemonic seed
+4. Address is derived deterministically: `SHA-256(PublicKey[0])`
+5. Account is encrypted (AES-256-GCM) and stored in IndexedDB
+6. Backend mints initial coins from its minting account via SP1 CPU prover
+7. Commitment is published as a Bitcoin Taproot Inscription
 
 ## Send Coins
 

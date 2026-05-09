@@ -10,39 +10,34 @@ zkCoins uses BIP32 Hierarchical Deterministic (HD) wallets for key derivation. A
 ## Key derivation
 
 ```
-Random 256-bit seed (from browser crypto.getRandomValues)
+Seed (BIP-39 mnemonic or Passkey PRF → HKDF)
   └── BIP32 Master Key (Xpriv)
         │
-        ├── Public Key [0]  →  blinded with random bytes  →  Account Address
+        ├── Public Key [0]  →  SHA-256  →  Account Address
         ├── Public Key [1]  →  used as sender_next_public_key in TX 1
         ├── Public Key [2]  →  used as sender_next_public_key in TX 2
         └── ...
 ```
 
+Two ways to create a wallet (both produce the same BIP32 key structure):
+
+- **Seed Phrase (BIP-39):** 12-word mnemonic → PBKDF2 → 64-byte seed → Xpriv
+- **Passkey (WebAuthn PRF):** biometric auth → PRF output → HKDF → 16-byte entropy → BIP-39 mnemonic → seed → Xpriv
+
 Each transaction uses the current public key and derives the next one. This provides:
 
 - **Forward secrecy** — each transaction uses a fresh key
-- **Deterministic derivation** — all keys can be re-derived from the master key
-- **Stealth-like addresses** — the blinded address is unlinkable to the public keys
+- **Deterministic derivation** — all keys can be re-derived from the seed
+- **Deterministic address** — same seed always produces the same account address
 
 ## Key storage
 
-Currently, keys are stored in the browser's `localStorage`:
+Keys are stored encrypted in the browser's IndexedDB using AES-256-GCM via the Web Crypto API:
 
-```json
-{
-  "address": "a1b2c3...",
-  "numPubkeys": 3,
-  "xpriv": "xprv9s21ZrQH..."
-}
-```
+- **Seed phrase wallets:** encryption key derived from user password (PBKDF2, 100k iterations)
+- **Passkey wallets:** encryption key derived from WebAuthn PRF output (HKDF-SHA256)
 
-:::warning MVP limitation
-localStorage is not encrypted. The master private key is stored in plaintext. This is acceptable for testnet but must be addressed before mainnet:
-
-- **Phase 2**: IndexedDB with Web Crypto API encryption
-- **Phase 3**: Hardware wallet integration or WebAuthn
-:::
+The master private key is never stored in plaintext. Decryption requires user authentication on each session.
 
 ## Schnorr signatures
 
@@ -55,13 +50,13 @@ const signature = wasm.signSchnorr(privateKeyHex, messageHashHex);
 
 ## Account address
 
-The account address is derived from the first public key, blinded with random bytes:
+The account address is derived deterministically from the first public key:
 
 ```
-Address = hash(blind(PublicKey[0]))
+Address = SHA-256(PublicKey[0])
 ```
 
-This ensures that the on-chain commitment (which contains the public key hash) cannot be linked back to the account address without knowledge of the blinding factor.
+This ensures the same seed always produces the same address, enabling wallet recovery. The address is an internal identifier — on-chain privacy is provided by the ZK proofs, not by address blinding.
 
 ## Backup and recovery
 

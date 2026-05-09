@@ -23,15 +23,15 @@ ZK proof generation is CPU-intensive. Research benchmarks show ~49 seconds per p
 
 **Mitigation:** Server-side proving (current approach). The prover is a service that generates proofs on behalf of users. Users can self-host for privacy.
 
-## Mock prover mode
+## Proof generation latency
 
-**Risk: The current SP1 prover runs in mock mode.**
+**Note: Production uses real SP1 CPU proving.**
 
-Mock mode generates dummy proofs that pass verification without actual Zero-Knowledge guarantees. This is a development shortcut.
+The SP1 prover runs in CPU mode, generating legitimate compressed STARK proofs for every transaction. Proof generation takes seconds to minutes depending on transaction complexity.
 
-**Impact:** No real privacy or security in the current testnet deployment. The mock proofs prove nothing.
+**Impact:** Transactions are not instant — users wait for proof generation before the inscription is broadcast to Bitcoin.
 
-**Mitigation:** Production deployment will use real SP1 proving (GPU or Succinct network).
+**Scaling path:** GPU proving (CUDA) or the Succinct Prover Network can reduce latency if CPU becomes a bottleneck.
 
 ## Backend trust
 
@@ -51,11 +51,11 @@ The sender must disclose an upper bound on when the coin was created, so the rec
 
 ## Key storage
 
-**Risk: Keys are stored unencrypted in localStorage.**
+**Status: Keys are encrypted at rest.**
 
-The current MVP stores the BIP32 master key in plaintext in the browser's localStorage. Any script with access to the page can read it.
+The BIP32 master key is stored encrypted using AES-256-GCM in the browser's IndexedDB via the Web Crypto API. Decryption requires user authentication (password for seed-phrase wallets, biometric via passkey for passkey wallets).
 
-**Mitigation:** Planned migration to IndexedDB with Web Crypto API encryption. Hardware wallet integration for Phase 3.
+**Remaining risk:** Browser-based storage is inherently less secure than hardware wallets or OS-level secure storage. A compromised browser extension with IndexedDB access could potentially extract encrypted data.
 
 ## Data availability
 
