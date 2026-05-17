@@ -28,6 +28,8 @@ Static docs
 
 | URL | Service | Environment |
 |---|---|---|
+| `zkcoins.com` | Whitepaper / Shielded CSV Landing | PRD |
+| `dev.zkcoins.com` | Whitepaper Landing (preview) | DEV |
 | `zkcoins.info` | Brand-Hub / Landing (planned) | PRD |
 | `zkcoins.app` | Wallet App | PRD |
 | `api.zkcoins.app` | Backend API | PRD |
