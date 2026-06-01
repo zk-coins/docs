@@ -28,6 +28,9 @@ Static docs
 
 | URL | Service | Environment |
 |---|---|---|
+| `zkcoins.com` | Whitepaper / Shielded CSV Landing | PRD |
+| `dev.zkcoins.com` | Whitepaper Landing (preview) | DEV |
+| `zkcoins.info` | Brand-Hub / Landing (planned) | PRD |
 | `zkcoins.app` | Wallet App | PRD |
 | `api.zkcoins.app` | Backend API | PRD |
 | `docs.zkcoins.app` | Documentation | PRD |
@@ -36,8 +39,10 @@ Static docs
 | `dev-api.zkcoins.app` | Backend API | DEV |
 | `dev-docs.zkcoins.app` | Documentation | DEV |
 | `dev-status.zkcoins.app` | Status Page | DEV |
-| `explorer.zkcoins.app` | Explorer (planned) | PRD |
-| `dev-explorer.zkcoins.app` | Explorer (planned) | DEV |
+| `zkcoins.exchange` | Trading Venue (planned) | PRD |
+| `dev.zkcoins.exchange` | Trading Venue (planned) | DEV |
+| `zkcoins.space` | Explorer (planned) | PRD |
+| `dev.zkcoins.space` | Explorer (planned) | DEV |
 
 ## Docker Images
 
