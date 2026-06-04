@@ -13,7 +13,7 @@ At its core, zkCoins is an **information system**: a small set of pieces of data
 
 It complements two neighbouring pages: the [Privacy Model](privacy-model) (what an _on-chain observer_ can see) and the [Trust Model](trust-model) (what your _node operator_ can see). Read this one first — it is the map.
 
-> Notation: `H(...)` denotes a domain-separated hash. In-circuit commitments use **Poseidon over Goldilocks**; the on-chain signature message uses **SHA-256** per BIP-340. The exact functions live in [Proof System](proof-system) and [Key Management](key-management); this page focuses on _what is hashed and why_, not the primitive.
+> Notation: `H(...)` denotes a domain-separated hash. In-circuit hashes use **Poseidon over Goldilocks**; the Schnorr signature over the on-chain commitment uses **SHA-256** per BIP-340. The exact functions live in [Proof System](proof-system) and [Key Management](key-management); this page focuses on _what is hashed and why_, not the primitive.
 
 :::info Protocol vs. the zkcoins.app service
 This page describes the **zkCoins protocol**. The protocol's only notion of identity is the 32-byte **address** = `SHA-256(initial public key)`.
@@ -30,9 +30,9 @@ Every piece of information falls into exactly one class. The class answers "who 
 | 🔴 **Secret** | Never leaves the wallet. Disclosure = total loss of funds. | The user's device only |
 | 🟠 **Private** | Plaintext bookkeeping. Disclosure = loss of _privacy_ (never theft). | Wallet + the node that hosts the account |
 | 🟡 **Shareable** | Handed out on purpose. | User + the payment counterparty |
-| 🟢 **Public** | Written to Bitcoin, world-readable — but only hashes. | Bitcoin L1 |
+| 🟢 **Public** | Written to Bitcoin, world-readable — but only opaque commitments (no amounts, no identities). | Bitcoin L1 |
 
-The whole privacy story is the gap between **Private** (off-chain plaintext) and **Public** (on-chain hashes), and the whole trust story is the question _whose node holds the Private data_.
+The whole privacy story is the gap between **Private** (off-chain plaintext) and **Public** (on-chain commitments), and the whole trust story is the question _whose node holds the Private data_.
 
 ## The information catalog
 
@@ -41,7 +41,7 @@ The whole privacy story is the gap between **Private** (off-chain plaintext) and
 | **Seed** | 🔴 Secret | 256-bit entropy (BIP-39 mnemonic, or Passkey PRF → HKDF) generated in the wallet | User only | nobody | **Never** |
 | **Master private key (Xpriv)** | 🔴 Secret | BIP-32 derivation from the seed | User only | nobody | **Never** |
 | **Per-transaction private key** | 🔴 Secret | BIP-32 child derivation; a fresh key per send (forward secrecy) | User only | nobody | **Never** |
-| **Public key** (33 bytes) | 🟢 Public | secp256k1 from the current private key; rotates each send | User → embedded in the on-chain commitment | Bitcoin | Yes (it is published on-chain) |
+| **Public key** (33 bytes) | 🟢 Public | secp256k1 from the current private key; rotates each send (unlinkable to outsiders) | User → embedded in the on-chain commitment | Bitcoin | Yes (it is published on-chain) |
 | **Address** | 🟡 Shareable | `SHA-256(initial public key)` — fixed once at account creation; the protocol's _only_ identity (see [Key Management](key-management)) | User | the payer (inside an invoice) | Yes — but it is stable, so reusing it links payments |
 | **Invoice** `{amount, recipient, asset_id}` | 🟡 Shareable | Created by the recipient when requesting a payment (`recipient` is the 32-byte address) | Recipient | the chosen payer | Yes, with the payer |
 | **AccountState** `{owner, balance, public_key}` | 🟠 Private | Created when the account is created; mutates on every send | User + the hosting node | only **your** node | No — the balance is private |
@@ -53,12 +53,12 @@ The whole privacy story is the gap between **Private** (off-chain plaintext) and
 | **Validity proof** (Plonky2, recursive) | 🟢 Public | The node's prover produces one per state transition | The node | the recipient (inside the coin proof) | Yes — zero-knowledge, it reveals nothing beyond validity |
 | **ProofData** (public inputs) `{account_state_hash, output_coins_root, commitment_history_root, coin_history_root, asset_id}` | 🟢 Public | The public outputs of the proof | public | bound on-chain | Yes — only hashes and roots |
 | **CoinProof** = `coin + proof + inclusion_proof` | 🟠 Private | The sender bundles it for delivery | Sender → recipient | the recipient | Recipient only (it contains the plaintext coin) |
-| **Commitment** `{public_key, signature, message}` | 🟢 Public | The owner signs `message = SHA-256(account_state_hash ‖ output_coins_root)` with a Schnorr/BIP-340 signature | first the owner, then Bitcoin | **Bitcoin** | Yes — this is the **only object that goes on-chain** |
-| **Inscription / nullifier** | 🟢 Public | The commitment is written to Bitcoin as a 64-byte Taproot inscription at broadcast | Bitcoin (permanently) | the whole world | Yes (it is what prevents double-spends) |
+| **Commitment** `{public_key, signature, message}` | 🟢 Public | `message = account_state_hash ‖ output_coins_root`; the owner Schnorr/BIP-340-signs it (the signature hashes the message with SHA-256 internally) | first the owner, then Bitcoin | **Bitcoin** | Yes — this is the **only object that goes on-chain** |
+| **Inscription** | 🟢 Public | The **full commitment** (public key + signature + message, ~177 bytes) is inscribed in the Bitcoin Taproot _reveal_ transaction at broadcast | Bitcoin (permanently) | the whole world | Yes — the public, permanent anchor of the transaction |
 
 ## How information comes into existence
 
-This is the heart of the model. Everything is **born in the wallet, top-down from the seed**, and only a **minimal hash fingerprint** is ever written to Bitcoin:
+This is the heart of the model. Everything is **born in the wallet, top-down from the seed**, and only the **opaque commitment** (no amounts, no identities) is ever written to Bitcoin:
 
 ```
 Seed (entropy)
@@ -73,9 +73,9 @@ Send: CoinTemplate{recipient, amount, asset_id}
         └─ + coin_index + account_state_hash ─ H ─▶ Coin.identifier
                                                       └──▶ output_coins_root (tree)
 
-(account_state_hash ‖ output_coins_root) ── SHA-256 ──▶ message
-   message ── Schnorr(Private key_i) ──▶ Commitment{public_key, signature, message}
-                                            └── Taproot inscription ──▶ BITCOIN L1   ◀── the only on-chain step
+message = account_state_hash ‖ output_coins_root
+   message ── Schnorr/BIP-340(Private key_i) ──▶ Commitment{public_key, signature, message}
+                                            └── inscribed in full ──▶ BITCOIN L1   ◀── the only on-chain step
 
 Node prover: (previous state, coins, trees) ── Plonky2 ──▶ Validity proof (+ ProofData)
 Delivery to recipient: Coin + proof + inclusion_proof  =  CoinProof
@@ -89,13 +89,13 @@ Reading it as layers:
 - **Asset layer (Shareable).** An asset is defined the moment someone hashes their creator key together with a name and decimals. The resulting `AssetId` is public — every holder of the token references it.
 - **Tree layer (Public roots / Private leaves).** The node folds accounts and coins into Merkle structures. The _roots_ are committed on-chain; the _leaves_ (plaintext) are not.
 - **Proof layer (Public).** A recursive zero-knowledge proof attests the whole state transition is valid without revealing any Private data. Its public inputs (`ProofData`) carry only hashes.
-- **On-chain layer (Public).** A single signed `Commitment` — a public key, a Schnorr signature, and the hash `SHA-256(account_state_hash ‖ output_coins_root)` — is inscribed on Bitcoin. Nothing else.
+- **On-chain layer (Public).** A single signed `Commitment` — a rotating public key, a Schnorr signature, and the message `account_state_hash ‖ output_coins_root` (two hashes) — is inscribed in full on Bitcoin. Nothing else.
 
 ## Two invariants
 
 These are the load-bearing truths of the whole design:
 
-1. **On-chain there are only hashes.** Amounts, recipients, and balances are **never** written to Bitcoin — only the `Commitment` (a public key, a signature, and one hash). No bookkeeping can be reconstructed from the chain. See [Privacy Model](privacy-model).
+1. **On-chain there are no amounts, recipients, or balances.** Bitcoin carries only the opaque `Commitment` (a rotating public key, a signature, and two state hashes). The rotating key is unlinkable to outsiders, and no bookkeeping can be reconstructed from the chain. See [Privacy Model](privacy-model).
 2. **Privacy is decided by _whose node_ holds the Private data.** Your own node ⇒ no leak. Someone else's node ⇒ that operator sees your Private (plaintext) data — a privacy trade-off — but can **never** steal, forge, or double-spend, because that is enforced by the Public layer plus cryptography. This is exactly the [Trust Model](trust-model): run your own node and you are trustless and private at once.
 
 ## Naming is a service-layer feature, not protocol
@@ -122,7 +122,7 @@ state blob size    : 181,967 bytes   (balance + rotating key + coin queue & hist
 
 This blob lives only on the node. It is never published.
 
-**🟢 Public** (on-chain, on Mutinynet) — the account's _entire_ Bitcoin footprint is one 177-byte commitment:
+**🟢 Public** (on-chain, on Mutinynet) — the account's _entire_ Bitcoin footprint is the inscribed commitment (~177 bytes = 33 + 64 + 64 fields, plus bincode framing):
 
 ```
 commit txid : a5b267555b2284f19d77670b6e55a2d74117ec91f5a84cc8b335509c15f3f53c
@@ -141,7 +141,7 @@ What is **not** here: no balance, no amount, no recipient — only a public key,
 SHA-256(0363c934…388ed8c7) = e660e4ea3ce6c92c1e27ecb6cad611236d96a412cbc51d28eeba45fa86903825
 ```
 
-So this account is **181,967 bytes** of private plaintext off-chain, but only **177 bytes** of hashes and a signature on-chain. The `account_state_hash` (`a791849c…`) is the public fingerprint of that private blob: an observer sees the hash and learns nothing; the owner can open it to the full balance.
+So this account is **181,967 bytes** of private plaintext off-chain, but only **~177 bytes** of an opaque commitment on-chain. The `account_state_hash` (`a791849c…`) is the public fingerprint of that private blob: an observer sees the hash and learns nothing; the owner can open it to the full balance.
 
 **🟢 Public** (global tree roots) — every account folds into shared roots; the latest values:
 
@@ -165,6 +165,6 @@ The protocol neither knows nor needs this handle; it only ever uses the 32-byte 
 - [Privacy Model](privacy-model) — what an on-chain observer can and cannot see
 - [Key Management](key-management) — seed, BIP-32 derivation, Schnorr signing
 - [Addressing](addressing) — addresses, invoices, and LNURL compatibility
-- [Nullifier Design](nullifier-design) — the 64-byte on-chain marker
+- [Nullifier Design](nullifier-design) — the on-chain spent-marker
 - [Proof System](proof-system) — the recursive Plonky2 circuit
 - [Transaction Flow](transaction-flow) — how a send moves through the system end-to-end

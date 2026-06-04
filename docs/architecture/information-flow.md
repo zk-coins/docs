@@ -37,16 +37,18 @@ For B to accept the 20 TFREAK **trustlessly**, A delivers B a **CoinProof bundle
 - the **coin in clear**: `{ identifier, recipient = B, amount = 20, asset = TFREAK }`
 - the **zero-knowledge proof** (recursive, constant-size): attests the coin is the valid output of a valid state transition — _without_ exposing A's other balances, coins, or history. It proves only "this coin is valid."
 - the **inclusion proof**: that the coin sits in the `output_coins_root` A committed.
-- a reference to **A's on-chain commitment** (the Bitcoin inscription / nullifier).
+- a reference to **A's on-chain commitment** (the Bitcoin inscription).
 
 B verifies all of it **against B's own node and B's own view of Bitcoin**:
 
 1. the ZK proof is valid,
 2. the coin is included in the committed root,
 3. that root is anchored in a real Bitcoin commitment,
-4. the coin's nullifier has not already been spent.
+4. the coin has not already been spent.
 
 If all four hold, B is convinced — **without trusting A or A's node**. That is client-side validation. What B learns: "I received 20 valid TFREAK." Not A's balance, not A's other coins, not A's history.
+
+> **Status:** this full, trustless check is the **target**. Today a receiving node verifies only the **inclusion proof** and trusts the source; re-verifying the recursive proof (**S1**) and a verifier-queryable global spent-coin accumulator for step 4 (**S2**) are roadmap items — see [Status](#status--caveats) below.
 
 ## What B needs to spend the coins onward
 
@@ -55,21 +57,21 @@ If all four hold, B is convinced — **without trusting A or A's node**. That is
 - **B's node** to build the new state transition, proof, and on-chain commitment.
 - the **recipient's address**.
 
-Consequence: **the bundle is custody.** A seed phrase alone cannot restore spendable coins — lose the bundle and the coins cannot be spent. (See [Key Management](key-management).)
+Consequence: **the bundle is custody.** A seed phrase alone cannot restore spendable coins — lose the bundle and the coins cannot be spent. (See [Key Management](key-management); [Recovery](#recovery-seed--bitcoin--an-honest-network) below shows how the network restores it.)
 
 ## What C receives
 
 C is uninvolved but runs a node and scans Bitcoin. C receives **only the public skeleton**:
 
-- the **opaque commitments / nullifiers** of A's mint and A's send (a public key, a Schnorr signature, one hash each), with their block and time,
-- folded into C's own copy of the **roots and the nullifier set**.
+- the **opaque commitments** of A's mint and A's send (a rotating public key, a Schnorr signature, and two state hashes each), with their block and time,
+- folded into C's own copy of the **global roots and commitment history**.
 
 C does **not** receive: the amount, the recipient, the fact that Tapfreak was involved, that it was 20, or that B took part. Only if B later pays C does C receive a bundle — until then, C learns nothing about A → B.
 
 ## What an explorer and a Bitcoin-only observer receive
 
 - An **explorer** is a public, read-only view of the **same Bitcoin data C sees**: the stream of commitments, the roots history, aggregate counts, and signature/anchoring checks. It **cannot** show amounts, the asset name "Tapfreak", balances, sender or recipient, or the graph. (One honest nuance: a commitment's _shape_ — a shorter message for an issuance vs a longer one for a transfer — may hint at the transaction _type_, never its content.)
-- A **Bitcoin-only observer** (no zkCoins node) sees the least: **opaque 64-byte Taproot inscriptions** (identifiable as zkCoins by their marker, countable, timestamped) and nothing interpretable — the same raw data the explorer decodes, just undecoded.
+- A **Bitcoin-only observer** (no zkCoins node) sees the least: the inscriptions are present but **opaque** — each carries a rotating public key, a signature, and two state hashes (~177 bytes), identifiable as zkCoins by their marker, countable, timestamped, but otherwise **uninterpretable** — the same raw data the explorer decodes, just undecoded.
 
 ## Who sees what
 
@@ -81,7 +83,7 @@ C does **not** receive: the amount, the recipient, the fact that Tapfreak was in
 | Proof the coin is valid | yes | yes | – | – | – | – |
 | The delivery itself | yes | yes | opaque¹ | opaque¹ | – | – |
 | A commitment was anchored on Bitcoin | yes | yes | yes | – | yes | yes² |
-| Global roots + nullifier set | yes | yes | yes | – | yes | raw only |
+| Global roots + commitment history | yes | yes | yes | – | yes | raw only |
 
 ¹ Only an encrypted, gift-wrapped blob — no sender, recipient, amount, or asset (see below). ² As opaque inscription bytes.
 
@@ -101,7 +103,7 @@ Both come from the **same seed**, on **separate hardened BIP-32 branches**, so:
 
 This makes the trust statement precise: the node never holds the **spend** key; it may hold a **spend-less operational key**. A compromised node is therefore a **privacy breach (read) — never theft**, exactly matching "a node can see but cannot steal."
 
-Incoming bundles are addressed to the **operational key**, so the always-on node receives, decrypts and stores them without ever touching the spend key; the wallet comes online only to spend.
+Incoming bundles are addressed to the **operational key**, so the always-on node receives, decrypts and stores them without ever touching the spend key; the wallet comes online only to spend. _(This is an addressing change: today the address derives from the spend-side key, so advertising the operational key as the receive identity is part of the proposal — see [Status](#status--caveats).)_
 
 **Own node vs foreign node.** You give _your own_ node the derived operational key. A _foreign_ node never gets your key — instead the wallet issues it a **scoped, signed delegation** to that node's own key. Same self-host-vs-foreign spectrum as everywhere.
 
@@ -117,6 +119,7 @@ One process does it all: Bitcoin validation, proof verification, state, the encr
 
 **Caveats:**
 
+- **Capability-gating is an extension, not vanilla relay behaviour.** A standard Nostr relay serves events by public filter to anyone; the gated recovery/disclosure **pull** is a zkCoins-specific endpoint layered on top of the relay, not plain Nostr semantics.
 - **Durability needs replication.** Your own relay removes the _dependency_, not the single point of failure — mirror bundles to a few peer/fallback relays so one dead disk cannot lose coins.
 - **Receiving needs the relay online** — advertise several relays (your own + fallbacks); store-and-forward across the mesh.
 - **A full open relay invites spam/storage abuse** — needs policies (capability-gating for pulls, anti-spam / PoW / web-of-trust for posting, scope to your own wallets for delivery).
@@ -124,7 +127,7 @@ One process does it all: Bitcoin validation, proof verification, state, the encr
 
 ## The transport layer: delivering the bundle over Nostr
 
-The scenario exposes the missing piece. On-chain carries only the commitment hash; the **CoinProof bundle must travel off-chain from A to B**. On a single shared service this happens implicitly today (sender and recipient share a node, which hands the coin over internally). For independent, equal nodes, zkCoins needs a **defined delivery protocol**.
+The scenario exposes the missing piece. On-chain carries only the opaque commitment (no amounts, no identities); the **CoinProof bundle must travel off-chain from A to B**. On a single shared service this happens implicitly today (sender and recipient share a node, which hands the coin over internally). For independent, equal nodes, zkCoins needs a **defined delivery protocol**.
 
 **The core is deliberately small:** encrypt the bundle to the recipient's key, leave it where the recipient can fetch it, and let the recipient verify it. Everything below is either that core or a clearly-optional layer on top — start minimal, add layers only as needed.
 
@@ -149,7 +152,7 @@ Delivery uses the **operational key** from the two-key model above — a secp256
 
 ### Why Nostr fits
 
-- **Same keys** — identity = Nostr key; no new identity layer.
+- **Same keys** — the operational key _is_ the Nostr key; no new identity layer.
 - **Decentralised & censorship-resistant** — many relays, self-hostable; matches zkCoins' ethos.
 - **Async by design** — relays store-and-forward; B fetches when online.
 - **Metadata-minimal** — gift-wrapping hides sender and recipient; the relay sees only ciphertext addressed to an ephemeral key — privacy that matches the on-chain layer.
@@ -162,18 +165,18 @@ A Nostr relay carrying the delivery sees an **opaque, gift-wrapped, encrypted ev
 ### Tradeoffs & open points
 
 - **Relay availability is custody-adjacent.** The bundle is the spend credential; if every relay drops the event before B fetches it and A has discarded its copy, the coin is unrecoverable. Mitigations: multiple relays (including one B self-hosts), and the sender retaining the bundle until B acknowledges.
-- **Proof size.** A CoinProof carries a zero-knowledge proof. If it exceeds practical relay event sizes, the design splits into a small Nostr control message plus the encrypted proof blob in content-addressed storage (e.g. a Blossom-style store), with the Nostr event carrying the pointer and decryption key.
+- **Proof size makes off-band storage mandatory, not optional.** A recursive Plonky2 proof is large (on the order of ~100 KB+) — too big for ordinary relay events. So delivery uses a small Nostr control message plus the **encrypted proof blob in content-addressed storage** (e.g. a Blossom-style store), with the Nostr event carrying the pointer and decryption key. (The node already treats proofs as large, disk-backed objects.)
 - **Acknowledgement & retries** must be specified so delivery is reliable, not best-effort.
 
 ## Recovery: seed + Bitcoin + an honest network
 
-Delivery (push once) is not the same as **recovery** (pull anytime). Bitcoin stores only the commitment hashes, so a node that loses its local state **cannot rebuild the spendable coins from the chain alone**. The property zkCoins targets:
+Delivery (push once) is not the same as **recovery** (pull anytime). Bitcoin stores only the opaque commitments, so a node that loses its local state **cannot rebuild the spendable coins from the chain alone**. The property zkCoins targets:
 
 > With only the **seed**, the **public Bitcoin chain**, and an **honest (cooperating) network**, a user recovers their **entire** spendable state — **trustlessly**.
 
 **What the seed gives back (deterministic).** Every key (spend + operational + all rotating keys), the address/identity, the decryption ability, and the deterministic pull-tags — enough to prove ownership and to enumerate and decrypt everything that is yours.
 
-**What Bitcoin gives back (the index + integrity anchor).** The full ordered set of commitments, the nullifier set, and the global roots — reconstructable by any node. It lets you **authenticate every recovered bundle** (proof valid + anchored + not double-spent). Where the on-chain commitment carries your signing public key, you can also **privately recognise your own commitments** — your seed derives the keys; outsiders cannot link the rotating keys, but you can — recovering the skeleton of your own activity.
+**What Bitcoin gives back (the index + integrity anchor).** The full ordered set of commitments and the global roots — reconstructable by any node. It lets you **authenticate every recovered bundle** (proof valid + anchored; the global double-spend check is the **S2** roadmap item — see [Status](#status--caveats)). Because the on-chain commitment carries your signing public key, you can also **privately recognise your own commitments** — your seed derives the keys; outsiders cannot link the rotating keys, but you can — recovering the skeleton of your own activity.
 
 **What is irreducibly external — and how it comes back.** The coin **values** (amounts, recipients), especially of **incoming** coins, are _choices others made_; they live only in the bundles and cannot be derived from a hash or your seed. Under an **honest network** these bundles are simply **returned on request**: you prove ownership (or present your tags), cooperating nodes serve every bundle addressed to you, and you **verify each one against Bitcoin**.
 
@@ -213,8 +216,8 @@ The access model yields two distinct explorers over the **same data** — the on
 
 ## Status / caveats
 
-- **Trustless receive (S1).** "B verifies without trusting A" requires B to re-verify the full recursive proof on receipt — the keystone of the decentralisation roadmap.
-- **The whole off-chain layer** (two-key model, node-as-relay, delivery, recovery, access) **is proposed** (roadmap), not yet implemented; today delivery is implicit same-node.
+- **Trustless verification is the target, not today's behaviour.** "B verifies without trusting A" needs two roadmap items: re-verifying the full recursive proof on receipt (**S1**), and a verifier-queryable **global spent-coin accumulator** for the double-spend check (**S2**). Today a receiving node checks only the inclusion proof and trusts the source; double-spend is enforced _in the circuit_ (proof of non-inclusion), not via an on-chain nullifier set.
+- **The whole off-chain layer is proposed** (roadmap), not yet implemented: the two-key model (today's wallet uses a single, non-hardened derivation branch and addresses by the spend-side key), node-as-relay, Nostr delivery, recovery-pull, and capability-gated access. Today delivery is implicit same-node.
 - **Trustless emission (S5).** Permissionless, un-privileged minting ("A mints") is the emission roadmap item.
 - **Asset names are never on-chain.** "Tapfreak" lives only in the peer-to-peer coin data and the `asset_id`.
 
