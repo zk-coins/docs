@@ -236,10 +236,6 @@ module.exports = function llmsTxtPlugin(context) {
 
       fs.writeFileSync(path.join(outDir, 'llms.txt'), llmsTxt + '\n', 'utf8');
       fs.writeFileSync(path.join(outDir, 'llms-full.txt'), llmsFull + '\n', 'utf8');
-
-      console.log(
-        `[llms-txt] wrote llms.txt (${byId.size} pages) and llms-full.txt to ${outDir}`,
-      );
     },
   };
 };
