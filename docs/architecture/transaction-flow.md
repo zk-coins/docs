@@ -22,7 +22,7 @@ Browser (WASM)                    Backend                     Bitcoin
  │─────────────────────────────────>│                           │
  │                                  │                           │
  │                                  │  Create CoinProof         │
- │                                  │  Generate SP1 proof       │
+ │                                  │  Generate Plonky2 proof   │
  │                                  │  Publish commitment       │
  │                                  │──────────────────────────>│
  │                                  │                           │
@@ -40,7 +40,7 @@ Browser (WASM)                    Backend                     Bitcoin
 3. BIP32 master key (Xpriv) is derived from the mnemonic seed
 4. Address is derived deterministically: `SHA-256(PublicKey[0])`
 5. Account is encrypted (AES-256-GCM) and stored in IndexedDB
-6. Backend mints initial coins from its minting account via SP1 CPU prover
+6. Backend mints initial coins from its minting account via the Plonky2 prover
 7. Commitment is published as a Bitcoin Taproot Inscription
 
 ## Send Coins
@@ -59,7 +59,7 @@ Browser                           Backend                     Bitcoin
  │                                  │  1. Verify balance        │
  │                                  │  2. Collect received coins│
  │                                  │  3. Get Merkle proofs     │
- │                                  │  4. Build SP1 inputs      │
+ │                                  │  4. Build circuit inputs  │
  │                                  │  5. Generate ZK proof     │
  │                                  │  6. Create output coins   │
  │                                  │  7. Publish commitment    │
@@ -78,7 +78,7 @@ Browser                           Backend                     Bitcoin
 2. Backend verifies the sender has sufficient balance
 3. Backend collects unspent coins from the sender's queue
 4. Merkle proofs are fetched for all input coins (Sparse Merkle Tree + MMR)
-5. SP1 circuit generates a recursive Zero-Knowledge proof
+5. The Plonky2 circuit generates a recursive Zero-Knowledge proof
 6. Output coins are created: one for the recipient, one for change (if needed)
 7. Commitment is published as a Bitcoin Taproot Inscription
 8. Recipient's coin proof is stored for later retrieval
@@ -89,14 +89,14 @@ Each transaction rotates the account's public key:
 
 - The sender provides `sender_public_key` (current) and `sender_next_public_key` (next)
 - Both are derived from the BIP32 master key at sequential indices
-- The SP1 circuit commits to the key rotation
+- The Plonky2 circuit commits to the key rotation
 - This ensures forward secrecy — compromising a past key doesn't help an attacker
 
 ## Blockchain Scanner
 
-The backend runs a continuous scanner that:
+The backend runs an event-driven scanner that:
 
-1. Polls Bitcoin every 30 seconds for new blocks
+1. Subscribes to an Esplora WebSocket and processes new blocks as they are announced — event-driven, not polling
 2. Filters transactions by the marker prefix (`4242`)
 3. Extracts Taproot Inscription data from witness
 4. Deserializes and verifies Schnorr signatures on commitments

@@ -47,7 +47,7 @@ A trust-minimized bridge using BitVM2 for on-chain verification of Shielded CSV 
 
 - **BitVM2 is proven on Bitcoin mainnet** (June 2025: full dispute resolution in 42 blocks, ~$16k cost)
 - **Groth16 SNARK verification works on Bitcoin** via BitVM2 script chunks
-- **SP1 proofs (used by zkCoins) can be wrapped into Groth16** for on-chain verification
+- **Recursive proofs can be wrapped into a Groth16 SNARK** for on-chain verification. zkCoins' Plonky2 proofs would need such a wrapping step before BitVM2 could verify them on Bitcoin — the same pattern other systems use (e.g. Citrea wraps RISC Zero). This is a forward-looking part of the bridge design and is not yet implemented
 - **Robin Linus authored both Shielded CSV and BitVM** — the protocols are designed to work together
 - **Live BitVM bridges exist:** Citrea (cBTC, Jan 2026), Bitlayer (YBTC, Jul 2025)
 - **Glock/Argo** (Robin Linus + Liam Eagen, Jan 2026) promises 430–2000x cost reduction over BitVM2
@@ -58,7 +58,7 @@ A trust-minimized bridge using BitVM2 for on-chain verification of Shielded CSV 
 |---|---|
 | BitVM2 paper | Published Aug 2024 |
 | Groth16 verification on Bitcoin | Working |
-| SP1 → Groth16 wrapping | Supported by Succinct |
+| Plonky2 → Groth16 wrapping | Established technique; not yet implemented for zkCoins |
 | First mainnet dispute resolution | June 2025 (42 blocks) |
 | Bitlayer bridge (YBTC) | Mainnet since Jul 2025 |
 | Citrea bridge (cBTC) | Mainnet since Jan 2026 |
@@ -97,7 +97,6 @@ This is not a coincidence. Shielded CSV was designed with BitVM bridging in mind
 - [BitVM2 Paper](https://bitvm.org/bitvm2) — Robin Linus et al.
 - [BitVM Bridge Whitepaper](https://bitvm.org/bitvm_bridge.pdf)
 - [SNARK Verifier in Bitcoin Script](https://bitvm.org/snark.html)
-- [SP1 Is Bitcoin Ready](https://blog.succinct.xyz/bitcoin-sp1/) — Succinct
 - [Citrea Clementine Bridge](https://docs.citrea.xyz/essentials/clementine-trust-minimized-bitcoin-bridge)
 - [Glock: Verification on Bitcoin](https://www.alpenlabs.io/blog/glock-verification-on-bitcoin) — Alpen Labs
 - [Shielded CSV Paper](https://eprint.iacr.org/2025/068) — Jonas Nick, Liam Eagen, Robin Linus
