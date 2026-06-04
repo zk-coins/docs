@@ -125,7 +125,7 @@ This blob lives only on the node. It is never published.
 **🟢 Public** (on-chain, on Mutinynet) — the account's _entire_ Bitcoin footprint is one 177-byte commitment:
 
 ```
-commit txid : 3cf5f3159c5035b3c84ca8f591ec1741d7a2556e0b67779df184225b5567b2a5
+commit txid : a5b267555b2284f19d77670b6e55a2d74117ec91f5a84cc8b335509c15f3f53c
 
 public_key (33 B) : 0363c9346024c5dcd393bb7577fd3f8d045c68ad297d7b90a454d8e2ec388ed8c7
 signature  (64 B) : b50b629ea32dadf453561c763e3567869b1e326777459ca7d8f7fe71462b2506
