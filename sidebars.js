@@ -7,6 +7,7 @@ const sidebars = {
       label: 'Architecture',
       items: [
         'architecture/overview',
+        'architecture/trust-model',
         'architecture/privacy-model',
         'architecture/nullifier-design',
         'architecture/transaction-flow',
