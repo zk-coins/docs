@@ -88,8 +88,8 @@ const config = {
                 href: 'https://github.com/zk-coins/zkcoins-app/tree/develop/rust/client',
               },
               {
-                label: 'SP1 Circuit',
-                href: 'https://github.com/zk-coins/zkcoins-app/tree/develop/rust/program',
+                label: 'Plonky2 Circuit',
+                href: 'https://github.com/zk-coins/node/tree/develop/program-plonky2',
               },
             ],
           },
