@@ -31,7 +31,7 @@ The Plonky2 prover runs in-process on CPU, generating a real recursive proof for
 
 **Impact:** Transactions are not instant — users wait for proof generation before the inscription is broadcast to Bitcoin.
 
-**Scaling path:** Proving is CPU-only on a single host (Apple Silicon M3 Ultra); there is no GPU proving and no external proving network. The long-term direction is Plonky3 — a faster field and hash (BabyBear, Poseidon2) with active upstream development.
+**Scaling path:** Proving is CPU-only on a single Apple Silicon host; there is no GPU proving and no external proving network. The long-term direction is Plonky3 — a faster field and hash (BabyBear, Poseidon2) with active upstream development.
 
 ## Backend trust
 

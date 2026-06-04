@@ -83,7 +83,7 @@ Taproot Assets shares the Bitcoin anchor and the off-chain-data model, but has *
 | **Layer** | L1 (Client-Side Validation) | L2 (payment channels) |
 | **Privacy** | Full (ZK proofs) | Good (onion routing) |
 | **Interactivity** | Receiver must be reachable | Routing path required |
-| **Capacity** | ~100 TPS on L1 | Theoretically unlimited |
+| **Capacity** | Bounded by Bitcoin L1 (one compact commitment per TX) | Theoretically unlimited |
 | **Offline receive** | No | No |
 | **Status** | Research | Production |
 
