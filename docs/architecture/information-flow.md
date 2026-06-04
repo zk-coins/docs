@@ -89,6 +89,8 @@ C does **not** receive: the amount, the recipient, the fact that Tapfreak was in
 
 The scenario exposes the missing piece. On-chain carries only the commitment hash; the **CoinProof bundle must travel off-chain from A to B**. On a single shared service this happens implicitly today (sender and recipient share a node, which hands the coin over internally). For independent, equal nodes, zkCoins needs a **defined delivery protocol**.
 
+**The core is deliberately small:** encrypt the bundle to the recipient's key, leave it where the recipient can fetch it, and let the recipient verify it. Everything below is either that core or a clearly-optional layer on top — start minimal, add layers only as needed.
+
 ### What it must guarantee
 
 1. **Confidentiality** — the bundle contains plaintext (amount, recipient, asset); it must be **encrypted to B**, so any relay sees only ciphertext.
@@ -126,10 +128,42 @@ A Nostr relay carrying the delivery sees an **opaque, gift-wrapped, encrypted ev
 - **Proof size.** A CoinProof carries a zero-knowledge proof. If it exceeds practical relay event sizes, the design splits into a small Nostr control message plus the encrypted proof blob in content-addressed storage (e.g. a Blossom-style store), with the Nostr event carrying the pointer and decryption key.
 - **Acknowledgement & retries** must be specified so delivery is reliable, not best-effort.
 
+## Recovery: pulling your data back
+
+Delivery (push once) is not the same as **recovery** (pull anytime). Bitcoin stores only the commitment hashes, so a node that loses its local state **cannot rebuild the spendable coins from the chain alone**. The bundle is the spend credential — therefore the network must let a holder **re-pull all of their coin data with nothing but their seed**.
+
+This turns the transport into a **persistent, key-indexed, encrypted store** the owner can query:
+
+- bundles are kept durably — the owner runs or pins at least one **persistent relay**, never relying on the counterparty (who may disappear);
+- the owner re-derives its keys from the seed and **pulls every bundle addressed to it**, decrypts, and rebuilds state.
+
+There is a real tension between _pullability_ and _recipient privacy_, because to return "everything for me" the store must recognise the owner's items:
+
+- **Simple:** items are tagged with the owner's public key — the owner pulls all of them, but the store learns who the recipient is.
+- **Private:** the owner derives deterministic, seed-bound tags that look random to the store — the owner computes its own tags and pulls by them, while the store cannot link them back to the owner.
+
+This data-availability layer is the **hardest part** of any client-side-validation protocol. Solving it as a **network pull** — rather than the manual file backups RGB / Taproot Assets rely on — is a concrete advantage.
+
+## Access model: capability-gated pull
+
+One primitive serves delivery, recovery, _and_ disclosure: a **pull endpoint gated by a cryptographic capability**. A node releases data only after the requester proves entitlement — in one of two ways:
+
+1. **Ownership proof.** The requester signs a challenge with the subject's identity key. The node verifies the signature against the subject's address and returns the data whose recipient is that subject. (This is also the recovery path.)
+2. **Delegated view grant.** The subject signs a grant — _"the holder of key D may view my transactions"_. The grantee presents it; the node verifies the subject's signature and releases the data. The node makes **no policy decision** — it simply **enforces the subject's signed grant**, which it can verify cryptographically.
+
+A view grant is, in effect, a **delegated viewing key** (compare Zcash viewing keys): it permits _seeing, not spending_. So a user can consensually disclose to an accountant, a tax tool, or an explorer **without ever surrendering the spend key**. Grants can be scoped (one asset, a date range, an expiry) and revoked — but revocation is **forward-only**: already-disclosed data cannot be un-seen.
+
+## Two explorer modes
+
+The access model yields two distinct explorers over the **same data** — the only difference is the capability presented:
+
+- **Public explorer** — no authorisation; shows only the on-chain public data (commitments, roots, aggregates). It cannot show amounts, assets, balances, or counterparties.
+- **Authorised (view) explorer** — shows a _specific user's real transactions_, but only when presented that user's signed **view grant**. Privacy stays under the user's control: they choose who sees what, and for how long.
+
 ## Status / caveats
 
 - **Trustless receive (S1).** "B verifies without trusting A" requires B to re-verify the full recursive proof on receipt — the keystone of the decentralisation roadmap.
-- **This delivery layer is proposed**, not yet implemented; today delivery is implicit same-node.
+- **The delivery, recovery, and access model are proposed** (roadmap), not yet implemented; today delivery is implicit same-node.
 - **Trustless emission (S5).** Permissionless, un-privileged minting ("A mints") is the emission roadmap item.
 - **Asset names are never on-chain.** "Tapfreak" lives only in the peer-to-peer coin data and the `asset_id`.
 
