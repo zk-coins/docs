@@ -8,6 +8,7 @@ const sidebars = {
       items: [
         'architecture/overview',
         'architecture/information-model',
+        'architecture/information-flow',
         'architecture/trust-model',
         'architecture/privacy-model',
         'architecture/nullifier-design',
