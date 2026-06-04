@@ -25,10 +25,10 @@ The zkCoins backend is a Rust/Axum REST API server that manages account state, g
 │         │          └───────┬────────┘  │
 │         │                  │           │
 │  ┌──────▼───────┐  ┌──────▼────────┐  │
-│  │ SP1 Prover   │  │ Scanner       │  │
-│  │              │  │               │  │
-│  │ ZK proof     │  │ Poll Bitcoin  │  │
-│  │ generation   │  │ every 30s     │  │
+│  │ Plonky2      │  │ Scanner       │  │
+│  │ prover       │  │               │  │
+│  │ (in-process) │  │ Esplora WS    │  │
+│  │ ZK proofs    │  │ (event-driven)│  │
 │  └──────────────┘  └──────┬────────┘  │
 │                           │           │
 │  ┌────────────────────────▼────────┐  │
@@ -121,7 +121,6 @@ For development, **Signet** is recommended — it's small, fast to sync, and has
 
 ```bash
 # Start the server (requires Bitcoin node access)
-SP1_PROVER=mock \
 ESPLORA_URL=http://localhost:8332 \
 RUST_LOG=info \
 cargo run -p server
@@ -131,14 +130,15 @@ The server starts on `http://127.0.0.1:4242`.
 
 ### Environment variables
 
-| Variable | Default | Description |
+| Variable | Required | Description |
 |---|---|---|
-| `SP1_PROVER` | `mock` | Prover mode: `mock` (testing), `cpu` (production), `cuda` (GPU), `network` (Succinct) |
-| `ESPLORA_URL` | `https://mutinynet.com/api` | Bitcoin blockchain API endpoint |
-| `IS_MAINNET` | `false` | Set `true` for Bitcoin mainnet |
-| `NETWORK_NAME` | Auto | Display name (auto-detected from IS_MAINNET) |
-| `PUBLISHER_KEY` | Test key | Private key for inscription publishing (required on mainnet) |
-| `RUST_LOG` | `info` | Log level |
+| `DATABASE_URL` | yes | Postgres connection string for account and proof state |
+| `PUBLISHER_KEY` | yes | Hex private key used to sign Taproot inscription (commit/reveal) transactions |
+| `USERNAME_DOMAIN` | yes | Domain used for account usernames (returned by `/api/info`) |
+| `IS_MAINNET` | yes | `true` for Bitcoin mainnet, `false` for the test network |
+| `NETWORK_NAME` | no | Display name for the network (e.g. `Mainnet`, `Mutinynet`); cosmetic only |
+| `PROOFS_DIR` | no | Directory where serialized proofs are stored (default `./proofs`) |
+| `ZKCOINS_SKIP_BOOTSTRAP_WARMUP` | no | Skip the Plonky2 prover warmup at startup (faster boot for local development) |
 
 ## Key components
 
@@ -148,7 +148,7 @@ Manages accounts as a hashmap of `Address → Account`:
 
 ```rust
 struct Account {
-    proof: Option<Proof>,           // Latest SP1 proof
+    proof: Option<Proof>,           // Latest Plonky2 proof
     coin_queue: Vec<CoinProof>,     // Received but unspent coins
     coin_history: SparseMerkleTree, // SMT of received coin identifiers
     balance: u64,                   // Liquid balance
@@ -157,9 +157,9 @@ struct Account {
 
 ### Scanner
 
-Continuously polls the Bitcoin blockchain via Esplora API:
+Subscribes to an Esplora WebSocket and processes blocks as they arrive (event-driven, no polling):
 
-1. Fetches new blocks every 30 seconds
+1. Receives new tip events from the Esplora WebSocket as blocks are announced
 2. Filters transactions by prefix `4242`
 3. Extracts Taproot Inscription data from witness
 4. Deserializes and verifies Schnorr signatures
@@ -188,7 +188,7 @@ Thread-safe shared state (`Arc<Mutex<State>>`):
 
 1. **Bitcoin Core node** with `txindex=1` and `rest=1` (see above)
 2. **Rust 1.81+** toolchain
-3. ~2 GB RAM for the server + SP1 prover
+3. ~2 GB RAM for the server + Plonky2 prover
 
 ### From source
 
@@ -197,7 +197,6 @@ Thread-safe shared state (`Arc<Mutex<State>>`):
 cargo build --release -p server
 
 # Run (connect to local Bitcoin node)
-SP1_PROVER=mock \
 ESPLORA_URL=http://localhost:8332 \
 BITCOIN_RPC_USER=myuser \
 BITCOIN_RPC_PASSWORD=mypassword \
@@ -211,7 +210,6 @@ RUST_LOG=info \
 # Run server container, join Bitcoin node's Docker network
 docker run -p 4242:4242 \
   --network bitcoin \
-  -e SP1_PROVER=mock \
   -e ESPLORA_URL=http://bitcoind:8332 \
   -e BITCOIN_RPC_USER=myuser \
   -e BITCOIN_RPC_PASSWORD=mypassword \

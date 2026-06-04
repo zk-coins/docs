@@ -30,13 +30,13 @@ zkCoins is a web wallet built on the Shielded CSV protocol. The architecture sep
 │  (api.zkcoins.app)   │     │                      │
 │                      │     │  Taproot Inscriptions │
 │  - Account Server    │     │  (64-byte nullifiers) │
-│  - SP1 Prover        │     └──────────────────────┘
+│  - Plonky2 Prover    │     └──────────────────────┘
 │  - Chain Scanner     │
 │  - Publisher         │     ┌──────────────────────┐
-│                      │────▶│  SP1 zkVM            │
-│  State:              │     │  (Succinct)          │
-│  - Sparse Merkle Tree│     │                      │
-│  - Merkle Mt. Range  │     │  Recursive ZK Proofs │
+│                      │────▶│  Plonky2 prover      │
+│  State:              │     │  (in-process)        │
+│  - Sparse Merkle Tree│     │  Poseidon-Goldilocks │
+│  - Merkle Mt. Range  │     │  cyclic recursion    │
 └──────────────────────┘     └──────────────────────┘
 ```
 
@@ -55,7 +55,7 @@ zkCoins is a web wallet built on the Shielded CSV protocol. The architecture sep
 | [Wallet](/wallet) | Next.js 14, Tailwind, Zustand | User interface for sending and receiving |
 | [WASM Crypto](/architecture/key-management) | Rust → WebAssembly | BIP32 key derivation, Schnorr signatures |
 | [Backend](/infrastructure/backend) | Rust, Axum | Account management, proof generation, chain scanning |
-| [SP1 Circuit](/architecture/proof-system) | SP1 zkVM (Succinct) | Recursive Zero-Knowledge proof circuit |
+| [Proof System](/architecture/proof-system) | Plonky2 + Poseidon-Goldilocks | Recursive Zero-Knowledge proof circuit (cyclic recursion) |
 | [Publisher](/architecture/transaction-flow) | Rust | Bitcoin Taproot Inscription broadcasting |
 
 ## What's different from traditional CSV

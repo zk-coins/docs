@@ -57,7 +57,7 @@ Unlike CoinJoin (Wasabi, Samourai) or mixer contracts (Tornado Cash), Shielded C
 
 ## Backend visibility
 
-The current implementation uses a server-side prover (SP1 zkVM in mock mode). The backend processes transactions and therefore sees:
+The current implementation uses a server-side prover — a real, in-process Plonky2 prover that produces genuine Zero-Knowledge proofs. The trust boundary is therefore the node operator: the backend processes transactions and therefore sees:
 
 - Which accounts are sending and receiving
 - Transaction amounts

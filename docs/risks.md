@@ -19,19 +19,19 @@ Unlike regular Bitcoin wallets, seed phrase recovery alone is insufficient. Shie
 
 **Risk: Creating a transaction requires significant computation.**
 
-ZK proof generation is CPU-intensive. Research benchmarks show ~49 seconds per proof step. On mobile devices, this may be impractical.
+ZK proof generation is CPU-intensive — on the order of seconds to minutes per proof. On mobile devices, this would be impractical.
 
 **Mitigation:** Server-side proving (current approach). The prover is a service that generates proofs on behalf of users. Users can self-host for privacy.
 
 ## Proof generation latency
 
-**Note: Production uses real SP1 CPU proving.**
+**Note: Production uses real Plonky2 CPU proving.**
 
-The SP1 prover runs in CPU mode, generating legitimate compressed STARK proofs for every transaction. Proof generation takes seconds to minutes depending on transaction complexity.
+The Plonky2 prover runs in-process on CPU, generating a real recursive proof for every transaction. Proof generation takes seconds to minutes depending on transaction complexity.
 
 **Impact:** Transactions are not instant — users wait for proof generation before the inscription is broadcast to Bitcoin.
 
-**Scaling path:** GPU proving (CUDA) or the Succinct Prover Network can reduce latency if CPU becomes a bottleneck.
+**Scaling path:** Proving is CPU-only on a single host (Apple Silicon M3 Ultra); there is no GPU proving and no external proving network. The long-term direction is Plonky3 — a faster field and hash (BabyBear, Poseidon2) with active upstream development.
 
 ## Backend trust
 

@@ -15,20 +15,30 @@ zkCoins uses **Proof-Carrying Data (PCD)** — the central cryptographic abstrac
 - **Verification time is constant** — a coin that changed hands 1000 times verifies as fast as a new coin
 - With the Zero-Knowledge property: the proof hides transactions, balances, accounts — only the nullifier is revealed
 
-## SP1 zkVM
+## Plonky2 + Poseidon-Goldilocks
 
-The proof circuit runs on [SP1](https://github.com/succinctlabs/sp1) by Succinct Labs — a Zero-Knowledge virtual machine that executes standard Rust code:
+The proof circuit is a single in-process [Plonky2](https://github.com/0xPolygonZero/plonky2) prover written in Rust, running inside the node — no external prover service. It works over the Goldilocks field with the Poseidon hash (`PoseidonGoldilocksConfig`) and uses **cyclic recursion** to realise Proof-Carrying Data: each proof recursively verifies its predecessor inside the same circuit.
 
 ```rust
-// Simplified: what the SP1 circuit verifies
-fn main() {
-    // 1. Verify previous account proof (recursive)
+// Simplified: what the Plonky2 state-transition circuit enforces
+// (program-plonky2/src/circuit/main.rs)
+fn enforce() {
+    // 1. Verify the previous account proof (recursive, same circuit)
     // 2. Verify all incoming coins (Schnorr signatures, Merkle inclusion)
     // 3. Check balance: sum(inputs) >= sum(outputs)
     // 4. Verify no coin is double-spent (coin_history SMT non-inclusion)
     // 5. Generate new coin commitments
-    // 6. Commit to new account state
+    // 6. Commit to the new account state
 }
+```
+
+Because recursion is **cyclic**, every proof is verified against the circuit's own verifier data, so a proof verifies in constant time regardless of how many transactions preceded it:
+
+```rust
+// Verification (script-plonky2 wraps Plonky2's verifier).
+// `data` holds the proving/verifying keys and common circuit data;
+// `proof` is a ProofWithPublicInputs<F, C, D> over the Goldilocks field.
+data.verify(proof)?;
 ```
 
 ## Data structures
@@ -36,7 +46,7 @@ fn main() {
 ### Sparse Merkle Tree (SMT)
 
 - 256-bit key space (binary tree, depth 256)
-- Each node: `SHA256(left || right)`
+- Each node: `Poseidon(left || right)` over the Goldilocks field
 - Stores commitments indexed by public key hash
 - Supports both inclusion and non-inclusion proofs
 - Default (empty) hashes pre-computed for efficiency
@@ -60,22 +70,16 @@ Global:
 
 ## Proof types
 
-The SP1 circuit handles two proof types:
+The same cyclic-recursion circuit handles two proof types:
 
 | Type | When | What it proves |
 |---|---|---|
 | `InitialProof` | First transaction from an account | Account creation is valid, initial coins are legitimate |
 | `AccountUpdateProof` | All subsequent transactions | Previous proof was valid + new transaction is valid (recursive) |
 
-## Current status
+## Prover
 
-:::info Mock mode
-The SP1 prover currently runs in **mock mode** (`SP1_PROVER=mock`). This generates dummy proofs that pass verification but provide no actual Zero-Knowledge guarantees. It is suitable for development and testing.
-
-Production deployment requires either:
-- **Local GPU proving** — SP1 supports CUDA for fast proof generation
-- **Succinct Prover Network** — outsource proving to Succinct's decentralized network
-:::
+The prover runs in-process as part of the node — a single Rust process, no external prover service. Every proof it produces is a real Plonky2 proof with full Zero-Knowledge guarantees. Proving is CPU-only on a single host (Apple Silicon); no GPU and no external proving network are involved.
 
 ## Implementation strategies (from the paper)
 
@@ -84,16 +88,10 @@ The Shielded CSV paper describes two practical PCD instantiations:
 1. **Folding Schemes** — incremental proof compression, efficient for sequential proofs
 2. **Recursive STARKs** — proof verification inside new proofs, more established tooling
 
-The current implementation uses SP1 (STARK-based), which falls into category 2.
+The current implementation uses Plonky2, whose FRI-based recursive proofs fall into category 2. Cyclic recursion — one circuit that verifies proofs of itself — is what turns the recursive-STARK approach into Proof-Carrying Data.
 
-## Benchmark expectations
+## Performance
 
-From related research (not yet benchmarked on zkCoins):
+Proof generation runs on CPU on a single host and takes on the order of **seconds to minutes**, depending on circuit parameters and hardware. This cost is paid once per transaction, on the node, before the commitment is broadcast to Bitcoin.
 
-| Metric | Value |
-|---|---|
-| Proof generation | ~49 seconds per step (research benchmark) |
-| SNARK compression | 1031 MB → 13 KB |
-| Verifier time | 11–22 seconds |
-
-These numbers will improve significantly as SP1 and the broader ZK ecosystem mature.
+Verification is **constant-time**: cyclic recursion keeps both proof size and verification cost independent of history length, so a coin that changed hands many times verifies as fast as a freshly created one.
