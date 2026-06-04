@@ -29,7 +29,7 @@ zkCoins is a web wallet built on the Shielded CSV protocol. The architecture sep
 │  Rust/Axum Backend   │────▶│  Bitcoin Blockchain   │
 │  (api.zkcoins.app)   │     │                      │
 │                      │     │  Taproot Inscriptions │
-│  - Account Server    │     │  (64-byte nullifiers) │
+│  - Account Server    │     │  (commitment data)    │
 │  - Plonky2 Prover    │     └──────────────────────┘
 │  - Chain Scanner     │
 │  - Publisher         │     ┌──────────────────────┐
@@ -45,7 +45,7 @@ zkCoins is a web wallet built on the Shielded CSV protocol. The architecture sep
 1. **Privacy first** — every architectural decision prioritizes hiding transaction details from observers
 2. **No consensus changes** — the protocol works on Bitcoin today, no soft fork needed
 3. **Client-side validation** — receivers validate transactions, not the network
-4. **Minimal on-chain footprint** — 64 bytes per transaction, nothing more
+4. **Minimal on-chain footprint** — only a compact commitment per transaction, nothing more
 5. **Self-custodial** — keys are generated and controlled by the user, never sent to a server
 
 ## Component overview
@@ -66,6 +66,6 @@ Shielded CSV improves on existing Client-Side Validation protocols (RGB, Taproot
 |---|---|---|
 | **Privacy** | Transaction history visible to sender & receiver | Full privacy via ZK proofs |
 | **Proof size** | Grows with transaction history | Constant (independent of history) |
-| **On-chain data** | Full Bitcoin transaction (~560 WU) | 64-byte nullifier |
+| **On-chain data** | Full Bitcoin transaction (~560 WU) | Compact commitment (~177 B today; paper targets ~64 B) |
 | **Verification** | Receiver validates full history | Receiver verifies one ZK proof |
 | **Double-spend** | Full Bitcoin transaction | Single Schnorr signature |
