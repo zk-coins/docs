@@ -21,10 +21,10 @@ Every piece of information falls into exactly one class. The class answers "who 
 
 | Class | Meaning | Lives where |
 |---|---|---|
-| **Secret** | Never leaves the wallet. Disclosure = total loss of funds. | The user's device only |
-| **Private** | Plaintext bookkeeping. Disclosure = loss of _privacy_ (never theft). | Wallet + the node that hosts the account |
-| **Shareable** | Handed out on purpose. | User + the payment counterparty |
-| **Public** | Written to Bitcoin, world-readable — but only hashes. | Bitcoin L1 |
+| 🔴 **Secret** | Never leaves the wallet. Disclosure = total loss of funds. | The user's device only |
+| 🟠 **Private** | Plaintext bookkeeping. Disclosure = loss of _privacy_ (never theft). | Wallet + the node that hosts the account |
+| 🟡 **Shareable** | Handed out on purpose. | User + the payment counterparty |
+| 🟢 **Public** | Written to Bitcoin, world-readable — but only hashes. | Bitcoin L1 |
 
 The whole privacy story is the gap between **Private** (off-chain plaintext) and **Public** (on-chain hashes), and the whole trust story is the question _whose node holds the Private data_.
 
@@ -32,23 +32,23 @@ The whole privacy story is the gap between **Private** (off-chain plaintext) and
 
 | Information | Class | How it comes into existence (genesis) | Held by | Shared with | May it be shared? |
 |---|---|---|---|---|---|
-| **Seed** | Secret | 256-bit entropy (BIP-39 mnemonic, or Passkey PRF → HKDF) generated in the wallet | User only | nobody | **Never** |
-| **Master private key (Xpriv)** | Secret | BIP-32 derivation from the seed | User only | nobody | **Never** |
-| **Per-transaction private key** | Secret | BIP-32 child derivation; a fresh key per send (forward secrecy) | User only | nobody | **Never** |
-| **Public key** (33 bytes) | Public | secp256k1 from the current private key; rotates each send | User → embedded in the on-chain commitment | Bitcoin | Yes (it is published on-chain) |
-| **Address** | Shareable | `H(initial public key)` — fixed once at account creation (see [Key Management](key-management), [Addressing](addressing)) | User | the payer (inside an invoice) | Yes — but it is stable, so reusing it links payments |
-| **Invoice** `{amount, recipient, asset_id}` | Shareable | Created by the recipient when requesting a payment (encoded as an LNURL-style string) | Recipient | the chosen payer | Yes, with the payer |
-| **AccountState** `{owner, balance, public_key}` | Private | Created when the account is created; mutates on every send | User + the hosting node | only **your** node | No — the balance is private |
-| **account_state_hash** | Public | `H(AccountState)` | User → commitment | Bitcoin | Yes — a hash; hides the balance |
-| **Coin** `{identifier, recipient, amount, asset_id}` | Private | Built during a send from a `CoinTemplate` | Sender → recipient | the recipient (via the coin proof) | Recipient only (today more is visible than ideal — see [Privacy Model](privacy-model)) |
-| **Coin identifier** | Shareable | `H(account_state_hash ‖ asset_id ‖ coin_index)` | inside the coin proof | recipient + the coins tree | Yes |
-| **AssetId** | Shareable | `H(genesis_tag ‖ creator_pubkey ‖ name ‖ decimals)` at asset creation | Creator → every user of that asset | public | Yes (everyone using the token needs it) |
-| **Account / coins / history trees** (Sparse Merkle Tree, Merkle Mountain Range) | Public (roots) / Private (leaves) | The node builds them incrementally from accounts and coins | The node | roots go on-chain; plaintext leaves stay private | Roots yes; plaintext leaves no |
-| **Validity proof** (Plonky2, recursive) | Public | The node's prover produces one per state transition | The node | the recipient (inside the coin proof) | Yes — zero-knowledge, it reveals nothing beyond validity |
-| **ProofData** (public inputs) `{account_state_hash, output_coins_root, commitment_history_root, coin_history_root, asset_id}` | Public | The public outputs of the proof | public | bound on-chain | Yes — only hashes and roots |
-| **CoinProof** = `coin + proof + inclusion_proof` | Private | The sender bundles it for delivery | Sender → recipient | the recipient | Recipient only (it contains the plaintext coin) |
-| **Commitment** `{public_key, signature, message}` | Public | The owner signs `message = SHA-256(account_state_hash ‖ output_coins_root)` with a Schnorr/BIP-340 signature | first the owner, then Bitcoin | **Bitcoin** | Yes — this is the **only object that goes on-chain** |
-| **Inscription / nullifier** | Public | The commitment is written to Bitcoin as a 64-byte Taproot inscription at broadcast | Bitcoin (permanently) | the whole world | Yes (it is what prevents double-spends) |
+| **Seed** | 🔴 Secret | 256-bit entropy (BIP-39 mnemonic, or Passkey PRF → HKDF) generated in the wallet | User only | nobody | **Never** |
+| **Master private key (Xpriv)** | 🔴 Secret | BIP-32 derivation from the seed | User only | nobody | **Never** |
+| **Per-transaction private key** | 🔴 Secret | BIP-32 child derivation; a fresh key per send (forward secrecy) | User only | nobody | **Never** |
+| **Public key** (33 bytes) | 🟢 Public | secp256k1 from the current private key; rotates each send | User → embedded in the on-chain commitment | Bitcoin | Yes (it is published on-chain) |
+| **Address** | 🟡 Shareable | `H(initial public key)` — fixed once at account creation (see [Key Management](key-management), [Addressing](addressing)) | User | the payer (inside an invoice) | Yes — but it is stable, so reusing it links payments |
+| **Invoice** `{amount, recipient, asset_id}` | 🟡 Shareable | Created by the recipient when requesting a payment (encoded as an LNURL-style string) | Recipient | the chosen payer | Yes, with the payer |
+| **AccountState** `{owner, balance, public_key}` | 🟠 Private | Created when the account is created; mutates on every send | User + the hosting node | only **your** node | No — the balance is private |
+| **account_state_hash** | 🟢 Public | `H(AccountState)` | User → commitment | Bitcoin | Yes — a hash; hides the balance |
+| **Coin** `{identifier, recipient, amount, asset_id}` | 🟠 Private | Built during a send from a `CoinTemplate` | Sender → recipient | the recipient (via the coin proof) | Recipient only (today more is visible than ideal — see [Privacy Model](privacy-model)) |
+| **Coin identifier** | 🟡 Shareable | `H(account_state_hash ‖ asset_id ‖ coin_index)` | inside the coin proof | recipient + the coins tree | Yes |
+| **AssetId** | 🟡 Shareable | `H(genesis_tag ‖ creator_pubkey ‖ name ‖ decimals)` at asset creation | Creator → every user of that asset | public | Yes (everyone using the token needs it) |
+| **Account / coins / history trees** (Sparse Merkle Tree, Merkle Mountain Range) | 🟢 Public (roots) / 🟠 Private (leaves) | The node builds them incrementally from accounts and coins | The node | roots go on-chain; plaintext leaves stay private | Roots yes; plaintext leaves no |
+| **Validity proof** (Plonky2, recursive) | 🟢 Public | The node's prover produces one per state transition | The node | the recipient (inside the coin proof) | Yes — zero-knowledge, it reveals nothing beyond validity |
+| **ProofData** (public inputs) `{account_state_hash, output_coins_root, commitment_history_root, coin_history_root, asset_id}` | 🟢 Public | The public outputs of the proof | public | bound on-chain | Yes — only hashes and roots |
+| **CoinProof** = `coin + proof + inclusion_proof` | 🟠 Private | The sender bundles it for delivery | Sender → recipient | the recipient | Recipient only (it contains the plaintext coin) |
+| **Commitment** `{public_key, signature, message}` | 🟢 Public | The owner signs `message = SHA-256(account_state_hash ‖ output_coins_root)` with a Schnorr/BIP-340 signature | first the owner, then Bitcoin | **Bitcoin** | Yes — this is the **only object that goes on-chain** |
+| **Inscription / nullifier** | 🟢 Public | The commitment is written to Bitcoin as a 64-byte Taproot inscription at broadcast | Bitcoin (permanently) | the whole world | Yes (it is what prevents double-spends) |
 
 ## How information comes into existence
 
