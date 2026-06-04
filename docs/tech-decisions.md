@@ -90,39 +90,35 @@ Every technology choice has trade-offs. This page documents what we chose, why, 
 **Chosen:** Rust with Axum (async web framework)
 
 **Why:**
-- **Same language as the ZK circuits** — shared types between server and SP1 program
+- **Same language as the ZK circuits** — shared types between the server and the Plonky2 circuit crates
 - **Performance** — Rust handles concurrent blockchain scanning and proof generation efficiently
 - **Memory safety** — critical for a system that manages cryptographic state
 - **Axum** — built on Tokio, idiomatic Rust, excellent middleware ecosystem
 - **Direct port of ZeroSync prototype** — minimal rewrite needed
 
 **Considered:**
-- **Node.js/TypeScript** — used in DFX projects (indexer, prover). Would require rewriting all Rust types and Merkle tree logic. The shared Rust workspace between server and SP1 program is a significant advantage
-- **Go** — good for concurrent servers but no SP1 zkVM support, would need FFI bridge
+- **Node.js/TypeScript** — used in DFX projects (indexer, prover). Would require rewriting all Rust types and Merkle tree logic. The shared Rust workspace between the server and the Plonky2 circuit is a significant advantage
+- **Go** — good for concurrent servers but cannot use the Plonky2 prover (a Rust library) natively, would need an FFI bridge
 - **Python/FastAPI** — too slow for proof generation and blockchain scanning
 
 ---
 
-## ZK Proofs: SP1 zkVM (Succinct)
+## ZK Proofs: Plonky2 + Poseidon-Goldilocks
 
-**Chosen:** SP1 with CPU prover (production)
+**Chosen:** Plonky2 with cyclic recursion — an in-process CPU prover (Apple Silicon)
+
+The proving system began as an SP1 + SHA256 prototype and was migrated to Plonky2 + Poseidon-Goldilocks, which is the current implementation.
 
 **Why:**
-- **Write proofs in standard Rust** — no DSL, no Circom, no custom language
-- **Recursive proofs** — essential for Proof-Carrying Data (PCD)
-- **Succinct Prover Network** — outsource proving to decentralized network (future)
-- **Active development** — Succinct is well-funded, rapid iteration
-- **Used by ZeroSync prototype** — proven to work for this use case
-
-**Prover modes:**
-- **CPU** (current production) — runs on ARM64 (Apple Silicon M3 Ultra), generates real compressed STARK proofs
-- **Mock** (development only) — dummy proofs for local testing via `SP1_PROVER=mock`
-- **GPU / Network** (future scaling) — CUDA or Succinct Prover Network for lower latency
+- **Cyclic recursion** — a single circuit that recursively verifies proofs of itself. This is what realises Proof-Carrying Data (PCD) with constant proof size and constant verification time, the core requirement of Shielded CSV
+- **No external prover dependency** — proving runs in one in-process Rust prover: no external prover service and no decentralized proving network to depend on or trust
+- **Shared Rust workspace** — the circuit and the node live in the same Rust workspace and share types directly: no DSL, no language boundary, no FFI
+- **Plonky3 as the long-term path** — Plonky2 is treated as bridge technology; Plonky3 (Poseidon2, BabyBear field, active upstream development) is the long-term destination. The circuit is kept implementation-agnostic to ease that future port
 
 **Considered:**
-- **Circom + Groth16** — used in Shade Protocol. Excellent for EVM verification but poor fit for Bitcoin (no on-chain verifier). Also requires a trusted setup
-- **Halo2** — used by Zcash. Mature but complex DSL, steep learning curve
-- **RISC Zero** — similar to SP1 but less ecosystem support for Bitcoin
+- **General-purpose zkVMs** — let you write proofs in standard Rust, but add a VM execution layer and typically lean on an external or decentralized prover network for scaling. The migration to an in-process Plonky2 prover deliberately dropped that external dependency
+- **Circom + Groth16** — used in Shade Protocol. Excellent for EVM verification but a poor fit for Bitcoin (no on-chain verifier). Also requires a trusted setup
+- **Halo2** — used by Zcash. Mature but a complex DSL with a steep learning curve
 
 ---
 

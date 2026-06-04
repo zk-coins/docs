@@ -118,7 +118,6 @@ Runtime env var injection via `entrypoint.sh` — same image for DEV and PRD.
 ```bash
 docker run -p 4242:4242 \
   --network bitcoin \
-  -e SP1_PROVER=mock \
   -e ESPLORA_URL=http://bitcoind:8332 \
   -e BITCOIN_RPC_USER=myuser \
   -e BITCOIN_RPC_PASSWORD=mypassword \
