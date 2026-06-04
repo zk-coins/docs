@@ -85,6 +85,43 @@ C does **not** receive: the amount, the recipient, the fact that Tapfreak was in
 
 ¹ Only an encrypted, gift-wrapped blob — no sender, recipient, amount, or asset (see below). ² As opaque inscription bytes.
 
+## Two keys: spend vs operational
+
+The node must never hold the key that moves funds — yet the off-chain layer (publishing to relays, decrypting incoming bundles, signing view grants) needs a key that can act while the wallet is offline. zkCoins resolves this with **two keys per wallet, split by role**:
+
+| Key | Held by | Can | Cannot |
+|---|---|---|---|
+| **Spend key** | the wallet only | sign commitments — i.e. **spend** (custody) | — |
+| **Operational key** (per wallet) | the node | publish/receive on Nostr, **decrypt** incoming bundles (read), sign **view grants** + acknowledgements | **never spend** |
+
+Both come from the **same seed**, on **separate hardened BIP-32 branches**, so:
+
+- the wallet re-derives **both** deterministically on recovery (one seed backup);
+- the hardened split means the operational key **cannot be walked back** to the spend key — compromising the node leaks _read access_, never spend authority.
+
+This makes the trust statement precise: the node never holds the **spend** key; it may hold a **spend-less operational key**. A compromised node is therefore a **privacy breach (read) — never theft**, exactly matching "a node can see but cannot steal."
+
+Incoming bundles are addressed to the **operational key**, so the always-on node receives, decrypts and stores them without ever touching the spend key; the wallet comes online only to spend.
+
+**Own node vs foreign node.** You give _your own_ node the derived operational key. A _foreign_ node never gets your key — instead the wallet issues it a **scoped, signed delegation** to that node's own key. Same self-host-vs-foreign spectrum as everywhere.
+
+## The node is also a Nostr relay
+
+Every zkCoins node **is itself a full Nostr relay**. That collapses the entire off-chain layer into the node you already run:
+
+- **Self-hosted delivery, storage and recovery** — your node is your relay is your persistent bundle store. Senders publish to it; after a crash you re-pull from it.
+- **The node network _is_ the relay mesh** — nodes subscribe to and replicate each other for redundancy, with no third-party dependency.
+- **Dual-use** — as a _full_ relay it also carries general Nostr traffic, so coin-delivery events **blend into ordinary traffic** (cover traffic) and the node is useful Nostr infrastructure besides.
+
+One process does it all: Bitcoin validation, proof verification, state, the encrypted bundle relay/store, and the capability-gated pull endpoint.
+
+**Caveats:**
+
+- **Durability needs replication.** Your own relay removes the _dependency_, not the single point of failure — mirror bundles to a few peer/fallback relays so one dead disk cannot lose coins.
+- **Receiving needs the relay online** — advertise several relays (your own + fallbacks); store-and-forward across the mesh.
+- **A full open relay invites spam/storage abuse** — needs policies (capability-gating for pulls, anti-spam / PoW / web-of-trust for posting, scope to your own wallets for delivery).
+- **A relay exposes network presence (IP)** — Tor / hidden service as an option.
+
 ## The transport layer: delivering the bundle over Nostr
 
 The scenario exposes the missing piece. On-chain carries only the commitment hash; the **CoinProof bundle must travel off-chain from A to B**. On a single shared service this happens implicitly today (sender and recipient share a node, which hands the coin over internally). For independent, equal nodes, zkCoins needs a **defined delivery protocol**.
@@ -102,9 +139,9 @@ The scenario exposes the missing piece. On-chain carries only the commitment has
 
 ### Design: delivery over Nostr
 
-zkCoins identities are **secp256k1 / BIP-340** keys — the same family Nostr uses — so an account's identity key is directly usable as a Nostr key, with **no separate keypair**. That makes Nostr a natural fit:
+Delivery uses the **operational key** from the two-key model above — a secp256k1 / BIP-340 key, the same family Nostr uses, so it doubles as the wallet's Nostr key with **no separate keypair**. The node holds it and runs the relay:
 
-1. **Addressing.** B's receive identity is B's stable identity key (the one its address derives from), which is also B's Nostr public key. B's invoice/address advertises its relay set.
+1. **Addressing.** B's receive identity is B's **operational (Nostr) public key**; B's invoice/address advertises its relay set.
 2. **Encrypt.** A encrypts the CoinProof bundle to B's key (NIP-44).
 3. **Gift-wrap.** A wraps it (NIP-59) under an ephemeral key, so relays see neither sender nor recipient — only an opaque event.
 4. **Publish.** A posts the gift-wrapped event to B's relays (and/or shared relays).
@@ -128,21 +165,35 @@ A Nostr relay carrying the delivery sees an **opaque, gift-wrapped, encrypted ev
 - **Proof size.** A CoinProof carries a zero-knowledge proof. If it exceeds practical relay event sizes, the design splits into a small Nostr control message plus the encrypted proof blob in content-addressed storage (e.g. a Blossom-style store), with the Nostr event carrying the pointer and decryption key.
 - **Acknowledgement & retries** must be specified so delivery is reliable, not best-effort.
 
-## Recovery: pulling your data back
+## Recovery: seed + Bitcoin + an honest network
 
-Delivery (push once) is not the same as **recovery** (pull anytime). Bitcoin stores only the commitment hashes, so a node that loses its local state **cannot rebuild the spendable coins from the chain alone**. The bundle is the spend credential — therefore the network must let a holder **re-pull all of their coin data with nothing but their seed**.
+Delivery (push once) is not the same as **recovery** (pull anytime). Bitcoin stores only the commitment hashes, so a node that loses its local state **cannot rebuild the spendable coins from the chain alone**. The property zkCoins targets:
 
-This turns the transport into a **persistent, key-indexed, encrypted store** the owner can query:
+> With only the **seed**, the **public Bitcoin chain**, and an **honest (cooperating) network**, a user recovers their **entire** spendable state — **trustlessly**.
 
-- bundles are kept durably — the owner runs or pins at least one **persistent relay**, never relying on the counterparty (who may disappear);
-- the owner re-derives its keys from the seed and **pulls every bundle addressed to it**, decrypts, and rebuilds state.
+**What the seed gives back (deterministic).** Every key (spend + operational + all rotating keys), the address/identity, the decryption ability, and the deterministic pull-tags — enough to prove ownership and to enumerate and decrypt everything that is yours.
 
-There is a real tension between _pullability_ and _recipient privacy_, because to return "everything for me" the store must recognise the owner's items:
+**What Bitcoin gives back (the index + integrity anchor).** The full ordered set of commitments, the nullifier set, and the global roots — reconstructable by any node. It lets you **authenticate every recovered bundle** (proof valid + anchored + not double-spent). Where the on-chain commitment carries your signing public key, you can also **privately recognise your own commitments** — your seed derives the keys; outsiders cannot link the rotating keys, but you can — recovering the skeleton of your own activity.
 
-- **Simple:** items are tagged with the owner's public key — the owner pulls all of them, but the store learns who the recipient is.
-- **Private:** the owner derives deterministic, seed-bound tags that look random to the store — the owner computes its own tags and pulls by them, while the store cannot link them back to the owner.
+**What is irreducibly external — and how it comes back.** The coin **values** (amounts, recipients), especially of **incoming** coins, are _choices others made_; they live only in the bundles and cannot be derived from a hash or your seed. Under an **honest network** these bundles are simply **returned on request**: you prove ownership (or present your tags), cooperating nodes serve every bundle addressed to you, and you **verify each one against Bitcoin**.
 
-This data-availability layer is the **hardest part** of any client-side-validation protocol. Solving it as a **network pull** — rather than the manual file backups RGB / Taproot Assets rely on — is a concrete advantage.
+**Why it stays trustless.** Because Bitcoin authenticates every returned bundle, a node can only **withhold**, never forge. So:
+
+- **cooperation is needed only for availability** — they hand back what they hold;
+- **correctness is guaranteed by the chain** — you verify what they hand back.
+
+The network is reduced to an **untrusted blob cache** checked against Bitcoin.
+
+**The one precondition (even under cooperation).** "Cooperate" means _they serve what they have_ — you also need the network to **hold** it. So the delivery layer must **distribute/replicate** bundles across nodes, not leave them on the single node you lost. **Honest + replicated ⇒ total, trustless recovery.**
+
+**Pullability vs recipient privacy.** To return "everything for me", the store must recognise your items —
+
+- **Simple:** items tagged with your public key (the store learns the recipient);
+- **Private:** deterministic, seed-bound tags that look random to the store (you compute your own; the store cannot link them to you).
+
+**Asset id falls out of the bundles.** It is part of every coin (`asset_id = H(creator ‖ name ‖ decimals)`), so it is not a separate recovery input; only the human-readable **name** is external (never on-chain, not in the hash). The effective inputs reduce to **seed + Bitcoin + the (honest, replicated) network**.
+
+This data-availability layer is the **hardest part** of any client-side-validation protocol. Solving it as a **network pull verified against Bitcoin** — rather than the manual file backups RGB / Taproot Assets rely on — is a concrete advantage.
 
 ## Access model: capability-gated pull
 
@@ -163,7 +214,7 @@ The access model yields two distinct explorers over the **same data** — the on
 ## Status / caveats
 
 - **Trustless receive (S1).** "B verifies without trusting A" requires B to re-verify the full recursive proof on receipt — the keystone of the decentralisation roadmap.
-- **The delivery, recovery, and access model are proposed** (roadmap), not yet implemented; today delivery is implicit same-node.
+- **The whole off-chain layer** (two-key model, node-as-relay, delivery, recovery, access) **is proposed** (roadmap), not yet implemented; today delivery is implicit same-node.
 - **Trustless emission (S5).** Permissionless, un-privileged minting ("A mints") is the emission roadmap item.
 - **Asset names are never on-chain.** "Tapfreak" lives only in the peer-to-peer coin data and the `asset_id`.
 
