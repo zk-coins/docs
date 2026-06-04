@@ -11,7 +11,7 @@ Transparency about limitations is essential. This page documents every known ris
 
 **Risk: Losing the wallet means losing the coins.**
 
-Unlike regular Bitcoin wallets, seed phrase recovery alone is insufficient. Shielded CSV coins require the **coin proofs** — Zero-Knowledge proofs of each coin's validity — to be preserved. Without them, the coins exist on-chain (as nullifiers) but cannot be spent.
+Unlike regular Bitcoin wallets, seed phrase recovery alone is insufficient. Shielded CSV coins require the **coin proofs** — Zero-Knowledge proofs of each coin's validity — to be preserved. Without them, the coins are anchored on-chain (as opaque commitments) but cannot be spent.
 
 **Mitigation:** Planned backup/restore feature for wallet state export. Users must back up the entire wallet file, not just the seed phrase.
 
@@ -61,7 +61,7 @@ The BIP32 master key is stored encrypted using AES-256-GCM in the browser's Inde
 
 **Risk: Loss of coin proofs means loss of funds.**
 
-Client-Side Validation protocols are inherently vulnerable to data loss. The blockchain stores only nullifiers, not transaction data. If the wallet's coin proofs are lost, the coins become unspendable.
+Client-Side Validation protocols are inherently vulnerable to data loss. The blockchain stores only opaque commitments, not transaction data. If the wallet's coin proofs are lost, the coins become unspendable.
 
 **Mitigation:** Planned backup/restore feature. Research on UTxO binding for data availability is ongoing ([ePrint 2025/569](https://eprint.iacr.org/2025/569)).
 
@@ -89,7 +89,7 @@ Shielded CSV transactions are interactive — the sender must deliver the coin p
 
 **Risk: Privacy depends on usage volume.**
 
-If very few people use Shielded CSV, the anonymity set is small. Timing analysis on nullifiers could reveal patterns. The protocol's privacy guarantees strengthen as adoption grows.
+If very few people use Shielded CSV, the anonymity set is small. Timing analysis on the on-chain commitments could reveal patterns. The protocol's privacy guarantees strengthen as adoption grows.
 
 ## Regulatory uncertainty
 

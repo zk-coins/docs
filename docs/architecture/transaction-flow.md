@@ -5,7 +5,7 @@ title: Transaction Flow
 
 # Transaction Flow
 
-zkCoins supports three operations: **create account** (mint), **send**, and **receive**. All operations interact with the Rust backend, which manages account state and publishes nullifiers to Bitcoin.
+zkCoins supports three operations: **create account** (mint), **send**, and **receive**. All operations interact with the Rust backend, which manages account state and publishes commitments to Bitcoin.
 
 ## Create Account (Mint)
 
@@ -27,7 +27,7 @@ Browser (WASM)                    Backend                     Bitcoin
  │                                  │──────────────────────────>│
  │                                  │                           │
  │                                  │  Taproot Inscription      │
- │                                  │  (64-byte nullifier)      │
+ │                                  │  (commitment)             │
  │                                  │                           │
  │          {proof_id}              │                           │
  │<─────────────────────────────────│                           │

@@ -10,14 +10,14 @@ zkCoins follows the **Bitcoin full-node model: your wallet trusts _your_ node, e
 
 zkCoins splits into two pieces:
 
-- **The node** — a validator. It scans Bitcoin, verifies zero-knowledge proofs, maintains the commitment and nullifier history, and publishes nullifiers.
+- **The node** — a validator. It scans Bitcoin, verifies zero-knowledge proofs, maintains the commitment history, and publishes commitments.
 - **The wallet** — a thin key-holder. It stores your seed, derives keys, and signs.
 
 This split is packaging, not a trust boundary. It is the same separation as `bitcoind` (the validator) and a Bitcoin wallet (the key-holder). The only line the node never crosses is your private key — that never leaves the wallet.
 
 ## What a node cannot do
 
-A node — including a public one you do not control — **can never steal, forge, or double-spend your coins.** That is enforced cryptographically: every transfer carries a recursive zero-knowledge validity proof, and spent-coin nullifiers are anchored on Bitcoin. A dishonest operator cannot fabricate value or take yours.
+A node — including a public one you do not control — **can never steal, forge, or double-spend your coins.** That is enforced cryptographically: every transfer carries a recursive zero-knowledge validity proof, and every spend is anchored to an immutable on-chain commitment. Double-spend protection is enforced **inside the proof circuit** today (a proof of non-inclusion in the per-account coin history); a verifier-queryable global on-chain nullifier set is a roadmap item (see [Nullifier Design](nullifier-design)). A dishonest operator cannot fabricate value or take yours.
 
 ## What changes when the node is not yours
 
