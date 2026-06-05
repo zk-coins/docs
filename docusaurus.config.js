@@ -37,6 +37,8 @@ const config = {
     ],
   ],
 
+  plugins: [require.resolve('./plugins/llms-txt')],
+
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
