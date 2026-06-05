@@ -63,11 +63,11 @@ This ensures the same seed always produces the same address, enabling wallet rec
 :::danger Seed phrase recovery is NOT sufficient
 Unlike regular Bitcoin wallets, recovering a seed phrase alone does not restore a zkCoins wallet. The **coin proofs** — the Zero-Knowledge proofs of each coin's validity — must also be preserved. Without them, the coins cannot be spent.
 
-This is a fundamental property of Client-Side Validation: the blockchain only stores nullifiers, not transaction data. The wallet must keep its own records.
+This is a fundamental property of Client-Side Validation: the blockchain only stores opaque commitments, not transaction data. The wallet must keep its own records.
 :::
 
 Planned backup approach:
 
 1. Export wallet state as encrypted file (master key + coin proofs)
 2. Import on another device
-3. Re-scan blockchain for nullifiers to rebuild accumulator state
+3. Re-scan the blockchain for commitments to rebuild local state

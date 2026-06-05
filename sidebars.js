@@ -2,11 +2,27 @@
 const sidebars = {
   docs: [
     'intro',
+    'requirements',
+    {
+      type: 'category',
+      label: 'Specification',
+      items: [
+        'specification/index',
+        'specification/foundations',
+        'specification/proofs',
+        'specification/onchain',
+        'specification/transport-recovery',
+        'specification/access-explorer',
+        'specification/architecture',
+      ],
+    },
     {
       type: 'category',
       label: 'Architecture',
       items: [
         'architecture/overview',
+        'architecture/information-model',
+        'architecture/information-flow',
         'architecture/trust-model',
         'architecture/privacy-model',
         'architecture/nullifier-design',
@@ -37,6 +53,20 @@ const sidebars = {
         'research/authors',
         'research/community',
         'research/sources',
+        {
+          type: 'category',
+          label: 'Adoptable Elements',
+          items: [
+            'research/adoptable-elements/index',
+            'research/adoptable-elements/csv-bitcoin',
+            'research/adoptable-elements/shielded-zk-chains',
+            'research/adoptable-elements/evm-privacy',
+            'research/adoptable-elements/stateless-rollups',
+            'research/adoptable-elements/bitcoin-asset-overlays',
+            'research/adoptable-elements/ecash',
+            'research/adoptable-elements/other-trust-models',
+          ],
+        },
       ],
     },
     'risks',
