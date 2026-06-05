@@ -5,6 +5,19 @@ const sidebars = {
     'requirements',
     {
       type: 'category',
+      label: 'Specification',
+      items: [
+        'specification/index',
+        'specification/foundations',
+        'specification/proofs',
+        'specification/onchain',
+        'specification/transport-recovery',
+        'specification/access-explorer',
+        'specification/architecture',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Architecture',
       items: [
         'architecture/overview',
