@@ -2,6 +2,7 @@
 const sidebars = {
   docs: [
     'intro',
+    'requirements',
     {
       type: 'category',
       label: 'Architecture',
