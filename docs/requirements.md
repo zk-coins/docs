@@ -42,3 +42,7 @@ The protocol supports multiple distinct asset types, each identified by a global
 ### 9. Explorer (shareable confirmation)
 
 A sender can generate a shareable link that grants its holder a full view of exactly one transaction — amount, asset, time, and status — and nothing beyond it. The link carries a scoped view capability, never a public identifier and never the spend key. The confirmation must be cryptographically verifiable against Bitcoin rather than asserted by the explorer, and the explorer must be self-hostable.
+
+### 10. Node portability
+
+A wallet — the holder of the seed — can switch nodes at any time and can use multiple nodes simultaneously. A wallet must not depend on any node-specific state; every conforming node is interchangeable, and no node can lock a wallet in.
