@@ -13,15 +13,15 @@ zkCoins settles exclusively on Bitcoin mainnet Layer 1. It introduces no separat
 
 ### 2. Private
 
-From public on-chain data alone, no observer can determine a payment's amount, asset, sender, or receiver, nor link two on-chain events to the same coin, account, or user. The anonymity set is global — every coin in the system — not a fixed decoy ring or a per-round participant set. Only the existence and timing of an opaque on-chain event may be observable.
+From public on-chain data alone, no observer can determine a payment's amount, asset, sender, or receiver, nor link two on-chain events to the same coin, account, or user. The anonymity set is global — every coin in the system — not a fixed decoy ring or a per-round participant set.
 
 ### 3. Trustless
 
-The integrity of funds is enforced by cryptography and Bitcoin alone. No party — a node operator, a public node, any setup procedure, trusted hardware, or a federation — can steal, forge (create coins it is not entitled to), double-spend, or freeze coins it does not own. A node's only residual powers are over the privacy of its own users (it sees the data they entrust to it) and over availability (it can withhold service); it can never violate this guarantee.
+The integrity of funds is enforced by cryptography and Bitcoin alone. No party — a node operator, a public node, any setup procedure, trusted hardware, or a federation — can steal, forge (create coins it is not entitled to), double-spend, or freeze coins it does not own.
 
 ### 4. Client-side validation
 
-A receiver accepts a coin only after independently verifying its full validity proof. Correctness never depends on trusting the sender, the node, or any third party.
+A receiver accepts a coin only after independently verifying its full validity proof; correctness never depends on trusting the sender, the node, or any third party.
 
 ### 5. Custody only in the wallet
 
@@ -29,11 +29,11 @@ The key that authorizes spending exists only on the user's wallet and is never t
 
 ### 6. Recovery
 
-Under normal operation a node operator restores from their own backup; the seed is the root from which all keys are deterministically derived. As an emergency fallback after total loss of local data, the complete state must be reconstructable from the seed, the public Bitcoin chain, and the coin data replicated across other nodes.
+The seed is the root from which all keys are deterministically derived. The complete state must be recoverable: normally from the node operator's own backup, and — as an emergency fallback after total loss of local data — from the seed, the public Bitcoin chain, and the coin data replicated across other nodes.
 
 ### 7. Self-hostable
 
-Anyone can run their own node. Using zkCoins must never require trusting or depending on any specific operator; a user who runs their own node trusts no third party for the integrity of their funds.
+Anyone can run their own node; using zkCoins must never require trusting or depending on any specific operator.
 
 ### 8. Multi-asset
 
