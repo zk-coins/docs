@@ -20,11 +20,13 @@ w = {
   prev_proof,                 // the account's previous recursive proof (absent for InitialProof)
   prev_account_state,         // AccountState before this transition (Foundations §1.5)
   input_coins[],              // coins being spent (Foundations §1.5); empty for a pure mint
-  input_auth[]   = {          // per input coin, the spend authorisation
-    sig          : BIP-340(skⱼ, coin.identifier),   // signature by the coin's spend key
-    pubkey       : Pkⱼ (x-only),                     // the spend pubkey that fixes the address
-    history_path                                     // inclusion in prior coin-history SMT
+  input_auth[]   = {          // per input coin, membership evidence (NO per-coin key/signature)
+    history_path,                                    // inclusion in prior coin-history SMT
+    creating_ash                                     // the new_account_state_hash of the transition that
+                                                     // created this coin, delivered inside its CoinProof bundle
   },
+  txn_sig        = BIP-340(skᵢ, message),            // the account's single transition signature (Commitment)
+  txn_pubkey     = Pkᵢ (x-only),                     // current_pubkey, authorises this whole transition
   nullifier_nonmembership[],  // per input coin, non-membership path in the nullifier accumulator
   nullifier_insertion[],      // per input coin, the post-insertion membership path
   output_templates[],         // CoinTemplate list (Foundations §1.5)
@@ -37,19 +39,19 @@ w = {
 **Predicate `C` — enumerated clauses.**
 
 1. **Recursive verification (PCD).** Either this is an `InitialProof` and `w.prev_proof` is absent and `ProofData.prev_commitment_history_root` equals the canonical empty-account root; **or** `w.prev_proof` verifies under the circuit's own verifier data (cyclic recursion), and its public output `new_account_state_hash` equals the `ash` of `w.prev_account_state`, and its `coin_history_root` equals the coin-history root over which clause 3 proves inclusion. The verifier data **MUST** be fixed and identical in prover and verifier; a proof verified against any other verifier data is invalid.
+   - **Lineage binding to global history.** `ProofData.prev_commitment_history_root` **MUST** equal the global Commitment-MMR root ([Foundations](foundations) §1.6) as of the account's previous committed transition, binding the account's lineage to the on-chain global history.
 
-2. **Input authenticity.** For every `input_coins[j]`:
-   a. `input_auth[j].sig` is a valid **BIP-340** signature (see [Foundations](foundations) §1.1) over `input_coins[j].identifier` by `input_auth[j].pubkey`;
-   b. `input_coins[j].recipient` equals `prev_account_state.owner`, i.e. the coin is owned by the spending account (`owner = address = H(Pk₀)`, [Foundations](foundations) §1.4);
-   c. `input_coins[j]` is included in the prior **coin-history SMT** (per-account, [Foundations](foundations) §1.6) via `input_auth[j].history_path` against the root referenced in clause 1;
-   d. `input_coins[j].identifier` is recomputed in-circuit as `Hc("Coin", account_state_hash ‖ asset_id ‖ coin_index)` and **MUST** match the supplied identifier.
+2. **Input authenticity.** The whole transition is authorised by the account's **single transition signature** — there is no per-coin key and no per-coin signature ([Foundations](foundations) §1.2). The circuit **MUST** check that `txn_sig` is a valid **BIP-340** signature (see [Foundations](foundations) §1.1) over `message = ash ‖ ocr` by `txn_pubkey = Pkᵢ`, and that `Pkᵢ` is `prev_account_state.current_pubkey`. Then, for every `input_coins[j]`:
+   a. `input_coins[j].recipient` equals `prev_account_state.owner`, i.e. the coin is owned by the spending account (`owner = address = H(Pk₀)`, [Foundations](foundations) §1.4) — ownership is by the account, so a receiver never needs a per-coin key index;
+   b. `input_coins[j]` is included in the prior **coin-history SMT** (per-account, [Foundations](foundations) §1.6) via `input_auth[j].history_path` against the root referenced in clause 1;
+   c. `input_coins[j].identifier` is recomputed in-circuit as `Hc("Coin", input_auth[j].creating_ash ‖ asset_id ‖ coin_index)` — using the witnessed `creating_ash` (the `new_account_state_hash` of the transition that produced this coin, delivered to the spender inside the coin's `CoinProof` bundle), **not** the hash of `prev_account_state` — and **MUST** match the supplied identifier. The per-input witness `input_auth[]` **MUST** therefore include each input coin's `creating_ash`. This matches [Foundations](foundations) §1.4: a coin's identifier binds its creating state's `ash`.
 
 3. **Per-asset balance conservation.** Let `In(a) = Σ { input_coins[j].amount : input_coins[j].asset_id = a }` and `Out(a) = Σ { output_templates[k].amount : output_templates[k].asset_id = a }`, plus `Mint(a)` from any `asset_issuance` for asset `a` (zero otherwise). For **every** `asset_id` `a` appearing in inputs or outputs: `In(a) + Mint(a) ≥ Out(a)`. All amounts are range-checked to a fixed non-negative integer width so no sum can wrap the field; any amount outside range invalidates the proof. The difference `In(a) + Mint(a) − Out(a)` is retained by the account (a change coin) — funds are conserved, never created except by an explicit, predicate-checked `Mint(a)`.
 
 4. **Nullifier freshness (no double-spend).** For every `input_coins[j]`:
    a. compute `nf_j = Hc("Nullifier", nk ‖ input_coins[j].identifier)` (see [Foundations](foundations) §1.4) in-circuit from the witnessed `nk`;
-   b. prove **non-membership** of `nf_j` in the global **nullifier accumulator** at root `ProofData.prev_commitment_history_root`'s associated `nullifier_acc_root` via `nullifier_nonmembership[j]`;
-   c. prove **membership** of `nf_j` in the updated accumulator via `nullifier_insertion[j]`, yielding the new root `ProofData.nullifier_acc_root`. All `nf_j` within one transition **MUST** be pairwise distinct. The set of `nf_j` forms the leaves whose root is `ProofData.input_nullifiers_root`.
+   b. prove **non-membership** of `nf_j` in the global **nullifier accumulator** at root `ProofData.prev_nullifier_acc_root` via `nullifier_nonmembership[j]`;
+   c. prove **membership** of `nf_j` in the updated accumulator via `nullifier_insertion[j]`; inserting the full set of `nf_j` into `prev_nullifier_acc_root` yields the new root `ProofData.nullifier_acc_root`. All `nf_j` within one transition **MUST** be pairwise distinct. The set of `nf_j` forms the leaves whose root is `ProofData.input_nullifiers_root`.
 
 5. **Output coin construction.** For each `output_templates[k]`, the new `coin.identifier` is computed as `Hc("Coin", new_account_state_hash ‖ output_templates[k].asset_id ‖ coin_index_k)` ([Foundations](foundations) §1.4), with `coin_index_k` assigned monotonically within the transition. The resulting `Coin` objects (`{identifier, recipient, amount, asset_id}`) are the transition's outputs.
 
@@ -59,7 +61,7 @@ w = {
 
 8. **Coin-history update.** The per-account coin-history SMT is updated to mark spent inputs and admit the change/issuance coins; `ProofData.coin_history_root` **MUST** equal the resulting root.
 
-9. **Public-input binding.** All six `ProofData` fields — `prev_commitment_history_root`, `new_account_state_hash`, `output_coins_root`, `input_nullifiers_root`, `nullifier_acc_root`, `coin_history_root` — **MUST** be the in-circuit-computed values above and are the proof's public inputs. Nothing else is public: amounts, asset ids, recipients, keys, and counts remain in the witness (zero-knowledge).
+9. **Public-input binding.** All seven `ProofData` fields — `prev_commitment_history_root`, `new_account_state_hash`, `output_coins_root`, `input_nullifiers_root`, `prev_nullifier_acc_root`, `nullifier_acc_root`, `coin_history_root` — **MUST** be the in-circuit-computed values above and are the proof's public inputs. Nothing else is public: amounts, asset ids, recipients, keys, and counts remain in the witness (zero-knowledge).
 
 The signed on-chain **Commitment** (`message = ash ‖ ocr`, [Foundations](foundations) §1.4) binds the two state-defining outputs of this predicate (`new_account_state_hash` and `output_coins_root`) to Bitcoin via a BIP-340 signature by `Pkᵢ`; construction and publishing are specified in [On-chain Layer](onchain).
 
@@ -89,23 +91,24 @@ Inputs (wallet → node):
   amount                                 // initial supply to emit to self
 
 Wallet:
-  1. derive Pk₀ = sk₀·G; sign as required by clause 2/§2.1 with the relevant skⱼ
-  2. derive asset_id = Hc("AssetId", genesis_tag ‖ Pk₀ ‖ H(name) ‖ decimals)   (Foundations §1.4)
+  1. derive Pk₀ = sk₀·G; sign the transition signature BIP-340(sk₀, message = ash ‖ ocr)
+     (the initial transition is signed by Pk₀, i.e. sk₀; current_pubkey rotates to Pk₁)
+  2. derive name_hash = H(name); asset_id = Hc("AssetId", genesis_tag ‖ Pk₀ ‖ name_hash ‖ decimals)   (Foundations §1.4)
   3. provide nk and next_pubkey Pk₁ from the SPEND branch
 
 Node / prover:
-  4. build the witness with empty inputs, asset_issuance = {asset_id, H(name), amount, decimals},
+  4. build the witness with empty inputs, asset_issuance = {asset_id, name_hash, amount, decimals},
      and one output coin {recipient = owner, amount, asset_id}
   5. run C as an InitialProof (clause 1, InitialProof path): Mint(asset_id) = amount,
      In(asset_id) = 0, so balance clause 3 admits exactly `amount` of the new asset
   6. obtain π, new ash, ocr, and ProofData
 
-Becomes the Commitment (on-chain):  { Pk₀ or Pk₁, BIP-340 sig, message = ash ‖ ocr }
+Becomes the Commitment (on-chain):  { Pk₀ (x-only), BIP-340(sk₀, ash ‖ ocr), message = ash ‖ ocr }
 CoinProof produced:  for self-held supply, none is delivered; the node retains the coin,
   proof, and inclusion proof locally as spend credential.
 ```
 
-`asset_id` is globally unique because it commits to the creator pubkey; two creators cannot collide, and the same creator distinguishes assets by `H(name)`/`decimals`. The human-readable `name` travels only inside bundles, never on-chain ([Foundations](foundations) §1.4).
+`asset_id` is globally unique because it commits to the creator pubkey; two creators cannot collide, and the same creator distinguishes assets by `name_hash = H(name)`/`decimals`. The human-readable `name` travels only inside bundles, never on-chain ([Foundations](foundations) §1.4).
 
 ### 2.3.2 Send
 
@@ -117,7 +120,8 @@ Inputs (wallet → node):
   output_templates[] = CoinTemplate[]    // {recipient, amount, asset_id} per payee
 
 Wallet:
-  1. for each input coin, sign BIP-340(skⱼ, coin.identifier) with the coin's spend key skⱼ
+  1. sign the single transition signature BIP-340(skᵢ, message = ash ‖ ocr) with the
+     current per-transition signing key skᵢ (whose Pkᵢ is current_pubkey; no per-coin key)
   2. supply nk (for nullifiers) and the rotated next_pubkey Pkᵢ₊₁  (SPEND branch, Foundations §1.2)
 
 Node / prover:

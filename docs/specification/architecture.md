@@ -66,7 +66,7 @@ The node exposes four interface families, specified here at an implementation-ne
 
 | Interface | Direction | Capability required | Purpose | Specified in |
 |---|---|---|---|---|
-| **read.account** | wallet/node → node (pull) | account ownership proof, **or** holder of `{ivk}` / view grant | fetch `AccountState`, balances, owned coins, tree roots | [Access & Explorer](access-explorer) |
+| **read.account** | wallet/node → node (pull) | an **ownership proof** (sign the challenge with `sk₀`) **or** an `op`-signed **view grant** | fetch `AccountState`, balances, owned coins, tree roots | [Access & Explorer](access-explorer) |
 | **read.proof** | wallet → node (pull) | ownership proof | fetch a `CoinProof` and its `inclusion_proof` for re-verification | [Access & Explorer](access-explorer) · [Proofs](proofs) |
 | **submit.tx** | wallet → node (push) | none (proof is self-authenticating) | submit a transaction for proving/commitment and on-chain publication | [On-chain Layer](onchain) |
 | **relay.\*** | any ↔ node (Nostr) | NIP-44 / NIP-59 envelope; `detect_tag` for discovery | publish/fetch off-chain bundles, gift-wrapped delivery, note discovery | [Transport & Recovery](transport-recovery) |
@@ -86,12 +86,12 @@ IssuanceTerms = {
   amount_per_mint : amount,       // fixed amount each open mint emits
   start_height    : u32,          // first Bitcoin block height at which minting is valid
   end_height      : u32,          // last valid height (end_height ≥ start_height); 0 = open-ended
-  terms_hash      : field         // = Hc("AssetId", asset_id ‖ cap_total
+  terms_hash      : field         // = Hc("IssuanceTerms", asset_id ‖ cap_total
                                   //               ‖ amount_per_mint ‖ start_height ‖ end_height)
 }
 ```
 
-The mint proof (see [Proofs & State Transitions](proofs)) **MUST** verify, in-circuit, that: (a) the coin's `asset_id` matches the terms; (b) the minted amount equals `amount_per_mint`; (c) the cumulative minted supply after this mint does not exceed `cap_total`; and (d) the confirming Bitcoin block height `h` satisfies `start_height ≤ h` and (`end_height = 0` **or** `h ≤ end_height`). `terms_hash` binds the whole term set so that no party can substitute relaxed terms after creation. The human-readable `name` is **never** placed on-chain (Foundations §1.4).
+The mint proof (see [Proofs & State Transitions](proofs)) **MUST** verify, in-circuit, that: (a) the coin's `asset_id` matches the terms; (b) the minted amount equals `amount_per_mint`; (c) the cumulative minted supply after this mint does not exceed `cap_total`; and (d) the height `h` satisfies `start_height ≤ h` and (`end_height = 0` **or** `h ≤ end_height`). Here `h` is **`block_anchor.height`** — the height of the Bitcoin tip the proof is built against (`block_anchor = { block_hash, height }`), known at proving time ([On-chain Layer §3.5](onchain)) — **not** the actual, later inclusion height, which is unknown when the proof is produced; the validity-window check is therefore evaluated against `block_anchor.height` and avoids any circularity. `terms_hash` binds the whole term set so that no party can substitute relaxed terms after creation. The human-readable `name` is **never** placed on-chain (Foundations §1.4).
 
 ## 6.6 Threat model and trust configurations
 

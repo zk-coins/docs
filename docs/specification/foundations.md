@@ -32,8 +32,9 @@ Notation:
 - `P = k·G` — secp256k1 scalar multiplication; `G` the generator.
 - `ECDH(k, P) = x(k·P)` — the x-coordinate of the shared point.
 - `a ‖ b` — byte concatenation.
+- **Secret vs. public.** A lowercase key name (`skᵢ`, `ivk`, `ovk`, `op`, `nk`) denotes the **secret scalar**; its public point is written `<name>·G` or a named pubkey (e.g. `Pkᵢ = skᵢ·G`, `IVPK = ivk·G`, `op_pubkey = op·G`). BIP-340 public keys are **x-only** (32 bytes).
 
-**Domain separation.** Every `Hc` / `HKDF` call **MUST** be tagged with a context string of the form `"zkCoins/v1/<context>"`. The contexts used in this spec are: `Address`, `AssetId`, `Coin`, `AccountState`, `CoinsRoot`, `Nullifier`, `NoteKey`, `DetectTag`, `Grant`. Reusing a tag for two purposes is forbidden.
+**Domain separation.** Every `Hc` / `HKDF` call **MUST** be tagged with a context string of the form `"zkCoins/v1/<context>"`. The contexts used in this spec are: `Address`, `AssetId`, `Coin`, `AccountState`, `CoinsRoot`, `Nullifier`, `NoteKey`, `DetectTag`, `Grant`, `IssuanceTerms`, `HalfAgg`. Reusing a tag for two purposes is forbidden.
 
 ## 1.2 Key hierarchy
 
@@ -44,9 +45,9 @@ seed  (256-bit; BIP-39 mnemonic, or Passkey PRF → HKDF)
   └─ BIP-32 ─▶ m  (master)
         └─ m / 1798' / account'                              = A   (per-account root; 1798' = zkCoins purpose)
               ├─ A / 0'        = SPEND branch   (wallet only)
-              │     ├─ A/0'/0'            = sk₀   → Pk₀   (initial spend key; fixes the address)
-              │     ├─ A/0'/i'            = skᵢ   → Pkᵢ   (rotating per-send spend key)
-              │     └─ A/0'/n'            = nk            (nullifier key)
+              │     ├─ A/0'/0'            = sk₀   → Pk₀   (initial signing key; fixes the address)
+              │     ├─ A/0'/i'            = skᵢ   → Pkᵢ   (rotating per-transition signing key)
+              │     └─ A/0'/n'            = nk            (account-level nullifier key)
               ├─ A / 1'        = VIEW branch    (delegable to a node)
               │     ├─ A/1'/0'            = ivk           (incoming viewing key)
               │     └─ A/1'/1'            = ovk           (outgoing viewing key)
@@ -66,6 +67,8 @@ seed  (256-bit; BIP-39 mnemonic, or Passkey PRF → HKDF)
 | `K_tx` (per-coin note key, §1.3) | derived per coin; shareable | decrypt **exactly one** coin | spend, see any other coin |
 
 The **operational bundle** `{ivk, ovk, op}` is what a wallet entrusts to a node so the node can receive and serve on its behalf 24/7. None of it can spend. A *foreign* node never receives these directly; the wallet instead issues that node a scoped, `op`-signed **view grant** (§ Access model).
+
+**Spend-key model (account-level).** The keys `skᵢ` are rotating **per-transition** signing keys — there is **no** per-coin signing key. Transition `i` (where `i = send_counter` at entry) is authorised by `skᵢ`, whose public key `Pkᵢ` is the account's `current_pubkey` and is published in that transition's `Commitment`; the transition rotates `current_pubkey` to `Pk_{i+1}`. `Pk₀` fixes the address and appears on-chain only in the **first** transition. `nk` is account-level. Coin ownership is by the account (a coin's `recipient = address`); a receiver therefore never needs a per-coin key.
 
 ## 1.3 Per-coin keys (note encryption & detection)
 
@@ -93,14 +96,14 @@ Exact derivations. Every value here is reproducible from its inputs.
 | Identifier | Definition | Size / type |
 |---|---|---|
 | **Address** | `address = H(Pk₀)` — SHA-256 of the **initial** spend public key; fixed at account creation; the protocol's only identity | 32 bytes (Bech32m, HRP `zk`) |
-| **AssetId** | `asset_id = Hc("AssetId", genesis_tag ‖ creator_pubkey ‖ H(name) ‖ decimals)` at asset creation; the human-readable `name` is **never** on-chain | field element / 32-byte canonical |
-| **Coin identifier** | `coin.identifier = Hc("Coin", account_state_hash ‖ asset_id ‖ coin_index)` | field element |
+| **AssetId** | `asset_id = Hc("AssetId", genesis_tag ‖ creator_pubkey ‖ name_hash ‖ decimals)` at asset creation, where `name_hash = H(name)` and `genesis_tag` is the fixed constant ASCII string `zkCoins/v1/genesis`; the human-readable `name` is **never** on-chain | field element / 32-byte canonical |
+| **Coin identifier** | `coin.identifier = Hc("Coin", account_state_hash ‖ asset_id ‖ coin_index)`. The `account_state_hash` in this formula is the `ash` of the state that **created** the coin (the transition that produced it as an output); a coin's identifier is fixed at creation and recomputed with that same `ash` when later spent. | field element |
 | **account_state_hash** (`ash`) | `ash = Hc("AccountState", serialize(AccountState))` | 32-byte canonical |
 | **output_coins_root** (`ocr`) | Poseidon Merkle root over the transaction's output `coin.identifier`s, tag `CoinsRoot` | 32-byte canonical |
 | **Commitment message** | `message = ash ‖ ocr` | 64 bytes |
 | **Commitment** | `{ public_key: Pkᵢ (32B x-only), signature: BIP-340(skᵢ, message) (64B), message (64B) }` — the **only** object written to Bitcoin | ~177 bytes inscribed |
 | **Nullifier** | `nf = Hc("Nullifier", nk ‖ coin.identifier)` — revealed when a coin is spent; unlinkable to the coin without `nk` | field element |
-| **ProofData** (public inputs) | `{ prev_commitment_history_root, new_account_state_hash, output_coins_root, input_nullifiers_root, nullifier_acc_root, coin_history_root }` | hashes/roots only |
+| **ProofData** (public inputs) | `{ prev_commitment_history_root, new_account_state_hash, output_coins_root, input_nullifiers_root, prev_nullifier_acc_root, nullifier_acc_root, coin_history_root }` | hashes/roots only |
 
 The BIP-340 signature over `message` additionally uses **sign-to-contract**: the transaction commitment is embedded in the nonce, so no extra bytes are needed on-chain (see On-chain layer).
 
