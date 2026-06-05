@@ -214,10 +214,29 @@ The access model yields two distinct explorers over the **same data** — the on
 - **Public explorer** — no authorisation; shows only the on-chain public data (commitments, roots, aggregates). It cannot show amounts, assets, balances, or counterparties.
 - **Authorised (view) explorer** — shows a _specific user's real transactions_, but only when presented that user's signed **view grant**. Privacy stays under the user's control: they choose who sees what, and for how long.
 
+## Shareable confirmation links
+
+A practical case of the authorised view: **A pays B and wants to hand B (or a third party) a link that confirms the payment** — _"here's proof I sent it."_ The payment A → B already entitles B to pull the transaction (ownership); the link additionally packages a **per-transaction view capability** that any holder of the link can use.
+
+**Link contents.** Illustratively `explorer.zkcoins.com/tx/<commitment>:<holder>:<view-cap>`, carrying three parts:
+
+- `<commitment>` — a handle to the transaction's on-chain commitment, so the result can be anchored to and verified against Bitcoin.
+- `<holder>` — a locator for a node that holds the off-chain bundle (e.g. A's node), or omitted when the explorer can resolve a holder through the relay mesh.
+- `<view-cap>` — a viewing capability **scoped to exactly this one transaction**, not the account-wide viewing key. It authorises and decrypts this transaction and nothing else.
+
+**Flow.** Anyone holding the link opens it on an explorer — e.g. `explorer.zkcoins.com`, a **neutral node that is neither A nor B**. The explorer presents `<view-cap>` to a holder node, pulls the bundle (coin + proof + inclusion proof), and renders the full transaction: amount, asset, time, status. Crucially it surfaces the **verifiable evidence** — the result is checkable against the on-chain commitment, so the viewer trusts **Bitcoin and the proof, not the explorer's word**. The explorer is a presentation layer and is **self-hostable**; `explorer.zkcoins.com` is one instance among many.
+
+**Properties.**
+
+- **Bearer** — whoever holds the link can view that one transaction, so it must travel over a channel the sender trusts.
+- **Scoped** — it discloses that single transaction in full and **nothing else**: no other transactions, no balances, no spend authority.
+- **Privacy cost** — a third-party explorer operator (and anyone with the link) learns that one transaction; self-hosting the explorer avoids exposing it to an operator.
+- **Availability** — any node holding the replicated bundle (A, B, or another) can serve it; confirmation does not hinge on A being online.
+
 ## Status / caveats
 
 - **Trustless verification is the target, not today's behaviour.** "B verifies without trusting A" needs two roadmap items: re-verifying the full recursive proof on receipt (**S1**), and a verifier-queryable **global spent-coin accumulator** for the double-spend check (**S2**). Today a receiving node checks only the inclusion proof and trusts the source; double-spend is enforced _in the circuit_ (proof of non-inclusion), not via an on-chain nullifier set.
-- **The whole off-chain layer is proposed** (roadmap), not yet implemented: the two-key model (today's wallet uses a single, non-hardened derivation branch and addresses by the spend-side key), node-as-relay, Nostr delivery, recovery-pull, and capability-gated access. Today delivery is implicit same-node.
+- **The whole off-chain layer is proposed** (roadmap), not yet implemented: the two-key model (today's wallet uses a single, non-hardened derivation branch and addresses by the spend-side key), node-as-relay, Nostr delivery, recovery-pull, capability-gated access, and shareable confirmation links. Today delivery is implicit same-node.
 - **Trustless emission (S5).** Permissionless, un-privileged minting ("A mints") is the emission roadmap item.
 - **Asset names are never on-chain.** "Tapfreak" lives only in the peer-to-peer coin data and the `asset_id`.
 
