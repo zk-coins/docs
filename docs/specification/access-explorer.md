@@ -126,11 +126,13 @@ This is the case of [Requirement 9](/requirements): a sender (A) who paid a reci
 https://<explorer-host>/tx/<commitment>:<holder>:<view-cap>
 
   <explorer-host> = explorer.zkcoins.com         ; one instance among many; self-hostable
-  <commitment>    = <txid> "i" <vout> ":" <j>     ; a reveal tx batches MANY commitments, so
-                                                 ; txid:vout alone is insufficient; <j> is the
-                                                 ; in-payload commitment index (onchain.md §3.5/§3.6
-                                                 ; ordering) and resolves to exactly one Commitment
-                                                 ; e.g. <txid>i0:7 — anchors to Bitcoin ([Foundations §1.4])
+  <commitment>    = <txid> ":" <j>                ; the inscription lives in the reveal tx witness
+                                                 ; (NOT a vout); <txid> is the reveal transaction and
+                                                 ; <j> is the payload-position index of the commitment
+                                                 ; within that inscription (onchain.md §3.6 ordering).
+                                                 ; A reveal tx batches MANY commitments, so <j> is
+                                                 ; required; the handle resolves to exactly one
+                                                 ; Commitment; e.g. <txid>:7 — anchors to Bitcoin ([Foundations §1.4])
   <holder>        = a node locator that holds the bundle:
                       "op:" <op-pubkey-bech32>     ; a specific holder (e.g. A's node), or
                       "@"  <relay-url>             ; an explicit relay, or
@@ -138,7 +140,7 @@ https://<explorer-host>/tx/<commitment>:<holder>:<view-cap>
   <view-cap>      = <zkview>                       ; Bech32m per-coin capability ([§5.3])
 ```
 
-The `<txid>i<vout>:<j>` handle resolves to **exactly one** `Commitment` within the batched reveal transaction; the per-coin `K_tx` (`<view-cap>`) then selects the one coin inside that commitment's transaction.
+The `<txid>:<j>` handle — `<txid>` the reveal transaction whose witness carries the inscription, `<j>` the payload-position index of the commitment within that inscription (onchain §3.6 ordering) — resolves to **exactly one** `Commitment` within the batched reveal transaction; the per-coin `K_tx` (`<view-cap>`) then selects the one coin inside that commitment's transaction.
 
 A canonical, host-independent form `zkcoins:tx/<commitment>:<holder>:<view-cap>` **MAY** be used so the link is portable across explorer instances; an explorer **MUST** treat the `<commitment>`/`<holder>`/`<view-cap>` triple, not the host, as authoritative.
 

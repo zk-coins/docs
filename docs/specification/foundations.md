@@ -96,7 +96,7 @@ Exact derivations. Every value here is reproducible from its inputs.
 | Identifier | Definition | Size / type |
 |---|---|---|
 | **Address** | `address = H(Pk₀)` — SHA-256 of the **initial** spend public key; fixed at account creation; the protocol's only identity | 32 bytes (Bech32m, HRP `zk`) |
-| **AssetId** | `asset_id = Hc("AssetId", genesis_tag ‖ creator_pubkey ‖ name_hash ‖ decimals)` at asset creation, where `name_hash = H(name)` and `genesis_tag` is the fixed constant ASCII string `zkCoins/v1/genesis`; the human-readable `name` is **never** on-chain | field element / 32-byte canonical |
+| **AssetId** | `asset_id = Hc("AssetId", genesis_tag ‖ creator_pubkey ‖ name_hash ‖ decimals)` at asset creation, where `creator_pubkey ≜ Pk₀` of the issuing account (its initial spend public key — the same key that fixes the account `address`), `name_hash = H(name)`, and `genesis_tag` is the fixed constant ASCII string `zkCoins/v1/genesis`; the human-readable `name` is **never** on-chain. Every input is thus derived from stated values, so `asset_id` is fully reproducible | field element / 32-byte canonical |
 | **Coin identifier** | `coin.identifier = Hc("Coin", account_state_hash ‖ asset_id ‖ coin_index)`. The `account_state_hash` in this formula is the `ash` of the state that **created** the coin (the transition that produced it as an output); a coin's identifier is fixed at creation and recomputed with that same `ash` when later spent. | field element |
 | **account_state_hash** (`ash`) | `ash = Hc("AccountState", serialize(AccountState))` | 32-byte canonical |
 | **output_coins_root** (`ocr`) | Poseidon Merkle root over the transaction's output `coin.identifier`s, tag `CoinsRoot` | 32-byte canonical |

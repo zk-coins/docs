@@ -93,24 +93,26 @@ offset  size  field
 106      32   nullifier_acc_root   updated global nullifier accumulator root after this batch (§3.7)
 138       …   body               depends on `format` (below)
 
-format 0x00 — raw, m × 160 bytes:
-   per commitment j:
+format 0x00 — raw, body length = m × 160 bytes:
+   per commitment j (160 bytes):
       32   Pkⱼ        (x-only)
       64   signatureⱼ (R ‖ s)
       64   messageⱼ   (ash ‖ ocr)      // message carries NO nullifier
 
-format 0x01 — half-aggregated:
-      m × 128  per commitment j:  Pkⱼ(32) ‖ messageⱼ(64) ‖ Rⱼ(32)
-      32       s_agg      (single aggregate scalar, §3.3)
+format 0x01 — half-aggregated, body length = m × 128 + 32 bytes:
+      m × 128  per commitment j (128 bytes):  Pkⱼ(32) ‖ messageⱼ(64) ‖ Rⱼ(32)
+      32       s_agg      (single shared aggregate scalar, §3.3)
 ```
 
 The per-transaction `message` is exactly `ash ‖ ocr` and contains **no** nullifier. The spent `nf` set of a transition is bound off-chain via `input_nullifiers_root` in its proof's `ProofData` ([Foundations §1.4](foundations)); the inscription anchors only the **updated global roots** above. A publisher MUST set `commitment_smt_root`, `commitment_mmr_root`, and `nullifier_acc_root` to the values that result from applying this batch on top of `block_anchor` (§3.6, §3.7). A scanner derives the Commitment SMT and MMR roots from confirmed Bitcoin data and MUST reject a batch whose stated `commitment_smt_root` or `commitment_mmr_root` does not match; the correctness of the `nullifier_acc_root` update is attested by the batch's aggregate validity proof (§3.6 step 7), not recomputed by the scanner from foreign bundles.
 
 The `block_anchor` is the pair `{ block_hash, height }` identifying the tip a proof is built against. An issuance validity-window height check ([System Architecture §6.5](architecture)) is evaluated **in-circuit against `block_anchor.height`** — prover-supplied and provable in-circuit, the tip the proof is built against, known at proving time — **not** against the actual (later) Bitcoin inclusion height, which is unknown when the proof is produced. A scanner cross-checks on acceptance that `block_anchor.block_hash` is at `block_anchor.height` in its own Bitcoin chain view.
 
+**`block_anchor` bound (normative).** Let `inclusion_height` be the height of the Bitcoin block that includes this batch's reveal transaction. A scanner MUST reject the batch unless **both**: (1) `block_anchor.height` is strictly less than `inclusion_height` and `block_anchor.block_hash` is a strict ancestor of the inclusion block (the anchor MUST NOT be the inclusion block itself, a forward block, or off the inclusion block's chain), and (2) the gap is bounded by `N = 100` blocks: `inclusion_height − block_anchor.height ≤ 100`. The first condition rejects forward anchoring; the second rejects stale anchoring. A batch whose `block_anchor` is not a strict ancestor of its inclusion block, or whose gap exceeds `N = 100`, MUST be treated as carrying **zero** valid commitments.
+
 > Note on sizes: the fixed payload header is `2+1+1+2+32+4+32+32+32 = 138` bytes (marker, version, format, count, `block_anchor.block_hash`, `block_anchor.height`, and the three updated global roots), amortised across the whole batch. A raw single commitment adds `160` bytes of body — on the order of the ~177 bytes quoted in [Foundations §1.4](foundations) per commitment once the header is shared. Half-aggregation removes one 32-byte `s` per commitment and shares a single `s_agg`, so the marginal cost of an additional commitment falls to 128 bytes (`Pkⱼ ‖ messageⱼ ‖ Rⱼ`). A payload larger than the standardness limit MUST be split across multiple reveal inputs/transactions, each carrying its own marker and header.
 
-A scanner MUST verify `count == m` against the body length and MUST reject a malformed or truncated payload as carrying **zero** valid commitments.
+A scanner MUST validate the body length against the declared `format` and `count m`: for `format 0x00` (raw) the body length MUST equal `m × 160` bytes (each commitment `Pkⱼ(32) ‖ messageⱼ(64) ‖ signatureⱼ(64)`); for `format 0x01` (half-aggregated) the body length MUST equal `m × 128 + 32` bytes (each commitment `Pkⱼ(32) ‖ messageⱼ(64) ‖ Rⱼ(32)`, plus one shared 32-byte `s_agg`). The §3.6 structural check (step 2) verifies that `count == m` **and** that the body length equals the format's formula above; a scanner MUST reject a malformed or truncated payload — including one whose body length does not match its declared format and count — as carrying **zero** valid commitments.
 
 ## 3.6 Chain scanning
 
@@ -133,6 +135,8 @@ The operative double-spend check is **per-coin** (§3.7): a verifier checks a sp
 Double-spend protection is enforced **on-chain and trustlessly** by the global **nullifier accumulator** ([Foundations §1.6](foundations)): a sorted-key sparse Merkle tree (SMT) over all published nullifiers `nf = Hc("Nullifier", nk ‖ coin.identifier)` ([Foundations §1.4](foundations)), supporting both **membership** and **non-membership** proofs.
 
 **Insertion.** When a coin is spent, its `nf` is bound into the spending transaction's proof public inputs (`input_nullifiers_root`, [Foundations §1.4](foundations)). The published `message` (`ash ‖ ocr`) carries **no** nullifier. The publisher anchors the resulting **updated `nullifier_acc_root`** in the inscription (§3.5), and the batch's aggregate validity proof attests that this root is the correct result of inserting the batch's spent `nf` set on top of `block_anchor` (§3.6 step 7). A scanner records this on-chain-anchored root; it does **not** itself recompute the accumulator from foreign accounts' off-chain bundles. The accumulator is idempotent and order-independent across a block; the anchored root depends only on the **set** of nullifiers confirmed up to a given tip.
+
+**Per-transition chaining into the batch root.** Within a batch, the transitions are applied in the §3.6 total order. The batch's **starting** accumulator root is the previous tip's anchored `nullifier_acc_root`. A running accumulator root is then carried through the ordered transitions: each transition's `ProofData.prev_nullifier_acc_root` ([Foundations §1.4](foundations)) **MUST** equal the running root **immediately before** that transition, and its `ProofData.nullifier_acc_root` **MUST** equal the running root **immediately after** it (i.e. after inserting that transition's spent `nf` set). The **final** running root, after the last transition in the §3.6 order, **MUST** equal the `nullifier_acc_root` inscribed for the batch (§3.5). The batch's **aggregate validity proof** (§3.6 step 7) attests exactly this chaining — that the per-transition roots compose, in order, from the starting root to the inscribed batch root; a scanner therefore relies on the inscribed root only once that proof verifies.
 
 **Anchored root.** The accumulator root is **conditional on a specific Bitcoin chain tip**: the canonical value is `NAV(tip) = (root, tip_block_hash, tip_height)`. The `block_anchor = { block_hash, height }` field of every inscription (§3.5) records the tip the publisher built against, with `block_anchor.block_hash` and `block_anchor.height` identifying that tip. A verifier MUST evaluate any membership/non-membership claim **relative to a stated tip**; a root quoted without its anchoring tip MUST be rejected as ambiguous.
 

@@ -62,9 +62,14 @@ Invoice = {
   ivpk          : IVPK,                            // recipient incoming-view pubkey = ivk·G
   op_pubkey     : op·G,                            // recipient operational/Nostr identity
   relays        : [relay_url, …],                  // recipient's advertised relay set (≥ 1)
-  sig           : BIP-340(op, H("zkCoins/v1/Invoice" ‖ serialize(fields)))
+  sig           : BIP-340(op, invoice_message)     // 64B; binds all fields above
 }
+
+invoice_message = H( "zkCoins/v1/Invoice" ‖ amount ‖ recipient ‖ asset_id ‖ memo
+                   ‖ ivpk ‖ op_pubkey ‖ relays )
 ```
+
+The `sig` preimage is a **fixed concatenation** in exactly the field order above (mirroring `grant_message`, [Access & Explorer §5.2](access-explorer)); `H` and the input ordering are per [Foundations §1.4, §1.7](foundations). The optional `memo` contributes the empty byte string when absent, and `relays` is concatenated in its listed order. Reordering any field changes the digest and **MUST** be rejected. `serialize(fields)` is **not** used; only this explicit order is signed and verified.
 
 The sender **MUST** verify `sig` against `op_pubkey` and **MUST** check that `H(Pk₀)` published by the recipient binds to `address`; an `Invoice` whose `op`-signature or address binding fails **MUST** be rejected. When no `Invoice` is available, a recipient **MAY** publish the same `{ivpk, op_pubkey, relays}` tuple as an `op`-signed Nostr profile (a replaceable event) discoverable on well-known relays by `op_pubkey`; resolution by `address` alone, with no recipient-published record, is **not** supported — the recipient must have advertised at least one of these.
 
