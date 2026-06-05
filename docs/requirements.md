@@ -38,3 +38,7 @@ Anyone can run their own node; using zkCoins must never require trusting or depe
 ### 8. Multi-asset
 
 The protocol supports multiple distinct asset types, each identified by a globally unique asset id. Every other requirement applies equally to every asset.
+
+### 9. Explorer (shareable confirmation)
+
+A sender can generate a shareable link that grants its holder a full view of exactly one transaction — amount, asset, time, and status — and nothing beyond it. The link carries a scoped view capability, never a public identifier and never the spend key. The confirmation must be cryptographically verifiable against Bitcoin rather than asserted by the explorer, and the explorer must be self-hostable.
