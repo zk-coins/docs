@@ -5,41 +5,61 @@ title: Specification
 
 # zkCoins Protocol Specification
 
-This is the complete, normative specification of the zkCoins protocol. It is written against the **target design** — the [Requirements](/requirements) — and is deliberately **decoupled from the current implementation**: where today's code differs, the specification, not the code, describes the goal. Open design choices are resolved here in favour of the established, Bitcoin-consistent option; nothing is left undefined.
+This document is the complete technical specification of the **zkCoins protocol** — a concrete, buildable realization of the zkCoins concept (Robin Linus) and the **Shielded CSV** construction (Jonas Nick, Liam Eagen, Robin Linus), designed around a single principle: **the full self-sovereignty of every participant, with no central element anywhere in the system.**
+
+> Private payments on Bitcoin — no new chain, no token, no consensus change, no trusted operator. Only Bitcoin, zero-knowledge proofs, and the user's own keys.
+
+:::info What this is — and what it isn't
+This is **one** concrete realization, not the only one possible: wherever the source papers leave a choice open, this specification takes the established, Bitcoin-consistent option and defines it exactly. It builds faithfully on the whitepapers' core and carries their philosophy into every layer they did not formalize — delivery, recovery, access, and operation. It describes the **target design** and is intentionally independent of any current implementation.
+:::
+
+## One principle, carried all the way
+
+Every decision below follows from one idea — **complete self-sovereignty, zero central elements** — applied without exception:
+
+| Design decision | follows from the principle |
+|---|---|
+| Settles only on Bitcoin L1 — no own chain, token, or consensus | inherit the most decentralized base; build no new one |
+| Client-side validation; constant-size ZK proofs | each participant verifies for themselves, trusting no one |
+| Spend key lives only in the wallet | the participant alone holds custody |
+| Off-chain delivery over a node-as-relay mesh | no central delivery service |
+| Recovery from seed + Bitcoin + the network | no central backup custodian |
+| Capability-gated disclosure; self-hostable, verifiable explorer | the owner alone decides who sees what; no trusted authority |
+| Any node — switchable, several at once | no lock-in to any operator |
+| Permissionless issuance | no privileged minter |
+
+These are not features bolted on. They are the same principle, followed to its conclusion.
+
+## The triad it guarantees
+
+- **Bitcoin-anchored** — settled on Bitcoin L1, exactly as it exists today.
+- **Shielded** — amounts, sender, receiver, and the transaction graph are hidden, behind a global anonymity set.
+- **Trustless** — correctness is enforced by cryptography and Bitcoin alone.
+
+Each is rare on its own elsewhere; here they hold **together** — see [Comparisons](/comparisons).
 
 ## Scope
 
-The specification covers **every** component that will exist:
+The specification covers every component that will exist: the **node** (validator · prover · relay · data store), the **wallet** (thin key-holder), and the **explorer** (public and authorised views) — together with the cryptography that binds them. For every key, hash, and identifier it states exactly **how it is derived**; for every requirement, **how it is met**.
 
-- the **node** (validator, prover, relay, data store);
-- the **wallet** (thin key-holder);
-- the **explorer** (public and authorised views);
-- the cryptography binding them (keys, hashes, identifiers, proofs, on-chain commitments, off-chain transport, recovery).
+## The ten requirements
 
-It defines, for every key / hash / identifier, exactly **how it is derived**; for every requirement, **how it is met**; and for the system, **how the parts fit together**.
-
-## Conventions
-
-- Normative keywords **MUST**, **MUST NOT**, **SHOULD**, **MAY** follow RFC 2119.
-- All notation, primitives, and domain-separation tags are defined once in [Foundations](foundations) and used unchanged throughout.
-- Sizes, encodings, and input orderings are exact; reordering hashed inputs yields a different, invalid value.
-
-## The requirements (normative)
-
-The specification exists to satisfy these ten requirements. Each is restated in full on the [Requirements](/requirements) page; in brief:
+The whole specification exists to satisfy these (in full on the [Requirements](/requirements) page):
 
 1. Bitcoin L1 as the only base · 2. Private · 3. Trustless · 4. Client-side validation · 5. Custody only in the wallet · 6. Recovery · 7. Self-hostable · 8. Multi-asset · 9. Explorer (shareable confirmation) · 10. Node portability.
 
 ## Reading guide
 
-| # | Page | Defines |
+| # | Page | What it gives you |
 |---|---|---|
-| 1 | [Foundations](foundations) | Primitives, key hierarchy, identifiers, data structures, trees — the single source of truth |
+| 1 | [Foundations](foundations) | The single source of truth: primitives, the full key hierarchy and exact derivations, every identifier, the data structures and trees |
 | 2 | [Proofs & State Transitions](proofs) | The compliance predicate, recursion, and the mint / send / receive algorithms |
-| 3 | [On-chain Layer](onchain) | Commitment construction, signing, aggregation, publishing, scanning, the nullifier accumulator |
-| 4 | [Transport & Recovery](transport-recovery) | Off-chain bundle delivery, node-as-relay, note discovery, recovery, data availability |
-| 5 | [Access & Explorer](access-explorer) | Capability-gated pull, viewing keys / view grants, and the explorer (public + authorised, shareable links) |
-| 6 | [System Architecture](architecture) | Node, wallet, explorer components; portability & multi-node; issuance; threat model |
+| 3 | [On-chain Layer](onchain) | Commitment, signing, half-aggregation, the publisher, and the nullifier accumulator |
+| 4 | [Transport & Recovery](transport-recovery) | Off-chain delivery, note discovery, seed recovery, data availability |
+| 5 | [Access & Explorer](access-explorer) | Capability-gated pull, view grants, and shareable confirmation links |
+| 6 | [System Architecture](architecture) | Node, wallet, explorer; portability, multi-node, issuance, threat model |
+
+New here? Read **Foundations** first — everything else builds on it.
 
 ## Requirements traceability
 
@@ -57,3 +77,7 @@ Where each requirement is satisfied:
 | **8 · Multi-asset** | §1.4 (`asset_id`), §1.5 (per-asset balances), §2 (per-asset conservation), §6 (issuance) |
 | **9 · Explorer** | §5 (capability-gated authorised view; per-coin view capability; verifiable confirmation links) |
 | **10 · Node portability** | §1.2 (everything derives from the seed ⇒ no node-specific state), §6 (switch / multi-node) |
+
+## Conventions
+
+Normative keywords (**MUST**, **MUST NOT**, **SHOULD**, **MAY**) follow RFC 2119. All notation, primitives, and domain-separation tags are defined once in [Foundations](foundations) and used unchanged throughout; sizes, encodings, and input orderings are exact.
