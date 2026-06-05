@@ -42,6 +42,48 @@ The wallet holds the **seed** and is the sole custodian of the SPEND branch (`A/
 
 The explorer is a **stateless** read surface over one or more nodes. It holds **no keys** and no private state of its own. Given a per-coin view capability `K_tx` (Foundations §1.3) — carried in a shareable link — it decrypts and presents exactly one transaction and verifies that confirmation against Bitcoin ([Requirement 9](/requirements)). It **MUST** be self-hostable and **MUST NOT** assert any fact it cannot derive verifiably from a node's data and the chain. See [Access & Explorer](access-explorer).
 
+### Running a node — what an operator deploys
+
+The logical roles above map onto a small, fully **self-hosted** stack. Every part is the operator's own; using a third party for any of them would reintroduce a central element and is therefore out of scope for a sovereign node.
+
+```mermaid
+flowchart TB
+  wallet["Wallet — SPEND keys only<br/>(user device, not in Docker)"]
+  domain["Domain + TLS  ·  or Tor onion"]
+
+  subgraph docker["Docker host — self-hosted by the operator"]
+    direction TB
+    explorer["Explorer — stateless"]
+    znode["zkCoins node<br/>scanner · prover · store · capability-gated API"]
+    bitcoind["Bitcoin full node — bitcoind (own)"]
+    relay["Nostr relay (own)"]
+    pg[("PostgreSQL<br/>node state · bundles")]
+  end
+
+  chain(["Bitcoin network"])
+  mesh(["Nostr network"])
+
+  wallet -->|"submit · verify vs Bitcoin"| domain
+  domain --> znode
+  domain --> explorer
+  explorer -->|"read"| znode
+  znode --- bitcoind
+  znode --- relay
+  znode --- pg
+  bitcoind <-->|"read · broadcast"| chain
+  relay <-->|"deliver · replicate"| mesh
+```
+
+- **Container runtime** (Docker or compatible) — the base; each part ships as a container.
+- **Bitcoin full node** (`bitcoind`, the operator's own) — the source of truth for **reading** the chain (the scanner) and for **broadcasting** the publisher's Taproot reveal transactions. A third-party chain source (Electrum/Esplora/etc.) would reintroduce a trusted dependency and eclipse risk, and is not used.
+- **Nostr relay** — stores and serves the off-chain `CoinProof` bundles and carries gift-wrapped transport. It **MAY** be embedded in the zkCoins-node image or run as a separate relay container; either way it is the operator's **own** relay.
+- **Reachable address** — an internet domain with TLS so wallets, explorers, and peer nodes can reach the node's API and relay. A Tor onion service **MAY** be used instead for IP privacy.
+- **zkCoins node** — the core software: Bitcoin scanner, prover, data store, and capability-gated API (and the relay role, if embedded).
+- **PostgreSQL** — the node's database; persists the rebuilt tree state and the off-chain `CoinProof` bundles (the concrete backing of the data-store role).
+- **Explorer** — the stateless presentation surface ([Access & Explorer](access-explorer)), typically co-hosted as its own container reading the node; it holds no keys.
+
+The only thing that is **never** part of a node deployment is the SPEND branch — those keys live solely in the wallet, on the user's device ([Foundations §1.2](foundations)).
+
 ## 6.2 Wallet ↔ node
 
 The wallet is a **thin client**. It never delegates spend authority; it delegates only viewing and serving:

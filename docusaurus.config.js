@@ -15,6 +15,10 @@ const config = {
   onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
 
+  markdown: {
+    mermaid: true,
+  },
+
   i18n: {
     defaultLocale: 'en',
     locales: ['en'],
@@ -39,6 +43,8 @@ const config = {
 
   plugins: [require.resolve('./plugins/llms-txt')],
 
+  themes: ['@docusaurus/theme-mermaid'],
+
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
@@ -46,6 +52,9 @@ const config = {
         defaultMode: 'dark',
         disableSwitch: false,
         respectPrefersColorScheme: false,
+      },
+      mermaid: {
+        theme: { light: 'neutral', dark: 'dark' },
       },
       navbar: {
         title: 'zkCoins',
