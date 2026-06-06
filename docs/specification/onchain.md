@@ -182,8 +182,23 @@ Publishing a batch costs ordinary Bitcoin transaction fees, paid in BTC; zkCoins
 
 ## 3.9 Finality
 
-A `SpendRecord` is **published** the instant its reveal transaction enters a Bitcoin block, and **final** under the same assumptions as any Bitcoin payment of comparable value.
+A `SpendRecord` is **published** the instant its reveal transaction enters a Bitcoin block. zkCoins fixes the finality threshold at **6 confirmations**: a record at fewer than 6 confirmations is in state `pending` (§3.10), and a receiver **MUST NOT** treat it as anchored. The protocol assumes Bitcoin has **no reorgs deeper than 5 blocks**; a deeper reorg is treated as a protocol-failure event, not a recoverable state transition.
 
-- A receiver **MUST** treat a `SpendRecord` as merely *seen* (zero-confirmation) until its reveal transaction has at least **one** confirmation, and **SHOULD** require **six** confirmations before treating the associated `NAV` (§3.7) as reorg-stable for high-value transfers.
-- A double-spend non-membership result (§3.7) is only as final as the tip it is anchored to; a verifier **MUST** re-evaluate it if a reorg displaces that tip below the required confirmation depth.
-- zkCoins adds no finality assumption beyond Bitcoin's: there is no separate consensus, validator set, or checkpoint ([Requirement 1](/requirements), [Requirement 3](/requirements)). Confirmation depth is the receiver's risk choice, exactly as for a native Bitcoin payment.
+- A double-spend non-membership result (§3.7) is only as final as the tip it is anchored to; a verifier **MUST** re-evaluate it on any reorg that displaces the inclusion block (§3.10).
+- zkCoins adds no finality assumption beyond Bitcoin's: there is no separate consensus, validator set, or checkpoint ([Requirement 1](/requirements), [Requirement 3](/requirements)).
+
+## 3.10 Transaction states
+
+Every `SpendRecord` a verifier observes is classified into **exactly one** of three states. The state is a function of the verifier's own §3.5+§3.6 admission scan and the inclusion block's confirmation depth — **never** of any assertion by a node, courier, or sender. Two honest verifiers at the same canonical Bitcoin tip **MUST** classify every record identically.
+
+| State | Defined as | Receiver MAY credit |
+|---|---|---|
+| **`completed`** | the record is **admitted** under §3.5+§3.6 by the verifier's own scan **AND** its inclusion block has **at least 6 confirmations** (§3.9) | **yes** |
+| **`failed`** | the record is **rejected** by the verifier's scan — any single §3.5 or §3.6 admission rule violated (parser, `block_anchor` bounds, signature, nullifier-`inr` binding, canonical order, first-spend-wins) suffices | **no** (never) |
+| **`pending`** | the record is in neither state — its bytes are inscribed but the inclusion block has fewer than 6 confirmations, or the record is still off-chain | **no** |
+
+**6 confirmations is a hard protocol constant**, not a parameter: zkCoins assumes Bitcoin has no reorgs deeper than 5 blocks (§3.9), and a deeper reorg is treated as a protocol-failure event — not a state transition under §3.10. Under this assumption, **`completed` is absolute**: a record once classified `completed` stays `completed`.
+
+**`failed` is forward-sticky.** A rejection cannot become an admission by waiting. A reorg **MAY** change *which* of two conflicting records is rejected (e.g. if the canonical order shifts under first-spend-wins, §3.6 step 6), but the property of being rejected by some admission rule cannot be undone by passage of time alone.
+
+**Receivers SHALL act only on `completed`.** The anchor / receive checks in [Proofs §2.3.3](proofs), [Transport & Recovery §4.5](transport-recovery), and [Access & Explorer §5.6 / §5.7](access-explorer) all require the relevant `SpendRecord` to be in state `completed`; a record in any other state **MUST NOT** be treated as anchored. The user-facing **status** rendered by an explorer (e.g. Access & Explorer §5.6 step 3) **MUST** be the §3.10 state, not a node-asserted classification.
