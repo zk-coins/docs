@@ -44,6 +44,20 @@ The wallet holds the **seed** and is the sole custodian of the SPEND branch (`A/
 
 The explorer is a **stateless** read surface over one or more nodes. It holds **no keys** and no private state of its own. Given a per-coin view capability `K_tx` (Foundations §1.3) — carried in a shareable link — it decrypts and presents exactly one transaction and verifies that confirmation against Bitcoin ([Requirement 9](/requirements)). It **MUST** be self-hostable and **MUST NOT** assert any fact it cannot derive verifiably from a node's data and the chain. See [Access & Explorer](access-explorer).
 
+### Operational roles inside "the node"
+
+`Node` is a single conceptual component for trust-model purposes, but a node deployment is internally a **composition of logical roles** that **MAY** be co-hosted in one process (the default self-host) or split across separate operators (a public or shared deployment). The trust statements of §6.6 apply **per role** — the worst each can do is bounded in the same way the node's roles below describe, never custody loss:
+
+| Logical role | What it owns | Resources |
+|---|---|---|
+| **Validator** | Bitcoin scanner, nullifier accumulator, coin store, ZK prover | CPU, storage, own `bitcoind` |
+| **API provider** | the capability-gated pull endpoint (§5.1) and the wallet-facing `read.*` / `submit.tx` interfaces (§6.4) | TLS endpoint, auth layer |
+| **Publisher** | broadcasting `SpendRecord`s on Bitcoin, half-aggregating signatures across many submitters ([On-chain §3.3, §3.4](onchain)) | Bitcoin wallet with BTC for fees |
+| **Relay / bundle store** | Nostr relay + content-addressed `CoinProof` blob store ([Transport & Recovery §4.1, §4.2](transport-recovery)) | storage, bandwidth |
+| **Treasury / issuer** *(optional; only in privileged-mint deployments)* | a privileged minting account; the permissionless mint of §2.3.1 needs no such role | a SPEND-branch key for the issuance account |
+
+Operators **MAY** specialise: an organisation might run only a Publisher (sells inscription as a service, accepts records from many validators) or only a Relay/Bundle store. Multiple validators **MAY** share one Publisher — the Publisher's many-to-one mapping ([On-chain §3.4](onchain)) explicitly covers records from many distinct sources. A wallet that points at a foreign node treats each role's operator independently: running your own Publisher is independent of running your own Validator, and trust shifts per role rather than per `node`.
+
 ### Running a node — what an operator deploys
 
 The logical roles above map onto a small, fully **self-hosted** stack. Every part is the operator's own; using a third party for any of them would reintroduce a central element and is therefore out of scope for a sovereign node.
