@@ -260,7 +260,7 @@ Insertion of `nf` flips the leaf at key `nf` from `0` to `1` and recomputes the 
 
 ### 1.7.7 Bech32m and Bitcoin conventions
 
-- Addresses, view grants, and bearer view capabilities use Bech32m with distinct HRPs so they are never confused: `zk` (address, 32-byte payload), `zkgrant` (view grant, full `ViewGrant` byte serialization), `zkview` (per-coin view capability, 32-byte payload), `zkavk` (bearer account view key, 64-byte `ivk ‖ ovk` payload; see [Access & Explorer §5.8](access-explorer)). A node/explorer **MUST** reject a value presented under the wrong HRP.
+- Addresses, view grants, and bearer view capabilities use Bech32m with distinct HRPs so they are never confused: `zk` (address, 32-byte payload), `zkgrant` (view grant, full `ViewGrant` byte serialization), `zkview` (per-coin view capability, 32-byte payload), `zkavk` (bearer account view key, 64-byte `ivk ‖ ovk` payload; see [Access & Explorer §5.8](access-explorer)), `zkbid` (confirmation-link bundle locator, 32-byte `blob_id = H(ciphertext)`; see [Access & Explorer §5.6](access-explorer)). A node/explorer **MUST** reject a value presented under the wrong HRP.
 - Bitcoin txids are stored internal-order and **displayed** byte-reversed (canonical Bitcoin convention).
 - All multi-input hashes fix input order exactly as written in §1.4 and in this section; reordering changes the digest and is invalid.
 

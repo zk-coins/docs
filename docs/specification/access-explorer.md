@@ -148,45 +148,38 @@ The same node data ([Foundations §1.6](foundations): plaintext leaves Private, 
 
 ## 5.6 Shareable confirmation links
 
-This is the case of [Requirement 9](/requirements): a sender (A) who paid a recipient (B) hands B — or a third party — a link that confirms exactly that one payment, *"here is verifiable proof I sent it."* The link is a bearer of a **per-coin view capability** ([§5.3](#53-per-coin-view-capability)) plus the locators needed to fetch and anchor the transaction.
+This is the case of [Requirement 9](/requirements): a sender (A) who paid a recipient (B) hands B — or a third party — a link that confirms exactly that one payment, *"here is verifiable proof I sent it."* The link carries just two things: **where to fetch** the one coin's bundle, and **the key to read it**. Everything else — which on-chain record, the amount, the proof — is recovered from the bundle and verified against Bitcoin.
 
-**Link grammar.** A confirmation link carries exactly three parts: a handle to the on-chain `SpendRecord`, a **holder locator**, and a `zkview` per-coin capability. The reference URL form (one self-hostable explorer instance shown; any instance is equivalent):
+**Link grammar.** A confirmation link is two Bech32m values — a content **locator** and a per-coin **view capability** — under a host-independent URI:
 
 ```
-https://<explorer-host>/tx/<spendrecord>:<holder>:<view-cap>
+zkcoins:tx/<bundle>/<view>
 
-  <explorer-host> = explorer.zkcoins.app         ; one instance among many; self-hostable
-  <spendrecord>   = <txid> ":" <j>                ; the inscription lives in the reveal tx witness
-                                                 ; (NOT a vout); <txid> is the reveal transaction and
-                                                 ; <j> is the payload-position index of the record
-                                                 ; within that inscription (onchain.md §3.6 ordering).
-                                                 ; A reveal tx batches MANY records, so <j> is
-                                                 ; required; the handle resolves to exactly one
-                                                 ; SpendRecord; e.g. <txid>:7 — anchors to Bitcoin ([Foundations §1.4])
-  <holder>        = a node locator that holds the bundle:
-                      "op:" <op-pubkey-bech32>     ; a specific holder (e.g. A's node), or
-                      "@"  <relay-url>             ; an explicit relay, or
-                      "*"                          ; empty/omitted — resolve via the relay mesh
-  <view-cap>      = <zkview>                       ; Bech32m per-coin capability ([§5.3])
+  <bundle> = Bech32m( HRP "zkbid",  blob_id )    ; blob_id = H(ciphertext) of the CoinProof bundle
+                                                 ; ([Transport & Recovery §4.2](transport-recovery));
+                                                 ; content-addressed, so ANY relay holding the blob
+                                                 ; serves it — no node-specific locator is needed
+  <view>   = Bech32m( HRP "zkview", K_tx )       ; the per-coin note key ([§5.3](#53-per-coin-view-capability));
+                                                 ; decrypts exactly one coin; the bearer secret of the link
 ```
 
-The `<txid>:<j>` handle — `<txid>` the reveal transaction whose witness carries the inscription, `<j>` the payload-position index of the record within that inscription (onchain §3.6 ordering) — resolves to **exactly one** `SpendRecord` within the batched reveal transaction; the per-coin `K_tx` (`<view-cap>`) then selects the one coin inside that record's transaction.
+The `/` delimiter is unambiguous: a Bech32m string contains neither `/` nor `:`. The two HRPs `zkbid` and `zkview` ([Foundations §1.7.7](foundations)) are distinct, so a viewer **MUST** reject a value presented under the wrong HRP and can never confuse the locator for the key.
 
-A canonical, host-independent form `zkcoins:tx/<spendrecord>:<holder>:<view-cap>` **MAY** be used so the link is portable across explorer instances; an explorer **MUST** treat the `<spendrecord>`/`<holder>`/`<view-cap>` triple, not the host, as authoritative.
+An explorer **MAY** render the same pair as a clickable web URL — `https://<explorer-host>/tx/<bundle>/<view>` — but the host is only a renderer: any instance is equivalent and self-hostable, and a viewer **MUST** treat the `<bundle>`/`<view>` pair, not the host, as authoritative. A holder hint **MAY** be appended as `?h=<locator>` (`op:<op-pubkey>` or `@<relay-url>`) to speed resolution; it is an optimisation only and is never required.
 
-**Flow.**
+**Flow.** The viewer (an explorer that is neither A nor B, or one the viewer self-hosts):
 
-1. Any holder of the link opens it on an explorer — e.g. `explorer.zkcoins.app`, a **neutral node that is neither A nor B**, or one the viewer self-hosts.
-2. The explorer resolves `<holder>` (or, when `*`, queries the relay mesh, [Transport & Recovery](transport-recovery)) and **pulls the bundle** for `<spendrecord>` — the `CoinProof` ([Foundations §1.5](foundations): coin + proof + inclusion proof + encryption envelope).
-3. The explorer decrypts the coin with `<view-cap>` (`K_tx`) and renders the full single transaction: **amount, asset, time, status** (the [On-chain §3.10](onchain) transaction state).
-4. The explorer surfaces **verifiable evidence**: it checks the coin's inclusion in `output_coins_root`, that root's `SpendRecord` is in state `completed` ([On-chain §3.10](onchain)), and the recursive validity proof ([Foundations §1.4, §1.5](foundations)). The viewer therefore trusts **Bitcoin and the proof — never the explorer's assertion**.
+1. **Fetch** the `CoinProof` bundle by `blob_id` from the relay mesh ([Transport & Recovery §4.2, §4.6](transport-recovery)) — any of the `k` replicas holding the blob answers — and verify `H(ciphertext) == blob_id` (content-addressed self-check).
+2. **Decrypt** the coin with `<view>` (`K_tx`); render the single transaction — **amount, asset, time, status** (the [On-chain §3.10](onchain) transaction state).
+3. **Verify against Bitcoin.** Check the coin's inclusion in `output_coins_root`; locate the on-chain `SpendRecord` carrying that `ocr` and confirm it is in state **`completed`** ([On-chain §3.10](onchain)); verify the recursive validity proof ([Foundations §1.4, §1.5](foundations)). The viewer trusts **Bitcoin and the proof — never the explorer's assertion**.
 
 **Properties.**
 
-- **Bearer.** Whoever holds the link can view that one transaction; the `zkview` is the secret. The link **MUST** travel over a channel the sender trusts.
-- **Scoped.** It discloses that single transaction in full and **nothing else** — no other transactions, no balances, no counterparties beyond that payment, and no spend authority.
-- **Privacy cost.** A third-party explorer operator (and anyone given the link) learns that one transaction. Self-hosting the explorer removes the operator from the trust and disclosure surface.
-- **Availability.** Any node holding the replicated bundle (A, B, or another, [Transport & Recovery](transport-recovery)) can serve it; confirmation does not hinge on A being online.
+- **Bearer.** Whoever holds the link can view that one transaction; `K_tx` is the secret. `blob_id` is a public locator that reveals nothing without `K_tx`. The link **MUST** travel over a channel the sender trusts.
+- **Scoped.** It discloses that single transaction in full and **nothing else** — no other transactions, no balances, no counterparties beyond that payment, and no spend authority. It does reveal `coin.recipient` (B's address) for *this* payment; per-relationship unlinkability is an account choice ([Foundations §1.2](foundations)).
+- **Availability.** Because the locator is `blob_id = H(ciphertext)`, **every** replica that holds the blob can serve it ([Transport & Recovery §4.6](transport-recovery)); confirmation never hinges on A — or any specific node — being online.
+- **On-chain privacy intact.** Neither `blob_id` nor `K_tx` ever appears on Bitcoin; [Requirement 2](/requirements) is unaffected.
+- **Length.** Two 32-byte values in Bech32m make a fixed, compact link; the floor is the 256-bit `K_tx`, which is the access secret and cannot be shortened.
 
 The explorer is a **self-hostable presentation layer** and **MUST NOT** be a trusted authority: every figure it shows is independently verifiable against Bitcoin and the proof by the viewer.
 
@@ -222,7 +215,8 @@ The verifier checks the proof and that the `SpendRecord` at `anchor` (`txid:j`) 
 **Reference link** (any self-hostable instance is equivalent):
 
 ```
-https://<explorer-host>/balance/<address>:<asset_id>?proof=<attestation>
+zkcoins:balance/<address>/<asset_id>?proof=<attestation>
+  — an explorer MAY render it as https://<explorer-host>/balance/<address>/<asset_id>?proof=<attestation>
   — the <attestation> MAY instead be referenced by a content handle when too large for a URL
 ```
 
@@ -247,12 +241,14 @@ There are two forms, with the **same result** but different control. A subject *
 zkavk = Bech32m( HRP = "zkavk", data = ivk ‖ ovk )    // 64B; ivk = incoming, ovk = outgoing
                                                        ; ivk alone (32B) = incoming-only variant
 
-https://<explorer-host>/address/<address>:<holder>:<zkavk>
-  — equivalently  https://<explorer-host>/address=<address>&viewKey=<zkavk>
-  <holder> = node locator ("op:"<op-pubkey> | "@"<relay-url> | "*"), as in §5.6
+zkcoins:addr/<address>/<zkavk>
+  <address> = Bech32m( HRP "zk", H(Pk₀) )   ; the account whose full history is disclosed
+  — an explorer MAY render it as https://<explorer-host>/addr/<address>/<zkavk>
+  — a holder hint MAY be appended as ?h=<locator>; it is an optimisation only. The account's
+    coins are found by deriving detect_tags from ivk and scanning the mesh, so no locator is required.
 ```
 
-**Flow.** The explorer derives the detection key from `ivk` ([Foundations §1.3](foundations)), finds the account's coins on the relay mesh ([Transport & Recovery](transport-recovery)) or via `<holder>`, decrypts incoming coins with `ivk` and recovers outgoing-coin plaintext with `ovk`, and renders the full history — checking every transaction against Bitcoin (coin inclusion → `SpendRecord` → recursive proof, as in [§5.6](#56-shareable-confirmation-links)). The explorer is never trusted.
+**Flow.** The explorer derives the detection key from `ivk` ([Foundations §1.3](foundations)), finds the account's coins by scanning the relay mesh ([Transport & Recovery](transport-recovery)) for the derived `detect_tags` (a `?h=<locator>` hint, if present, only speeds resolution), decrypts incoming coins with `ivk` and recovers outgoing-coin plaintext with `ovk`, and renders the full history — checking every transaction against Bitcoin (coin inclusion → `completed` SpendRecord ([On-chain §3.10](onchain)) → recursive proof, as in [§5.6](#56-shareable-confirmation-links)). The explorer is never trusted.
 
 **Properties.**
 

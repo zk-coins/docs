@@ -88,6 +88,7 @@ A short, scannable reference for the jargon, notation, and identifier names used
 - **Transition** — one execution of the compliance predicate `C` (mint, send, or receive). ([§2.3](proofs#23-state-transitions))
 - **View grant** — `op`-signed delegated viewing key (Bech32m `zkgrant`), scoped by `asset_ids` and time. ([§5.2](access-explorer#52-view-grant))
 - **`zkavk`** — bearer account view key (Bech32m), payload `ivk ‖ ovk`; sees the full account history; non-revocable. ([§5.8](access-explorer#58-address-view-full-history))
+- **`zkbid`** — bearer confirmation-link locator (Bech32m), payload `blob_id = H(ciphertext)`; content-addresses the one coin's bundle so any replica can serve it. ([§5.6](access-explorer#56-shareable-confirmation-links))
 - **`zkgrant`** — see *View grant*.
 - **`zkview`** — bearer per-coin view capability (Bech32m), payload `K_tx`; decrypts exactly one coin. ([§5.3](access-explorer#53-per-coin-view-capability))
 
