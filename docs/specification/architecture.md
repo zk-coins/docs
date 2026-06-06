@@ -54,7 +54,6 @@ The explorer is a **stateless** read surface over one or more nodes. It holds **
 | **API provider** | the capability-gated pull endpoint (§5.1) and the wallet-facing `read.*` / `submit.tx` interfaces (§6.4) | TLS endpoint, auth layer |
 | **Publisher** | broadcasting `SpendRecord`s on Bitcoin, half-aggregating signatures across many submitters ([On-chain §3.3, §3.4](onchain)) | Bitcoin wallet with BTC for fees |
 | **Relay / bundle store** | Nostr relay + content-addressed `CoinProof` blob store ([Transport & Recovery §4.1, §4.2](transport-recovery)) | storage, bandwidth |
-| **Treasury / issuer** *(optional; only in privileged-mint deployments)* | a privileged minting account; the permissionless mint of §2.3.1 needs no such role | a SPEND-branch key for the issuance account |
 
 Operators **MAY** specialise: an organisation might run only a Publisher (sells inscription as a service, accepts records from many validators) or only a Relay/Bundle store. Multiple validators **MAY** share one Publisher — the Publisher's many-to-one mapping ([On-chain §3.4](onchain)) explicitly covers records from many distinct sources. A wallet that points at a foreign node treats each role's operator independently: running your own Publisher is independent of running your own Validator, and trust shifts per role rather than per `node`.
 
