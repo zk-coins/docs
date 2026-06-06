@@ -48,7 +48,7 @@ The whole privacy story is the gap between **Private** (off-chain plaintext) and
 | **account_state_hash** | 🟢 Public | `H(AccountState)` | User → commitment | Bitcoin | Yes — a hash; hides the balance |
 | **Coin** `{identifier, recipient, amount, asset_id}` | 🟠 Private | Built during a send from a `CoinTemplate` | Sender → recipient | the recipient (via the coin proof) | Recipient only (today more is visible than ideal — see [Privacy Model](privacy-model)) |
 | **Coin identifier** | 🟡 Shareable | `H(account_state_hash ‖ asset_id ‖ coin_index)` | inside the coin proof | recipient + the coins tree | Yes |
-| **AssetId** | 🟡 Shareable | `H(genesis_tag ‖ creator_pubkey ‖ name ‖ decimals)` at asset creation | Creator → every user of that asset | public | Yes (everyone using the token needs it) |
+| **AssetId** | 🟡 Shareable | `Hc("AssetId", genesis_tag ‖ creator_pubkey ‖ name_hash ‖ decimals ‖ issuance_version)` at asset creation | Creator → every user of that asset | public | Yes (everyone using the token needs it) |
 | **Account / coins / history trees** (Sparse Merkle Tree, Merkle Mountain Range) | 🟢 Public (roots) / 🟠 Private (leaves) | The node builds them incrementally from accounts and coins | The node | roots go on-chain; plaintext leaves stay private | Roots yes; plaintext leaves no |
 | **Validity proof** (Plonky2, recursive) | 🟢 Public | The node's prover produces one per state transition | The node | the recipient (inside the coin proof) | Yes — zero-knowledge, it reveals nothing beyond validity |
 | **ProofData** (public inputs) `{account_state_hash, output_coins_root, commitment_history_root, coin_history_root, asset_id}` | 🟢 Public | The public outputs of the proof | public | bound on-chain | Yes — only hashes and roots |
