@@ -34,7 +34,7 @@ Notation:
 - `a ‖ b` — byte concatenation.
 - **Secret vs. public.** A lowercase key name (`skᵢ`, `ivk`, `ovk`, `op`, `nk`) denotes the **secret scalar**; its public point is written `<name>·G` or a named pubkey (e.g. `Pkᵢ = skᵢ·G`, `IVPK = ivk·G`, `op_pubkey = op·G`). BIP-340 public keys are **x-only** (32 bytes).
 
-**Domain separation.** Every `Hc` / `HKDF` call **MUST** be tagged with a context string of the form `"zkCoins/v1/<context>"`. The contexts used in this spec are: `Address`, `AssetId`, `Coin`, `AccountState`, `CoinsRoot`, `Nullifier`, `NullifiersRoot`, `NoteKey`, `DetectTag`, `Grant`, `IssuanceTerms`, `HalfAgg`, `BalanceProof`. Reusing a tag for two purposes is forbidden.
+**Domain separation.** Every domain-separated `Hc`, `HKDF`, or `H` call **MUST** use a context string of the form `"zkCoins/v1/<context>"`. The contexts used in this spec are: `Address`, `AssetId`, `Coin`, `AccountState`, `CoinsRoot`, `Nullifier`, `NullifiersRoot`, `NoteKey`, `DetectTag`, `Grant`, `IssuanceTerms`, `HalfAgg`, `BalanceProof`, `PullChallenge`, `PullHost`. Reusing a tag for two purposes is forbidden.
 
 ## 1.2 Key hierarchy
 
