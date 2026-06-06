@@ -89,7 +89,7 @@ Content starts here.
 
 ### Diagrams
 
-Use **ASCII diagrams** — no Mermaid, no images, no external tools:
+Use **ASCII or Mermaid** diagrams — no images, no external tools:
 
 ```
 ┌──────────┐     ┌──────────┐
