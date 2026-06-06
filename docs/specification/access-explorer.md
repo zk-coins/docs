@@ -32,7 +32,6 @@ A request proceeds as a challenge–response so that captured transcripts cannot
 ```
 1. Requester → Node :  PullRequest { subject: address, scope }
 2. Node → Requester :  Challenge   { nonce: 32 random bytes,
-                                     server_id,            // this node's op pubkey (x-only)
                                      expiry: unix_seconds, // node MUST reject after expiry
                                      domain: "zkCoins/v1/PullChallenge" }
 3. Requester → Node :  PullProof   { one of (a) OwnershipProof | (b) GrantProof }
@@ -40,7 +39,13 @@ A request proceeds as a challenge–response so that captured transcripts cannot
                        or an error (capability invalid / scope exceeded / challenge expired).
 ```
 
-The signed challenge message is fixed as `chal = H(domain ‖ nonce ‖ server_id ‖ subject ‖ expiry)`, using `H` and input ordering per [Foundations §1.4, §1.7](foundations). A node **MUST** reject a `PullProof` whose `chal` it did not issue, whose `nonce` it has already consumed, or whose `expiry` has passed.
+The signed challenge message is fixed as `chal = H(domain ‖ nonce ‖ chan_bind ‖ subject ‖ expiry)`, using `H` and input ordering per [Foundations §1.4, §1.7](foundations).
+
+`chan_bind` is a **channel binding** to the transport session the requester has already authenticated — it identifies *which server the requester is talking to*, and it is **not** a value the node asserts. The requester **MUST** derive it from its **own** authenticated connection and **MUST NOT** take it from the node: over TLS it is the **`tls-exporter`** channel-binding value of the session (RFC 9266 — a 32-byte TLS-exporter output); over a Tor onion service it is the service's **`.onion`** address, which is itself the server's public-key identity. The node independently recomputes `chan_bind` from its **own** side of the same session, and a node **MUST** reject a `PullProof` whose recomputed `chal` does not match.
+
+This is what makes a foreign or public node safe to query: a malicious node `X` cannot relay a requester's `OwnershipProof` to another node `Y` (a man-in-the-middle / proof-forwarding attack), because the proof is bound to the `X` session the requester actually authenticated, and `Y` derives a different `chan_bind`. Binding to the **transport identity the requester already verifies** — the TLS certificate of the node's URL, or its onion address — means the protocol needs **no** node-specific key material and no node-level identity beyond the URL itself; node portability ([Requirement 10](/requirements)) is unaffected.
+
+A node **MUST** also reject a `PullProof` whose `nonce` it did not issue or has already consumed, or whose `expiry` has passed.
 
 ### (a) Ownership proof
 
