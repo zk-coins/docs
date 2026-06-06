@@ -178,8 +178,8 @@ A canonical, host-independent form `zkcoins:tx/<spendrecord>:<holder>:<view-cap>
 
 1. Any holder of the link opens it on an explorer — e.g. `explorer.zkcoins.app`, a **neutral node that is neither A nor B**, or one the viewer self-hosts.
 2. The explorer resolves `<holder>` (or, when `*`, queries the relay mesh, [Transport & Recovery](transport-recovery)) and **pulls the bundle** for `<spendrecord>` — the `CoinProof` ([Foundations §1.5](foundations): coin + proof + inclusion proof + encryption envelope).
-3. The explorer decrypts the coin with `<view-cap>` (`K_tx`) and renders the full single transaction: **amount, asset, time, status**.
-4. The explorer surfaces **verifiable evidence**: it checks the coin's inclusion in `output_coins_root`, that root's `SpendRecord` anchored on Bitcoin, and the recursive validity proof ([Foundations §1.4, §1.5](foundations)). The viewer therefore trusts **Bitcoin and the proof — never the explorer's assertion**.
+3. The explorer decrypts the coin with `<view-cap>` (`K_tx`) and renders the full single transaction: **amount, asset, time, status** (the [On-chain §3.10](onchain) transaction state).
+4. The explorer surfaces **verifiable evidence**: it checks the coin's inclusion in `output_coins_root`, that root's `SpendRecord` is in state `completed` ([On-chain §3.10](onchain)), and the recursive validity proof ([Foundations §1.4, §1.5](foundations)). The viewer therefore trusts **Bitcoin and the proof — never the explorer's assertion**.
 
 **Properties.**
 
@@ -217,7 +217,7 @@ BalanceAttestation:
        t = H(R_prime ‖ H(pi.ProofData))    (sign-to-contract, On-chain §3.2)
 ```
 
-The verifier checks the proof and that the `SpendRecord` at `anchor` (`txid:j`) is present at `{block_hash, height}` on Bitcoin ([On-chain layer](onchain)). No node, relay, or explorer is trusted.
+The verifier checks the proof and that the `SpendRecord` at `anchor` (`txid:j`) is in state `completed` ([On-chain §3.10](onchain)) at `{block_hash, height}`. No node, relay, or explorer is trusted.
 
 **Reference link** (any self-hostable instance is equivalent):
 
