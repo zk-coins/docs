@@ -42,7 +42,10 @@ const config = {
     ],
   ],
 
-  plugins: [require.resolve('./plugins/llms-txt')],
+  plugins: [
+    require.resolve('./plugins/llms-txt'),
+    require.resolve('./plugins/noindex-preview'),
+  ],
 
   themes: ['@docusaurus/theme-mermaid'],
 
