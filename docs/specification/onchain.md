@@ -186,6 +186,7 @@ A `SpendRecord` is **published** the instant its reveal transaction enters a Bit
 
 - A double-spend non-membership result (§3.7) is only as final as the tip it is anchored to; a verifier **MUST** re-evaluate it on any reorg that displaces the inclusion block (§3.10).
 - zkCoins adds no finality assumption beyond Bitcoin's: there is no separate consensus, validator set, or checkpoint ([Requirement 1](/requirements), [Requirement 3](/requirements)).
+- Threat-model implications of the 5-block bound: see [Architecture §6.6](architecture#66-threat-model-and-trust-configurations).
 
 ## 3.10 Transaction states
 
