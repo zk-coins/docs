@@ -51,17 +51,21 @@ Each is rare on its own elsewhere; here they hold **together** — see [Comparis
     ────────────────────                 ───────────────────────────────────
 
     ┌──────────────────┐                 ┌───────────────────────────────┐
-    │   SpendRecord    │   sign-to-      │  AccountState                 │
-    │   ────────────   │   contract      │   balances · keys · counters  │
-    │   Pkᵢ            │   binds         │   coin_history_root           │
-    │   nullifiers     │ ◀ H(ProofData)─ ├───────────────────────────────┤
-    │   signature      │                 │  Recursive validity proof     │
-    │   inr ‖ ocr      │ ◀── attests ─── │   (constant-size · ZK)        │
-    └──────────────────┘                 ├───────────────────────────────┤
-            ▲                            │  Coin plaintext               │
-            │ inscribed in a             │   amount · asset · recipient  │
-            │ Taproot reveal-tx          ├───────────────────────────────┤
-            │ envelope                   │  CoinProof bundle  ──▶ to B   │
+    │ BatchInscription │  sign-to-       │  AccountState                 │
+    │ ────────────     │  contract       │   balances · keys · counters  │
+    │ publisher_pubkey │  binds          │   coin_history_root           │
+    │ prev_root        │ ◀ H(AggProof)── ├───────────────────────────────┤
+    │ new_root         │                 │  SpendRecord(s)               │
+    │ bundle_locator   │ ◀── attests ─── │   per-spender, off-chain      │
+    │ block_anchor     │                 │   recursive validity proofs   │
+    │ signature        │                 ├───────────────────────────────┤
+    └──────────────────┘                 │  AggregateBatchProof          │
+            ▲   (231 bytes,              │   (publisher's recursive PCD) │
+            │    CONSTANT per batch)     ├───────────────────────────────┤
+            │ inscribed in a             │  BatchBundle ── relay mesh    │
+            │ Taproot reveal-tx          │   (k=3 replicated)            │
+            │ envelope                   ├───────────────────────────────┤
+            │                            │  CoinProof bundle  ──▶ to B   │
             │                            │   (coin + proof + envelope)   │
             └────────────────────────────┴───────────────────────────────┘
 ```
@@ -69,37 +73,50 @@ Each is rare on its own elsewhere; here they hold **together** — see [Comparis
 **A payment, end to end.** A pays B; both run their own wallet+node; only Bitcoin is shared:
 
 ```
-    Alice                 Nostr relay         Bitcoin              Bob
-      │                       │                  │                  │
-      │ 1. build SpendRecord  │                  │                  │
-      │    + recursive proof  │                  │                  │
-      │                       │                  │                  │
-      │ 2. publish encrypted CoinProof bundle (NIP-44 / NIP-59)     │
-      ├──────────────────────▶│                  │                  │
-      │                       │                  │                  │
-      │ 3. inscribe SpendRecord (nullifiers in the clear)           │
-      ├──────────────────────────────────────────▶                  │
-      │                       │                  │                  │
-      │                       │  every node folds the new nfs into  │
-      │                       │  its nullifier accumulator          │
-      │                       │                  │                  │
-      │                       │ 4. scan candidates · match          │
-      │                       │    detect_tag (1 Poseidon hash/evt) │
-      │                       ◀───────────────────────────────────┤
-      │                       │                  │                  │
-      │                       │ 5. gift-wrapped bundle blob         │
-      │                       ├──────────────────────────────────▶│
-      │                       │                  │                  │
-      │                       │            6. decrypt with K_tx     │
-      │                       │               verify recursive proof│
-      │                       │               check nf non-member.  │
-      │                       │               of accumulator at tip │
-      │                       │                  │                  │
-      │                       │            7. credit coin (trustless)
-      │                       │                  │                  │
-      │ 8. encrypted ACK · A may now drop her retained copy         │
-      ◀──────────────────────────────────────────────────────────┤
-      │                       │                  │                  │
+    Alice                 Nostr relay     Publisher       Bitcoin       Bob
+      │                       │              │              │           │
+      │ 1. build SpendRecord  │              │              │           │
+      │    + recursive proof  │              │              │           │
+      │                       │              │              │           │
+      │ 2. publish encrypted CoinProof bundle (NIP-44 / NIP-59)         │
+      ├──────────────────────▶│              │              │           │
+      │                       │              │              │           │
+      │ 3. hand SpendRecord to publisher (off-chain)                    │
+      ├─────────────────────────────────────▶│              │           │
+      │                       │              │              │           │
+      │                       │              │ 4. aggregate │           │
+      │                       │              │  many SpendRecords,      │
+      │                       │              │  build AggregateBatchProof
+      │                       │              │              │           │
+      │                       │              │ 5. push BatchBundle      │
+      │                       │              │  to k=3 replicas         │
+      │                       │◀─────────────┤              │           │
+      │                       │              │              │           │
+      │                       │              │ 6. inscribe BatchInscription
+      │                       │              │   (231 bytes, constant)  │
+      │                       │              ├─────────────▶│           │
+      │                       │              │              │           │
+      │                       │  scanners fetch BatchBundle by locator, │
+      │                       │  verify AggregateBatchProof, apply      │
+      │                       │  prev_root → new_root to accumulator    │
+      │                       │              │              │           │
+      │                       │ 7. scan CoinProof candidates · match    │
+      │                       │    detect_tag (1 Poseidon hash/evt)     │
+      │                       ◀──────────────────────────────────────────
+      │                       │              │              │           │
+      │                       │ 8. gift-wrapped bundle blob             │
+      │                       ├─────────────────────────────────────────▶
+      │                       │              │              │           │
+      │                       │            9. decrypt with K_tx         │
+      │                       │              verify recursive proof     │
+      │                       │              check nf non-member.       │
+      │                       │              of accumulator at tip      │
+      │                       │              │              │           │
+      │                       │           10. credit coin (trustless)   │
+      │                       │              │              │           │
+      │11. encrypted ACK · A may now drop her retained copy             │
+      ◀──────────────────────────────────────────────────────────────────
+      │                       │              │              │           │
 ```
 
 ## Scope
@@ -118,7 +135,7 @@ The whole specification exists to satisfy these (in full on the [Requirements](/
 |---|---|---|
 | 1 | [Foundations](#1--foundations-normative) | The single source of truth: primitives, the full key hierarchy and exact derivations, every identifier, the data structures and the global nullifier accumulator |
 | 2 | [Proofs & State Transitions](#2--proofs--state-transitions) | The compliance predicate, recursion, and the mint / send / receive algorithms |
-| 3 | [On-chain Layer](#3--on-chain-layer) | The `SpendRecord`, signing, half-aggregation, the publisher, and the nullifier accumulator |
+| 3 | [On-chain Layer](#3--on-chain-layer) | The `BatchInscription` (constant 231 bytes per batch), publisher signing, the off-chain `BatchBundle` and its `AggregateBatchProof`, and the nullifier accumulator |
 | 4 | [Transport & Recovery](#4--transport--recovery) | Off-chain delivery, note discovery, seed recovery, data availability |
 | 5 | [Access & Explorer](#5--access--explorer) | Capability-gated pull, view grants, and the disclosure spectrum: per-transaction links, balance attestations, full-account views |
 | 6 | [System Architecture](#6--system-architecture) | Node, wallet, explorer; portability, multi-node, issuance, threat model |
@@ -133,8 +150,8 @@ Where each requirement is satisfied:
 
 | Requirement | Satisfied by |
 |---|---|
-| **1 · Bitcoin-only base** | §1 (no native token; secp256k1/BIP-340), §3 (a single `SpendRecord` inscribed; no chain/consensus change) |
-| **2 · Private** | §1.3 (per-coin encryption), §1.4 (opaque `SpendRecord` carries only hashes and unlinkable nullifiers), §2 (ZK proof hides amounts/parties/graph) |
+| **1 · Bitcoin-only base** | §1 (no native token; secp256k1/BIP-340), §3 (a single constant-size `BatchInscription` inscribed per publisher batch; no chain/consensus change) |
+| **2 · Private** | §1.3 (per-coin encryption), §1.4 (opaque `BatchInscription` carries only roots, a publisher key, a locator hash, and a signature — no individual nullifiers, amounts, parties, or per-spender keys on chain), §2 (ZK proof hides amounts/parties/graph) |
 | **3 · Trustless** | §2 (proof soundness ⇒ no forgery), §3 (nullifier accumulator ⇒ no double-spend), §1.2 (no key a node holds can spend), §6 (threat model) |
 | **4 · Client-side validation** | §2 (receiver re-verifies the full recursive proof), §4 (receive flow) |
 | **5 · Custody only in wallet** | §1.2 (SPEND branch is wallet-only; hardened separation) |
@@ -224,7 +241,7 @@ seed  (256-bit; BIP-39 mnemonic, or Passkey PRF → HKDF)
 
 The **operational bundle** `{ivk, ovk, op}` is what a wallet entrusts to a node so the node can receive and serve on its behalf 24/7. None of it can spend. A *foreign* node never receives these directly; the wallet instead issues that node a scoped, `op`-signed **view grant** (§ Access model).
 
-**Spend-key model (account-level).** The keys `skᵢ` are rotating **per-transition** signing keys — there is **no** per-coin signing key. Transition `i` (where `i = send_counter` at entry) is authorised by `skᵢ`, whose public key `Pkᵢ` is the account's `current_pubkey` and is published in that transition's `SpendRecord` (§1.4); the transition rotates `current_pubkey` to `Pk_{i+1}`. `Pk₀` fixes the address and appears on-chain only in the **first** transition. `nk` is account-level. Coin ownership is by the account (a coin's `recipient = address`); a receiver therefore never needs a per-coin key.
+**Spend-key model (account-level).** The keys `skᵢ` are rotating **per-transition** signing keys — there is **no** per-coin signing key. Transition `i` (where `i = send_counter` at entry) is authorised by `skᵢ`, whose public key `Pkᵢ` is the account's `current_pubkey` and is carried in that transition's `SpendRecord` (§1.4) — the SpendRecord is handed to a publisher off-chain, so `Pkᵢ` never appears on Bitcoin directly; it is verified in-circuit by the publisher's `AggregateBatchProof` ([§2.2](#22-proof-types)). The transition rotates `current_pubkey` to `Pk_{i+1}`. `Pk₀` fixes the address. `nk` is account-level. Coin ownership is by the account (a coin's `recipient = address`); a receiver therefore never needs a per-coin key.
 
 **Accounts and addresses are one-to-one.** An account `A` has **exactly one** address, `address = H(Pk₀)` (§1.4). The protocol defines **no** diversified addresses, sub-addresses, or change addresses: there is no way to derive a second, separately-disclosable or separately-unlinkable receiving address under the same account. The **account is therefore the sole unit** of every isolation boundary in the system — privacy domain, selective disclosure ([Access & Explorer](#5--access--explorer)), recovery ([Transport & Recovery](#4--transport--recovery)), and node portability ([Requirement 10](/requirements)). A wallet derives further accounts at `m/1798'/account'`; it **MUST NOT** present multiple receiving addresses within one account. Consequences a wallet **MUST** surface to the user:
 
@@ -265,11 +282,13 @@ Exact derivations. Every value here is reproducible from its inputs.
 | **output_coins_root** (`ocr`) | Poseidon Merkle root over the transaction's output `coin.identifier`s, tag `CoinsRoot` | 32-byte canonical |
 | **input_nullifiers_root** (`inr`) | Poseidon Merkle root over the transition's spent `nf`s, tag `NullifiersRoot` | 32-byte canonical |
 | **SpendRecord message** | `message = inr ‖ ocr` — binds the spent nullifier set and the produced output coins | 64 bytes |
-| **SpendRecord** | `{ public_key: Pkᵢ (32B x-only), nullifiers: [nf]ⱼ (32B each — the coins spent in this transition, **published in the clear**), signature: BIP-340(skᵢ, message) (64B), message (64B) }` — the **only** object written to Bitcoin. The published `nf`s are exactly what every node folds into the global nullifier accumulator (§1.6); a mint, which spends no coin, publishes an empty `nullifiers` list | `~160 + 32·\|nf\|` bytes inscribed |
-| **Nullifier** | `nf = Hc("Nullifier", nk ‖ coin.identifier)` — revealed (in the `SpendRecord`) when a coin is spent; unlinkable to the coin without `nk` | 256-bit digest (32-byte canonical) |
-| **ProofData** (public inputs) | `{ new_account_state_hash, output_coins_root, input_nullifiers_root, coin_history_root }` — note there is **no** accumulator root here: global double-spend is enforced by the published `nf`s on-chain (§1.6), not by an in-circuit membership proof against a global root | hashes/roots only |
+| **SpendRecord** | `{ public_key: Pkᵢ (32B x-only), signature: BIP-340(skᵢ, message) (64B), message: inr ‖ ocr (64B), k: u8 (1B, the count of input nullifiers), nullifiers: [nf]ⱼ (32B each — the coins spent in this transition; exactly `k` entries) }` — an **off-chain** object: a spender produces one per transition and hands it to a publisher. The publisher aggregates many `SpendRecord`s into one `BatchBundle` ([§4.6](#46-data-availability--replication-factor-k)), builds the `AggregateBatchProof` over them, and anchors the batch with one constant-size `BatchInscription` on Bitcoin ([§3.1](#31-the-on-chain-object)). A mint, which spends no coin, has `k = 0` and need not be batched at all — its receiver verifies it directly against its `CoinProof` bundle | 161 + 32·\|nf\| bytes off-chain |
+| **Nullifier** | `nf = Hc("Nullifier", nk ‖ coin.identifier)` — derived in-circuit by the spender; included in the `SpendRecord` handed to the publisher and folded into the global nullifier accumulator (§1.6) when the batch's `BatchInscription` is admitted; unlinkable to the coin without `nk` | 256-bit digest (32-byte canonical) |
+| **ProofData** (public inputs) | `{ new_account_state_hash, output_coins_root, input_nullifiers_root, coin_history_root }` — there is **no** accumulator root here: a spender's per-account proof attests local soundness; global double-spend is enforced by the publisher's `AggregateBatchProof` ([§2.2](#22-proof-types)) when it inserts the batch's nullifiers into the on-chain-committed accumulator | hashes/roots only |
+| **BatchInscription** | `{ publisher_pubkey: Pkₚ, prev_root, new_root, bundle_locator, block_anchor, signature }` — the **only** object written to Bitcoin; 231 bytes per batch, constant in batch size; commits the publisher's accumulator state transition `prev_root → new_root` and addresses the off-chain bundle by `bundle_locator = Hc("BatchBundle", serialize(BatchBundle))` ([§3.1](#31-the-on-chain-object), [§3.5](#35-inscription-format)) | 231 bytes per batch |
+| **BatchBundle** | `{ prev_root, new_root, spend_records: [SpendRecord], aggregate_proof: AggregateBatchProof, nullifiers: [nf] (derived view) }` — off-chain, content-addressed, `k = 3` replicated by the same DA discipline as `CoinProof` bundles ([§4.6](#46-data-availability--replication-factor-k)). Carries every member `SpendRecord` plus the recursive proof that attests the whole batch. The top-level `nullifiers` field is a **derived view** equal to the canonical multi-set concatenation of every member `SpendRecord`'s `nullifiers` in canonical bundle order — provided as a convenience for scanners that want the flat `nf` list without re-parsing every record. **Canonical serialisation** `serialize(BatchBundle)` (the preimage of `bundle_locator = Hc("BatchBundle", …)`, [§3.5](#35-inscription-format), [§2.2 clause 6](#22-proof-types)) is `prev_root ‖ new_root ‖ u32-be(m) ‖ SpendRecord₁ ‖ … ‖ SpendRecord_m` — the derived `nullifiers` field and the `aggregate_proof` are **excluded** from this preimage (the former because it is redundant under §2.2 clauses 3–4; the latter because a proof cannot commit to its own bytes, so it is bound separately by the publisher's sign-to-contract tweak, [§3.2](#32-batchinscription-signing-bip-340--sign-to-contract)) | grows with member count + recursive-proof size (typically ~100 KB) |
 
-The BIP-340 signature over `message` additionally uses **sign-to-contract**: it embeds the digest of the transition's off-chain validity proof (`H(ProofData)`) in the nonce, anchoring that proof to this exact on-chain `SpendRecord` without spending any extra bytes on-chain (see [On-chain layer §3.2](#32-spendrecord-signing-bip-340--sign-to-contract)). This is a real binding to data that is **not** otherwise on-chain — the message itself carries only `inr ‖ ocr`.
+The per-spender BIP-340 signature over `message` additionally uses **sign-to-contract**: it embeds the digest of that spender's off-chain validity proof (`H(ProofData)`) in the nonce, binding the proof to the spender's `SpendRecord` for in-circuit verification by the publisher's `AggregateBatchProof` (see [On-chain §3.3](#33-off-chain-signature-handling)). The publisher's separate signature on the `BatchInscription` (see [On-chain §3.2](#32-batchinscription-signing-bip-340--sign-to-contract)) is similarly sign-to-contract-bound to the off-chain `AggregateBatchProof`.
 
 ### 1.5 Core data structures
 
@@ -303,11 +322,11 @@ Invoice      = { amount, recipient: address, asset_id, memo? }     // shareable,
 | Structure | Scope | Contents | Built from |
 |---|---|---|---|
 | **Coin-history SMT** | per account | coins the account has received/spent (for in-circuit non-inclusion) | the account's own coins; root folded into `ash` lineage (Private) |
-| **Nullifier accumulator** | global | every published `nf` (sorted Merkle / SMT, supports membership + non-membership) | the `nf`s **published in the clear** in every on-chain `SpendRecord` (§1.4) |
+| **Nullifier accumulator** | global | every admitted `nf` (256-bit-depth SMT, supports membership + non-membership) | the `nf`s carried in every admitted `BatchBundle`, whose `prev_root → new_root` transitions are anchored by `BatchInscription`s on Bitcoin ([§3.7](#37-the-nullifier-accumulator)) |
 
-There is **exactly one** global structure — the nullifier accumulator — and it is the only thing the protocol relies on Bitcoin to order. zkCoins defines **no** global, account-keyed commitment tree: an account's latest state is carried by its own constant-size recursive proof ([Proofs §2.2](#22-proof-types)), never by a global per-account on-chain index. This is deliberate. A global structure keyed by a stable account identifier would have to be **either** rebuildable by every node from the chain (which requires the identifier on-chain) **or** privacy-preserving (which requires it hidden) — never both. The protocol keeps privacy ([Requirement 2](/requirements)) and rebuildability ([Requirement 10](/requirements)) at once by removing that structure entirely and anchoring double-spend protection in the **nullifier accumulator** alone.
+There is **exactly one** global structure — the nullifier accumulator — and Bitcoin is the only ordering surface the protocol relies on. zkCoins defines **no** global, account-keyed commitment tree: an account's latest state is carried by its own constant-size recursive proof ([Proofs §2.2](#22-proof-types)), never by a global per-account on-chain index. This is deliberate. A global structure keyed by a stable account identifier would have to be **either** rebuildable from publicly verifiable data **or** privacy-preserving — never both. The protocol keeps privacy ([Requirement 2](/requirements)) and rebuildability ([Requirement 10](/requirements)) at once by removing that structure entirely and anchoring double-spend protection in the **nullifier accumulator** alone.
 
-Because the spent `nf`s are published verbatim on Bitcoin, **any node rebuilds the nullifier accumulator directly from the chain** — a pure function of confirmed Bitcoin data, identical for every honest node, requiring **no** trust in any peer and **no** foreign off-chain data ([On-chain §3.6](#36-chain-scanning)). The per-account coin-history SMT is Private (its leaves are the account's own coins) and never leaves the account's own proving context; only its root appears, hashed, inside `ash`.
+The accumulator's **state transitions** are anchored on Bitcoin (each `BatchInscription` commits `prev_root → new_root`) and its **per-transition validity** is attested by the publisher's `AggregateBatchProof` carried in the off-chain `BatchBundle` ([§3.7](#37-the-nullifier-accumulator)). Any node therefore tracks the accumulator by following the chain of inscribed roots and verifying each batch's recursive proof against its content-addressed bundle — a pure function of confirmed Bitcoin data plus publicly verifiable, `k = 3`-replicated bundles ([Transport & Recovery §4.6](#46-data-availability--replication-factor-k)), identical for every honest node, requiring **no** trust in any peer. The per-account coin-history SMT is Private (its leaves are the account's own coins) and never leaves the account's own proving context; only its root appears, hashed, inside `ash`.
 
 ### 1.7 Encoding, serialization, and the reference instantiation
 
@@ -424,11 +443,11 @@ This section pins one concrete, implementable convention for everything otherwis
 
 This page defines the **proof system** and the **three state transitions** (mint, send, receive) of zkCoins. It builds strictly on [Foundations](#1--foundations-normative): every key, identifier, hash, tree, and structure is used exactly as defined there and never redefined here. Normative keywords (**MUST**, **MUST NOT**, **SHOULD**, **MAY**) follow RFC 2119.
 
-The proof system is a **proof-carrying-data (PCD)** scheme realised by **cyclic recursion** (see [Foundations](#1--foundations-normative) §1.1): one circuit verifies a proof of itself. Each transition consumes the account's previous proof and emits a new one, so a coin that changed hands `N` times carries a **single constant-size proof**, verified in **constant time**, regardless of `N`.
+The proof system is a **proof-carrying-data (PCD)** scheme realised by **cyclic recursion** (see [Foundations §1.1](#11-cryptographic-primitives)): one circuit verifies a proof of itself. Each transition consumes the account's previous proof and emits a new one, so a coin that changed hands `N` times carries a **single constant-size proof**, verified in **constant time**, regardless of `N`.
 
 ### 2.1 The compliance predicate
 
-Every transition is a single execution of one circuit, `C`. The circuit takes a **private witness** `w` and a set of **public inputs** equal to `ProofData` (see [Foundations](#1--foundations-normative) §1.4). A proof `π` is accepted only if `C(ProofData, w) = 1`, i.e. **all** of the following clauses hold. The clauses are normative: a conforming prover **MUST** enforce every one, and a conforming verifier **MUST** reject any proof for which the public inputs are not bound exactly as below.
+Every transition is a single execution of one circuit, `C`. The circuit takes a **private witness** `w` and a set of **public inputs** equal to `ProofData` (see [Foundations §1.4](#14-identifiers-and-hashes)). A proof `π` is accepted only if `C(ProofData, w) = 1`, i.e. **all** of the following clauses hold. The clauses are normative: a conforming prover **MUST** enforce every one, and a conforming verifier **MUST** reject any proof for which the public inputs are not bound exactly as below.
 
 Witness (private to the prover; never revealed):
 
@@ -455,12 +474,12 @@ w = {
 **Predicate `C` — enumerated clauses.**
 
 1. **Recursive verification (PCD).** Either this is an `InitialProof` and `w.prev_proof` is absent and `w.prev_account_state` is the canonical empty account for `owner = H(Pk₀)`; **or** `w.prev_proof` verifies under the circuit's own verifier data (cyclic recursion), and its public output `new_account_state_hash` equals the `ash` of `w.prev_account_state`, and its `coin_history_root` equals the coin-history root over which clause 2 proves inclusion. The verifier data **MUST** be fixed and identical in prover and verifier; a proof verified against any other verifier data is invalid.
-   - **No global lineage anchor.** An account's latest state is attested **entirely** by its own constant-size recursive proof; the protocol defines no global, account-keyed commitment tree to bind to ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)). Anchoring to Bitcoin comes instead from the **published nullifiers**: a spend takes effect only once its `SpendRecord` is confirmed on-chain (§2.3.3), and equivocation between two forks of one account is caught because both forks reuse the same input-coin `nf`, which can enter the global nullifier set only once.
+   - **No global lineage anchor.** An account's latest state is attested **entirely** by its own constant-size recursive proof; the protocol defines no global, account-keyed commitment tree to bind to ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)). Anchoring to Bitcoin comes instead via the **publisher batching path**: a spend takes effect only once its `SpendRecord` is included in a `BatchBundle` whose `BatchInscription` is admitted on-chain (§2.3.3, [On-chain §3.6](#36-chain-scanning)), and equivocation between two forks of one account is caught because both forks reuse the same input-coin `nf`, which can enter the global nullifier accumulator only once — the publisher's `AggregateBatchProof` ([§2.2](#22-proof-types)) attests `new_root` as the deterministic SMT-insertion result, so an `nf` already in the accumulator at `prev_root` would make the proof unsatisfiable.
 
-2. **Input authenticity.** The whole transition is authorised by the account's **single transition signature** — there is no per-coin key and no per-coin signature ([Foundations](#1--foundations-normative) §1.2). The circuit **MUST** check that `txn_sig` is a valid **BIP-340** signature (see [Foundations](#1--foundations-normative) §1.1) over `message = inr ‖ ocr` (the `SpendRecord` message of [Foundations §1.4](#14-identifiers-and-hashes): `input_nullifiers_root` from clause 4 ‖ `output_coins_root` from clause 6) by `txn_pubkey = Pkᵢ`, and that `Pkᵢ` is `prev_account_state.current_pubkey`. Then, for every `input_coins[j]`:
-   a. `input_coins[j].recipient` equals `prev_account_state.owner`, i.e. the coin is owned by the spending account (`owner = address = H(Pk₀)`, [Foundations](#1--foundations-normative) §1.4) — ownership is by the account, so a receiver never needs a per-coin key index;
-   b. `input_coins[j]` is included in the prior **coin-history SMT** (per-account, [Foundations](#1--foundations-normative) §1.6) via `input_auth[j].history_path` against the root referenced in clause 1;
-   c. `input_coins[j].identifier` is recomputed in-circuit as `Hc("Coin", input_auth[j].creating_prev_ash ‖ asset_id ‖ coin_index)` — using the witnessed `creating_prev_ash` (the **prior** `account_state_hash` of the transition that produced this coin, i.e. the `ash` of the creating account *before* its creating transition, delivered to the spender inside the coin's `CoinProof` bundle) — and **MUST** match the supplied identifier. The per-input witness `input_auth[]` **MUST** therefore include each input coin's `creating_prev_ash`. This matches [Foundations](#1--foundations-normative) §1.4: a coin's identifier binds the creating account's **prior** state, breaking the would-be recursion between `coin.identifier` and `new_account_state_hash`.
+2. **Input authenticity.** The whole transition is authorised by the account's **single transition signature** — there is no per-coin key and no per-coin signature ([Foundations §1.2](#12-key-hierarchy)). The circuit **MUST** check that `txn_sig` is a valid **BIP-340** signature (see [Foundations §1.1](#11-cryptographic-primitives)) over `message = inr ‖ ocr` (the `SpendRecord` message of [Foundations §1.4](#14-identifiers-and-hashes): `input_nullifiers_root` from clause 4 ‖ `output_coins_root` from clause 6) by `txn_pubkey = Pkᵢ`, and that `Pkᵢ` is `prev_account_state.current_pubkey`. Then, for every `input_coins[j]`:
+   a. `input_coins[j].recipient` equals `prev_account_state.owner`, i.e. the coin is owned by the spending account (`owner = address = H(Pk₀)`, [Foundations §1.4](#14-identifiers-and-hashes)) — ownership is by the account, so a receiver never needs a per-coin key index;
+   b. `input_coins[j]` is included in the prior **coin-history SMT** (per-account, [Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)) via `input_auth[j].history_path` against the root referenced in clause 1;
+   c. `input_coins[j].identifier` is recomputed in-circuit as `Hc("Coin", input_auth[j].creating_prev_ash ‖ asset_id ‖ coin_index)` — using the witnessed `creating_prev_ash` (the **prior** `account_state_hash` of the transition that produced this coin, i.e. the `ash` of the creating account *before* its creating transition, delivered to the spender inside the coin's `CoinProof` bundle) — and **MUST** match the supplied identifier. The per-input witness `input_auth[]` **MUST** therefore include each input coin's `creating_prev_ash`. This matches [Foundations §1.4](#14-identifiers-and-hashes): a coin's identifier binds the creating account's **prior** state, breaking the would-be recursion between `coin.identifier` and `new_account_state_hash`.
 
 3. **Per-asset balance conservation.** Let `In(a) = Σ { input_coins[j].amount : input_coins[j].asset_id = a }` and `Out(a) = Σ { output_templates[k].amount : output_templates[k].asset_id = a }`, plus `Mint(a)` from any `asset_issuance` for asset `a` (zero otherwise). For **every** `asset_id` `a` appearing in inputs or outputs: `In(a) + Mint(a) ≥ Out(a)`. All amounts are range-checked to a fixed non-negative integer width so no sum can wrap the field; any amount outside range invalidates the proof. The difference `In(a) + Mint(a) − Out(a)` is retained by the account (a change coin) — funds are conserved, never created except by an explicit, predicate-checked `Mint(a)`. When `asset_issuance` is present, the v1 mint clauses of [Architecture §6.5](#65-issuance--versioned-schemas-v1-minimal) **MUST** all hold — these are the normative content of the v1 mint circuit, and they hook §6.5 into the predicate enumerated here. In summary:
 
@@ -471,11 +490,11 @@ w = {
 
    Together with `Mint(asset_issuance.asset_id) = asset_issuance.amount` flowing into the `In(a) + Mint(a) ≥ Out(a)` check above, these complete the v1 issuance discipline.
 
-4. **Nullifier derivation.** For every `input_coins[j]`, compute `nf_j = Hc("Nullifier", nk ‖ input_coins[j].identifier)` ([Foundations §1.4](#14-identifiers-and-hashes)) in-circuit from the witnessed `nk`. All `nf_j` within one transition **MUST** be pairwise distinct, and they form the leaves whose root is `ProofData.input_nullifiers_root`. These `nf_j` are the values published **in the clear** in this transition's `SpendRecord` ([On-chain §3.5](#35-inscription-format)); the proof binds them (through `input_nullifiers_root`, which the on-chain `message` and the sign-to-contract tweak both cover, [Foundations §1.4](#14-identifiers-and-hashes)), but the proof makes **no** in-circuit claim of global non-membership. Global double-spend protection is enforced **outside** the circuit, by the published nullifier set: a scanner rejects any `SpendRecord` reusing an `nf` already on-chain, and a receiver checks non-membership against the live on-chain accumulator (§2.3.3 step 5, [On-chain §3.7](#37-the-nullifier-accumulator)). Within the account, clause 2(b) together with the coin-history update (clause 8) prevent the account from spending the same coin twice along its own lineage.
+4. **Nullifier derivation.** For every `input_coins[j]`, compute `nf_j = Hc("Nullifier", nk ‖ input_coins[j].identifier)` ([Foundations §1.4](#14-identifiers-and-hashes)) in-circuit from the witnessed `nk`. All `nf_j` within one transition **MUST** be pairwise distinct, and they form the leaves whose root is `ProofData.input_nullifiers_root`. These `nf_j` are carried into the spender's `SpendRecord` (off-chain, [§1.5](#15-core-data-structures)) and are bound by the per-spender `message = inr ‖ ocr` plus the sign-to-contract tweak. The per-account proof makes **no** in-circuit claim of global non-membership. Global double-spend protection is enforced by the **publisher's** `AggregateBatchProof` ([§2.2](#22-proof-types)) when the batch is inscribed: it attests every member `nf` is correctly derived and that the new accumulator root is the SMT-insertion of every batch member into the previous root ([On-chain §3.7](#37-the-nullifier-accumulator)). A receiver checks non-membership against the live on-chain accumulator (§2.3.3 step 5) via Path A or Path B ([§3.7](#37-the-nullifier-accumulator)). Within the account, clause 2(b) together with the coin-history update (clause 8) prevent the account from spending the same coin twice along its own lineage.
 
-5. **Output coin construction.** For each `output_templates[k]`, the new `coin.identifier` is computed as `Hc("Coin", prev_account_state_hash ‖ output_templates[k].asset_id ‖ coin_index_k)` ([Foundations](#1--foundations-normative) §1.4), with `coin_index_k` assigned monotonically within the transition. Using the **prior** state's `ash` here keeps the identifier non-circular with respect to `new_account_state_hash` (which itself folds in the post-transition `coin_history_root` covering these very output coins). The resulting `Coin` objects (`{identifier, recipient, amount, asset_id}`) are the transition's outputs.
+5. **Output coin construction.** For each `output_templates[k]`, the new `coin.identifier` is computed as `Hc("Coin", prev_account_state_hash ‖ output_templates[k].asset_id ‖ coin_index_k)` ([Foundations §1.4](#14-identifiers-and-hashes)), with `coin_index_k` assigned monotonically within the transition. Using the **prior** state's `ash` here keeps the identifier non-circular with respect to `new_account_state_hash` (which itself folds in the post-transition `coin_history_root` covering these very output coins). The resulting `Coin` objects (`{identifier, recipient, amount, asset_id}`) are the transition's outputs.
 
-6. **Output coins root.** `ProofData.output_coins_root` (`ocr`) **MUST** equal the Poseidon Merkle root over the output `coin.identifier`s under tag `CoinsRoot` ([Foundations](#1--foundations-normative) §1.4, §1.6).
+6. **Output coins root.** `ProofData.output_coins_root` (`ocr`) **MUST** equal the Poseidon Merkle root over the output `coin.identifier`s under tag `CoinsRoot` ([Foundations §1.4](#14-identifiers-and-hashes), §1.6).
 
 7. **New account state.** `new_account_state` is `prev_account_state` with: `balances` updated per clause 3 (debit spent inputs, credit change and any issuance), `current_pubkey = next_pubkey = Pkᵢ₊₁`, `send_counter` incremented by one, and `coin_history_root` set to the value produced by clause 8 (the recomputed per-account coin-history SMT root, [Foundations §1.7.6](#176-nullifier-accumulator-sparse-merkle-tree)). `ProofData.new_account_state_hash` **MUST** equal `ash = Hc("AccountState", serialize(new_account_state))` ([Foundations §1.4, §1.7.4](#14-identifiers-and-hashes)). `new_account_state.owner` **MUST** be unchanged.
 
@@ -483,16 +502,17 @@ w = {
 
 9. **Public-input binding.** All four `ProofData` fields — `new_account_state_hash`, `output_coins_root`, `input_nullifiers_root`, `coin_history_root` — **MUST** be the in-circuit-computed values above and are the proof's public inputs. Nothing else is public: amounts, asset ids, recipients, keys, and counts remain in the witness (zero-knowledge).
 
-The signed on-chain **SpendRecord** (`message = inr ‖ ocr`, [Foundations](#1--foundations-normative) §1.4) binds this transition's spent nullifier set (`input_nullifiers_root`) and its produced coins (`output_coins_root`) to Bitcoin via a BIP-340 signature by `Pkᵢ`, and its sign-to-contract nonce binds `H(ProofData)` so the off-chain validity proof is anchored to this exact record; construction and publishing are specified in [On-chain Layer](#3--on-chain-layer).
+The spender's **SpendRecord** (`message = inr ‖ ocr`, [Foundations §1.4](#14-identifiers-and-hashes)) — an off-chain object — binds this transition's spent nullifier set (`input_nullifiers_root`) and its produced coins (`output_coins_root`) via a BIP-340 signature by `Pkᵢ`, and its sign-to-contract nonce binds `H(ProofData)` so the off-chain validity proof is anchored to this record. The publisher then aggregates many `SpendRecord`s into a `BatchBundle`, builds the `AggregateBatchProof` over them, and inscribes one constant-size `BatchInscription` on Bitcoin (committing `prev_root → new_root` and binding the bundle by content-address); construction and publishing are specified in [On-chain Layer](#3--on-chain-layer).
 
 ### 2.2 Proof types
 
-The **same** circuit `C` handles both proof types; they differ only in clause 1.
+Two PCD circuits are involved, each handling one role: the **per-account compliance circuit** `C` (which `InitialProof` and `AccountUpdateProof` are both produced by) and the **publisher's batch-aggregation circuit** `C_batch` (which the `AggregateBatchProof` is produced by, verifying many `C`-proofs and an SMT update inside one recursive proof).
 
-| Type | When | Clause 1 behaviour |
-|---|---|---|
-| `InitialProof` | first transition of an account (creation; optionally an issuance) | `prev_proof` absent; `prev_account_state` is the canonical empty account for `owner = H(Pk₀)` (defined below) |
-| `AccountUpdateProof` | every subsequent transition | `prev_proof` present and verified recursively against the circuit's own verifier data |
+| Type | Circuit | When | Clause 1 behaviour |
+|---|---|---|---|
+| `InitialProof` | `C` | first transition of an account (creation; optionally an issuance) | `prev_proof` absent; `prev_account_state` is the canonical empty account for `owner = H(Pk₀)` (defined below) |
+| `AccountUpdateProof` | `C` | every subsequent transition | `prev_proof` present and verified recursively against the circuit's own verifier data |
+| `AggregateBatchProof` | `C_batch` | one per `BatchBundle` ([On-chain §3.1, §3.5](#31-the-on-chain-object)) — built by the publisher, not the spender | aggregates `m` member `SpendRecord`s + their per-account proofs |
 
 **Canonical empty account (normative).** For any `address`, the **canonical empty `AccountState`** has these exact field values and **MUST** be reproducible bit-for-bit:
 
@@ -504,11 +524,27 @@ The **same** circuit `C` handles both proof types; they differ only in clause 1.
 
 The InitialProof's `prev_account_state` is exactly this state; its `ash` (call it `ash_empty(address)`) is `Hc("AccountState", serialize(canonical_empty_account))`.
 
-Because recursion is **cyclic** — one fixed circuit that verifies proofs of itself — the verifier data is constant, so **proof size and verification time are constant** and independent of an account's or a coin's history length. A conforming verifier **MUST NOT** require, fetch, or re-execute any prior transition: verifying the latest proof transitively attests every predecessor.
+Because recursion is **cyclic** — one fixed circuit that verifies proofs of itself — the verifier data of `C` is constant, so **per-account proof size and verification time are constant** and independent of an account's or a coin's history length. A conforming verifier **MUST NOT** require, fetch, or re-execute any prior transition: verifying the latest proof transitively attests every predecessor.
+
+**AggregateBatchProof (normative).** The publisher's batch-aggregation circuit `C_batch` takes the following inputs and attests, in zero knowledge, the entire batch:
+
+- **Public inputs:** `prev_root` (the accumulator root before this batch), `new_root` (the resulting accumulator root), and `bundle_locator = Hc("BatchBundle", serialize(BatchBundle))` (the 32-byte content address of the bundle, computed in-circuit over the canonical serialisation of every batch member — see clause 6 below). Binding `bundle_locator` in the public inputs ties this proof to **exactly one** bundle content; a publisher cannot serve two bundles with the same `(prev_root, new_root)` pair but different member sets under the same proof.
+- **Private witness:** the `m` member `SpendRecord`s; the `m` corresponding per-account proofs (`InitialProof` / `AccountUpdateProof` from `C`); the SMT insertion paths from `prev_root` to `new_root` for every member nullifier; the canonical serialisation of the bundle.
+
+`C_batch` MUST enforce:
+
+1. **Per-member soundness.** For each `j ∈ [1, m]`, the spender's per-account proof verifies under `C`'s verifier data, its public `ProofData` matches the member `SpendRecord`'s `message = inr ‖ ocr`, and the spender's BIP-340 signature verifies against `(Pkⱼ, messageⱼ)` (half-aggregated in-circuit is permissible — [On-chain §3.3](#33-off-chain-signature-handling)).
+2. **Per-member sign-to-contract binding.** Each member's S2C tweak `t = H(R' ‖ H(ProofDataⱼ))` checks against the on-chain `Rⱼ`, binding the per-account proof to the SpendRecord that referenced it.
+3. **Nullifier-set integrity.** The multi-set union of every member `SpendRecord`'s `nullifiers` equals exactly the batch's `batch_nullifiers` list, with no duplicates introduced (every `nf` appears at most once across all members of this batch — duplicates *across* batches are caught by the global accumulator at admission).
+4. **Accumulator transition correctness.** Starting from `prev_root` and applying SMT-insertion of each `nf ∈ batch_nullifiers` in the canonical insertion order produces exactly `new_root`. The order is defined by the bundle's canonical serialisation and bound by the `bundle_locator` public input.
+5. **Network/chain separation.** The verifier data of `C_batch` (and of `C`) is parameterised by a fixed network tag (`"zkCoins/v1/mainnet"`, `"zkCoins/v1/testnet"`, …), so a proof valid against one network's verifier data is unsatisfiable against another's. A conforming verifier MUST refuse a proof whose verifier data does not match the network it is operating on.
+6. **Bundle-locator binding.** `bundle_locator` (public input) equals `Hc("BatchBundle", serialize(BatchBundle))` computed in-circuit over the witnessed canonical serialisation, where the serialisation is the deterministic byte concatenation `prev_root ‖ new_root ‖ u32-be(m) ‖ SpendRecord₁ ‖ … ‖ SpendRecord_m` (each `SpendRecordⱼ` per the [§1.4](#14-identifiers-and-hashes) byte layout). The `aggregate_proof` field of the bundle itself is **not** part of this preimage (a proof cannot commit to its own bytes); it is bound separately by the sign-to-contract tweak of the publisher's BIP-340 signature ([§3.2](#32-batchinscription-signing-bip-340--sign-to-contract)).
+
+Verifier data for `C_batch` is also fixed (under clause 5's network tag), so the `AggregateBatchProof` is **constant-size in `m`** (asymptotic to the recursion-overhead floor of ~100 KB; the marginal per-member contribution is in proving *time*, not in proof *size*). A scanner verifies one `AggregateBatchProof` per `BatchInscription` — never per member — and accepts the entire batch's accumulator transition on a single check.
 
 ### 2.3 State transitions
 
-The three operations are the only ways state changes. Each is one execution of `C` producing one `SpendRecord` (on-chain) and, for value delivered to a counterparty, one or more `CoinProof` bundles (off-chain, [Foundations](#1--foundations-normative) §1.5). The **wallet** holds the SPEND branch and signs; the **node/prover** holds the operational bundle, builds the witness, and runs the prover ([Foundations](#1--foundations-normative) §1.2). The spend key **MUST NOT** leave the wallet.
+The three operations are the only ways state changes. Each is one execution of `C` producing one `SpendRecord` (off-chain, handed to a publisher for batching unless the transition is a mint that the issuer chooses not to anchor) and, for value delivered to a counterparty, one or more `CoinProof` bundles (off-chain, [Foundations §1.5](#15-core-data-structures)). The **wallet** holds the SPEND branch and signs; the **node/prover** holds the operational bundle, builds the witness, and runs the prover ([Foundations §1.2](#12-key-hierarchy)). The spend key **MUST NOT** leave the wallet.
 
 #### 2.3.1 Mint / issuance
 
@@ -536,13 +572,21 @@ Node / prover:
      In(asset_id) = 0, so balance clause 3 admits exactly `amount` of the new asset
   6. obtain π, new ash, ocr, and ProofData
 
-Becomes the SpendRecord (on-chain):  { Pk₀ (x-only), nullifiers = [] (a mint spends nothing),
+Produces an off-chain mint object:  { Pk₀ (x-only), nullifiers = [] (a mint spends nothing),
   BIP-340(sk₀, inr ‖ ocr), message = inr ‖ ocr }
+  A mint contributes no nullifiers to the accumulator and therefore does NOT require a
+  BatchInscription. Its validity is established off-chain: the receiver of any subsequent
+  CoinProof verifies the mint's recursive proof transitively (cyclic recursion, §2.2)
+  along with every later transition in the coin's lineage.
+
 CoinProof produced:  for self-held supply, none is delivered; the node retains the coin,
-  proof, and inclusion proof locally as spend credential.
+  proof, and inclusion proof locally as spend credential. A mint MAY be optionally batched
+  into a BatchInscription by a publisher (with kⱼ = 0 contribution to the accumulator) if
+  the issuer wants a publicly anchored "first appearance" of the asset; this is a publisher
+  policy choice and not protocol-required.
 ```
 
-`asset_id` is globally unique because it commits to the creator pubkey, `name_hash = H(name)`, `decimals`, and the `issuance_version`; two creators cannot collide, the same creator distinguishes assets by `name_hash`/`decimals`, and two assets created under different `IssuanceTerms` versions are also distinct. The human-readable `name` travels only inside bundles, never on-chain ([Foundations](#1--foundations-normative) §1.4).
+`asset_id` is globally unique because it commits to the creator pubkey, `name_hash = H(name)`, `decimals`, and the `issuance_version`; two creators cannot collide, the same creator distinguishes assets by `name_hash`/`decimals`, and two assets created under different `IssuanceTerms` versions are also distinct. The human-readable `name` travels only inside bundles, never on-chain ([Foundations §1.4](#14-identifiers-and-hashes)).
 
 #### 2.3.2 Send
 
@@ -570,15 +614,19 @@ Node / prover:
      output construction (5–6), new state/ash (7), coin-history update (8), binding (9)
   7. obtain π, ash, ocr, ProofData
 
-Becomes the SpendRecord (on-chain):  { Pkᵢ (x-only), nullifiers = [nf for each input coin] (published in the clear),
-  BIP-340(skᵢ, inr ‖ ocr), message = inr ‖ ocr }
+Produces the SpendRecord (off-chain, handed to a publisher):
+  { Pkᵢ (x-only), nullifiers = [nf for each input coin],
+    BIP-340(skᵢ, inr ‖ ocr), message = inr ‖ ocr }
+  The publisher batches this SpendRecord with others into a BatchBundle, builds the
+  AggregateBatchProof, and inscribes one constant-size BatchInscription on Bitcoin
+  (On-chain §3.1, §3.5).
 
 CoinProof produced (per recipient coin, delivered off-chain):
   { coin, proof = π, inclusion_proof (membership in ocr), epk, ciphertext, detect_tag }
   (Foundations §1.5). The change coin's bundle is retained locally, not delivered.
 ```
 
-The published nullifiers (folded by every node into the global accumulator, [On-chain §3.7](#37-the-nullifier-accumulator)) make the spent coins unspendable again; the rotated `current_pubkey` unlinks this `SpendRecord` from the account's prior records to any on-chain observer. Delivery of the `CoinProof` over Nostr is specified in [Transport & Recovery](#4--transport--recovery).
+When the publisher's `BatchInscription` is admitted ([On-chain §3.6](#36-chain-scanning)), its `AggregateBatchProof` inserts every member's nullifiers into the global accumulator and the spent coins become unspendable again ([§3.7](#37-the-nullifier-accumulator)). The rotated `current_pubkey` is bundle-only (the inscription itself reveals only the publisher's identity, not the spender's), so the publisher cannot link this `SpendRecord` to the account's prior records and a chain-only observer learns nothing about the spender. Delivery of the per-recipient `CoinProof` over Nostr is specified in [Transport & Recovery](#4--transport--recovery); delivery of the spender's `SpendRecord` to the publisher is specified in [Transport & Recovery §4.6](#46-data-availability--replication-factor-k).
 
 #### 2.3.3 Receive
 
@@ -596,13 +644,22 @@ Receiver / node:
   2. RE-VERIFY THE FULL RECURSIVE PROOF: C.verify(proof) under the canonical verifier data.
      This transitively attests the entire provenance in constant time (§2.2). MUST pass.
   3. inclusion: verify inclusion_proof places coin.identifier in the committed output_coins_root.
-  4. anchoring: verify that output_coins_root is bound by a SpendRecord in state completed
-     (Onchain §3.10) — a BIP-340 signature over message = inr ‖ ocr whose published nullifiers
-     hash to that inr. A SpendRecord in any other state (pending or failed) MUST be treated as not
-     anchored. This proves the creating spend was actually admitted on Bitcoin, not merely inscribed.
-  5. nullifier non-membership: rebuild the global nullifier accumulator from the nullifiers published
-     on Bitcoin and verify the coin's own nf is NOT among them — i.e. the coin is unspent — computed
-     from the chain, not asserted by any node.
+  4. anchoring: verify that output_coins_root is bound by a SpendRecord whose containing
+     BatchInscription is in state completed (Onchain §3.10) — the spender's BIP-340 signature
+     over message = inr ‖ ocr verifies, the spender's nullifiers appear in the BatchBundle that
+     the inscription anchors, and the publisher's AggregateBatchProof attests the batch.
+     A BatchInscription in any other state (pending or failed) MUST be treated as not anchored.
+     This proves the creating spend was actually admitted on Bitcoin, not merely off-chain-signed.
+     (For a mint coin whose issuer chose not to anchor it on-chain, anchoring reduces to
+     verifying the mint's recursive proof directly — there is no nullifier to check, since
+     a mint produces none.)
+  5. nullifier non-membership: against the live accumulator at NAV(tip) (Onchain §3.7), verify
+     the coin's own nf is NOT in the set. The receiver MAY use Path A (maintain the accumulator
+     locally by tracking BatchInscriptions and verifying each AggregateBatchProof) or Path B
+     (hold only the inscribed roots and ask a Path-A node for a self-verifying SMT inclusion
+     path against the on-chain new_root). Either is trustless: the answering node cannot lie,
+     because a forged absent answer would require forging a Merkle path against a root the
+     receiver already knows from Bitcoin.
   6. amount/asset sanity: confirm coin.recipient = receiver's address and asset_id is well-formed.
 
 On all of 2–5 passing: credit coin.amount of coin.asset_id to the receiver's AccountState and
@@ -611,7 +668,7 @@ credential for a future Send. The receiver MAY return an encrypted acknowledgeme
 sender can drop its copy (Transport & Recovery).
 ```
 
-Steps 2 (recursive re-verification) and 5 (global nullifier non-membership against Bitcoin) are the two checks that make receipt fully trustless: the receiver depends on **Bitcoin and the proof, never on the courier**. A failed or malicious transport can **withhold** a bundle but can never make an invalid one verify.
+Steps 2 (recursive re-verification of the spender's per-account proof) and 5 (global nullifier non-membership against the accumulator anchored on Bitcoin) are the two checks that make receipt fully trustless: the receiver depends on **Bitcoin, the spender's recursive proof, and the publisher's AggregateBatchProof, never on the courier or any node's bare claim**. A failed or malicious transport can **withhold** a bundle but can never make an invalid one verify; a dishonest node can refuse to serve a Path-B Merkle path but cannot forge one against the on-chain root.
 
 ### 2.4 Soundness summary
 
@@ -621,14 +678,14 @@ Each predicate property delivers a specific [Requirement](/requirements):
 |---|---|---|
 | Recursive verification + input authenticity (1, 2) | **No forgery** — a coin exists only as the signed, proven output of a valid prior transition; no party can fabricate a coin it was not entitled to | 3 · Trustless |
 | Per-asset balance conservation (3) | **No inflation of others' assets** — for every `asset_id`, outputs never exceed inputs plus an explicit, creator-bound `Mint`; supply is auditable by every receiver | 3, 8 |
-| Nullifier derivation (4) + receive check 5 | **No double-spend** — each coin's `nf` is published on-chain and can enter the global set only once; a reused `nf` is rejected by every scanner and fails the receiver's non-membership check, both computed directly from Bitcoin | 3 |
+| Nullifier derivation (4) + receive check 5 | **No double-spend** — each coin's `nf` is admitted into the global accumulator via a publisher's `AggregateBatchProof` and can enter the set only once; a reused `nf` is rejected (the `AggregateBatchProof`'s SMT-update would be inconsistent) and fails the receiver's non-membership check against the on-chain-anchored root | 3 |
 | Full re-verification on receipt (§2.3.3) | **Client-side validation** — correctness never depends on the sender, the node, or any third party | 4 |
 | Public-input binding + ZK witness (9) | **Privacy** — only roots/hashes are public; amounts, assets, parties, and the graph stay hidden | 2 |
 | Constant-size cyclic recursion (§2.2) | **Scalable trustlessness** — history of any length verifies in constant time, so re-verification is always feasible | 4 |
 
 ### Reading guide
 
-- SpendRecord construction, signing, aggregation, publishing, scanning, and the global nullifier accumulator: [On-chain Layer](#3--on-chain-layer).
+- BatchInscription construction, publisher signing, batch aggregation via `AggregateBatchProof`, chain scanning, and the global nullifier accumulator: [On-chain Layer](#3--on-chain-layer).
 - `CoinProof` delivery, node-as-relay, note discovery, and recovery/data-availability: [Transport & Recovery](#4--transport--recovery).
 - Viewing keys, view grants, and the public/authorised explorer: [Access & Explorer](#5--access--explorer).
 - Node/wallet/explorer components, portability, and the open-mint issuance terms: [System Architecture](#6--system-architecture).
@@ -637,184 +694,177 @@ Each predicate property delivers a specific [Requirement](/requirements):
 
 ## 3 · On-chain Layer
 
-> *In one sentence: the single object zkCoins writes to Bitcoin (the `SpendRecord`), how publishers batch many records into one Bitcoin transaction, and how every node rebuilds the global nullifier set from the chain alone.*
+> *In one sentence: the single constant-size object zkCoins writes to Bitcoin (the `BatchInscription`), how publishers aggregate many records into one off-chain `BatchBundle` attested by a recursive `AggregateBatchProof`, and how every node tracks the global nullifier accumulator by following the chain of inscribed `prev_root → new_root` transitions.*
 
-This page specifies the Bitcoin-facing layer of zkCoins: how a transition's `SpendRecord` ([Foundations §1.4](#14-identifiers-and-hashes)) is signed and embedded, how many records are aggregated and published in a single Bitcoin transaction, how any node rebuilds the global **nullifier accumulator** from the chain ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)), and how that accumulator provides trustless double-spend protection. It introduces **no** change to Bitcoin consensus and **no** native token ([Requirement 1](/requirements)).
+This page specifies the Bitcoin-facing layer of zkCoins: how a publisher's `BatchInscription` ([§3.1](#31-the-on-chain-object)) is signed and embedded, how the corresponding off-chain `BatchBundle` ([Transport & Recovery §4.6](#46-data-availability--replication-factor-k)) carries the member `SpendRecord`s and the `AggregateBatchProof`, how any node tracks the global **nullifier accumulator** by verifying each batch's recursive proof and applying its `prev_root → new_root` transition ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)), and how that accumulator provides trustless double-spend protection. It introduces **no** change to Bitcoin consensus and **no** native token ([Requirement 1](/requirements)).
 
 Normative keywords (**MUST**, **MUST NOT**, **SHOULD**, **MAY**) are used per RFC 2119. All primitives, identifiers, and domain-separation tags are those defined in [Foundations](#1--foundations-normative) and are used unchanged.
 
 ### 3.1 The on-chain object
 
-The **only** object zkCoins writes to Bitcoin is the `SpendRecord` of [Foundations §1.4](#14-identifiers-and-hashes):
+The **only** object zkCoins writes to Bitcoin is the `BatchInscription` — a constant-size commitment that anchors one publisher batch:
 
 ```
-SpendRecord = {
-  public_key : Pkᵢ                    // 32 bytes, BIP-340 x-only
-  nullifiers : [nf]                   // 32 bytes each — the coins SPENT, published in the clear
-                                       //   (empty list for a mint, which spends nothing)
-  signature  : BIP-340(skᵢ, message)  // 64 bytes  (sign-to-contract binds H(ProofData), §3.2)
-  message    : inr ‖ ocr              // 64 bytes  (input_nullifiers_root ‖ output_coins_root)
-}                                      // ~160 + 32·|nf| bytes inscribed (before aggregation)
+BatchInscription = {
+  publisher_pubkey : Pkₚ                    // 32 bytes, BIP-340 x-only — the publisher's identity
+  prev_root        : root                   // 32 bytes — nullifier-accumulator root the batch builds on (§3.7)
+  new_root         : root                   // 32 bytes — resulting accumulator root after this batch (§3.7)
+  bundle_locator   : digest                 // 32 bytes — Hc("BatchBundle", serialize(BatchBundle)) (§3.5)
+  block_anchor     : { block_hash, height } // 32 + 4 bytes (§3.5)
+  signature        : BIP-340(skₚ, batch_message)  // 64 bytes — sign-to-contract binds the off-chain
+                                                  //   AggregateBatchProof (§3.2)
+}                                              // 231 bytes inscribed per batch, CONSTANT
 ```
 
-`Pkᵢ` is the rotating per-send spend public key ([Foundations §1.2](#12-key-hierarchy)); `message` binds the spent-nullifier root `inr` and the transaction's output-coins root `ocr` ([Foundations §1.4](#14-identifiers-and-hashes)); `nullifiers` lists those spent `nf`s **verbatim**. A `SpendRecord` contains only hashes, nullifiers, and a signature; it reveals no amount, asset, sender, or receiver, and its rotating `Pkᵢ` and unlinkable `nf`s tie it to no account ([Requirement 2](/requirements)). The proof that the record corresponds to a valid state transition is **off-chain** ([Proofs & State Transitions](#2--proofs--state-transitions)); Bitcoin verifies only that the records were published and ordered. The published `nf`s are exactly what every node folds into the global nullifier accumulator (§3.6) — so the one global structure zkCoins relies on is rebuilt from the chain alone, with no off-chain data.
+The inscription is **constant-size per batch**, independent of the number of `SpendRecord`s the batch carries. The records themselves — and the recursive **`AggregateBatchProof`** ([Proofs §2.2](#22-proof-types)) attesting them — live off-chain inside a `BatchBundle` ([Transport & Recovery §4.6](#46-data-availability--replication-factor-k)), addressed by `bundle_locator`.
 
-### 3.2 SpendRecord signing (BIP-340 + sign-to-contract)
+`prev_root` and `new_root` together commit, on-chain and ordered by Bitcoin, to one state transition of the global nullifier accumulator (§3.7). The `BatchBundle` carries the corresponding `AggregateBatchProof` that attests, in zero knowledge: (a) each member spender's `SpendRecord` ([Foundations §1.5](#15-core-data-structures)) verifies under its own per-account recursive proof, (b) `new_root` equals the SMT-insertion of all member nullifiers into `prev_root`, and (c) the bundle's nullifier set is **exactly** the union of those member SpendRecords' nullifiers. A scanner accepts the inscription only after fetching the bundle by `bundle_locator` and verifying the aggregate proof against `(prev_root, new_root, batch_nullifiers)` as public inputs (§3.6).
 
-The signature in a `SpendRecord` is a BIP-340 Schnorr signature over `message = inr ‖ ocr` produced by the per-send spend key `skᵢ`. It additionally carries, **in its nonce** via **sign-to-contract**, a commitment to the transition's off-chain validity proof, so the proof is anchored to this exact record with no extra bytes on-chain (as stated in [Foundations §1.4](#14-identifiers-and-hashes)).
+A `BatchInscription` contains only roots, a publisher key, a locator hash, and a signature; it reveals no amount, asset, sender, receiver, nor any individual nullifier. The per-batch Bitcoin footprint stays the same whether the bundle covers 1 record or 1 000.
 
-Let `H_tx = H(ProofData)` be the 32-byte digest of the transition's **off-chain** validity-proof public inputs (`H` = SHA-256, [Foundations §1.1, §1.4](#11-cryptographic-primitives)). The canonical byte preimage is the concatenation of the four `ProofData` fields in the order listed in [Foundations §1.4](#14-identifiers-and-hashes), each encoded as its 32-byte canonical Poseidon digest (§1.7.1):
+The bundle's **data availability** is enforced by the same replication discipline as `CoinProof` bundles — `k = 3` independent holders by default ([Transport & Recovery §4.6](#46-data-availability--replication-factor-k)). A bundle that becomes unreachable does not break custody (the last `completed` accumulator root remains anchored on-chain), but it blocks any verifier from validating the corresponding `BatchInscription` until at least one replica is reached (§3.10).
+
+### 3.2 BatchInscription signing (BIP-340 + sign-to-contract)
+
+The signature in a `BatchInscription` is a BIP-340 Schnorr signature by the publisher's identity key `skₚ`. It signs the batch's message and additionally carries, **in its nonce** via **sign-to-contract**, a commitment to the off-chain `AggregateBatchProof` — anchoring the proof to this exact inscription with no extra bytes on-chain.
+
+Let `H_agg = H(serialize(AggregateBatchProof))` be the 32-byte SHA-256 digest of the canonically-serialised aggregate proof (the prover's published bytes; the canonical serialisation is fixed by the proof system's implementation under §1.7). The batch message is the fixed concatenation of every other on-chain field in inscription order:
 
 ```
-H_tx = SHA-256( new_account_state_hash  (32B)
-              ‖ output_coins_root        (32B)
-              ‖ input_nullifiers_root    (32B)
-              ‖ coin_history_root        (32B) )
+batch_message = prev_root                 (32B)
+              ‖ new_root                   (32B)
+              ‖ bundle_locator             (32B)
+              ‖ block_anchor.block_hash    (32B)
+              ‖ block_anchor.height        ( 4B)        // u32 big-endian
 ```
 
-A conforming signer and a conforming verifier **MUST** use exactly this concatenation; any other order produces a different `H_tx` and a different on-chain signature. Because `ProofData` is **not** itself on-chain, this is a real, non-redundant binding — distinct from `message`, which carries only `inr ‖ ocr`. The signer MUST construct the nonce as:
+A conforming signer and a conforming verifier **MUST** use exactly this concatenation; any other order produces a different challenge and a different on-chain signature. Because the `AggregateBatchProof` is **not** itself on-chain, the sign-to-contract tweak is a real, non-redundant binding distinct from `batch_message` (which already covers `bundle_locator` — but `bundle_locator` is `Hc("BatchBundle", …)` over the canonical serialisation of the bundle per [§1.4](#14-identifiers-and-hashes), which excludes the `aggregate_proof` field by construction, so the additional `H_agg` tweak gives a second, SHA-256-based commitment covering the proof bytes themselves for receivers that prefer to verify on standard cryptographic primitives without the Poseidon stack). The signer MUST construct the nonce as:
 
 ```
 1. R'  = k'·G                          // k' a fresh, uniformly random 256-bit nonce scalar
-2. t   = H( bytes(R') ‖ H_tx )         // sign-to-contract tweak, SHA-256, 32 bytes
+2. t   = H( bytes(R') ‖ H_agg )        // sign-to-contract tweak, SHA-256, 32 bytes
 3. R   = R' + t·G                      // committed nonce point  (x-only, BIP-340 even-y)
-4. e   = H_BIP340( bytes(R) ‖ bytes(Pkᵢ) ‖ message )   // BIP-340 challenge
-5. s   = (k' + t + e·skᵢ) mod n        // n = secp256k1 group order
+4. e   = H_BIP340( bytes(R) ‖ bytes(Pkₚ) ‖ batch_message )   // BIP-340 challenge
+5. s   = (k' + t + e·skₚ) mod n        // n = secp256k1 group order
 6. signature = bytes(R) ‖ bytes(s)     // 64 bytes
 ```
 
-The published `signature` is an ordinary, standalone BIP-340 signature: any verifier checks `s·G == R + e·Pkᵢ` with no knowledge of `t`. A receiver who holds the `CoinProof` bundle — hence `ProofData` (so it can compute `H_tx`) and `R'` — can additionally recompute `t` and confirm `R = R' + t·G`, proving the on-chain record commits to **exactly that** off-chain proof. The signer MUST follow BIP-340 nonce hygiene (deterministic-plus-auxiliary-randomness derivation of `k'`) and MUST NOT reuse a nonce across two distinct messages. `Pkᵢ` MUST be the x-only key under which the spend is authorised; reusing `Pk₀` for a non-initial send is forbidden (keys rotate per send, [Foundations §1.2](#12-key-hierarchy)).
+The published `signature` is an ordinary, standalone BIP-340 signature: any verifier checks `s·G == R + e·Pkₚ` with no knowledge of `t`. A verifier that has fetched the `BatchBundle` (hence the `AggregateBatchProof`) additionally recomputes `t` and confirms `R = R' + t·G`, proving the on-chain commit binds **exactly that** off-chain proof. The signer MUST follow BIP-340 nonce hygiene (deterministic-plus-auxiliary-randomness derivation of `k'`) and MUST NOT reuse a nonce across two distinct messages. `Pkₚ` is the publisher's long-lived identity key, not a rotating per-batch key: stable identity for fee accounting and DA peering is the design intent. A publisher MAY rotate `Pkₚ` between batches but is not required to.
 
-### 3.3 Half-aggregation
+### 3.3 Off-chain signature handling
 
-Many independent `SpendRecord` signatures are compressed into one **half-aggregate** before publishing. Half-aggregation is **non-interactive**: it requires no coordination among signers and no secret keys — a publisher (§3.4) performs it on signatures it has merely collected. The published `nullifiers` of each record are carried alongside, unaggregated.
+Each member `SpendRecord` ([Foundations §1.5](#15-core-data-structures)) inside a `BatchBundle` ([Transport & Recovery §4.6](#46-data-availability--replication-factor-k)) carries its own spender's BIP-340 signature over `message = inr ‖ ocr`, sign-to-contract-bound to that spender's own off-chain validity proof (per the §1.4 record definition, with `H_tx = SHA-256(new_account_state_hash ‖ output_coins_root ‖ input_nullifiers_root ‖ coin_history_root)` and the standard `R = R' + t·G` tweak). The publisher's `AggregateBatchProof` ([Proofs §2.2](#22-proof-types)) verifies *every* member signature **in-circuit** — so the on-chain `BatchInscription` does not separately carry any spender signature.
 
-Given records `C₁ … C_m` with signatures `(Rⱼ, sⱼ)`, keys `Pkⱼ`, and messages `mⱼ`:
+Half-aggregation of those member signatures inside the aggregate-proof witness is an implementation-level optimisation: a publisher MAY batch `m` BIP-340 checks into one multi-scalar test, deriving aggregation coefficients `aⱼ = H( z ‖ le32(j) )` from a per-batch transcript `z = H("zkCoins/v1/HalfAgg" ‖ R₁ ‖ Pk₁ ‖ m₁ ‖ … ‖ R_m ‖ Pk_m ‖ m_m)`, computing `s_agg = Σⱼ aⱼ·sⱼ`, and proving in-circuit that `s_agg·G == Σⱼ aⱼ·(Rⱼ + eⱼ·Pkⱼ)`. This shrinks the aggregate-proof witness without changing any on-chain field. A non-aggregating publisher (verifying each `m` signature directly in-circuit) is equally valid and produces the same `BatchInscription`.
 
-```
-1. For each j:  eⱼ = H_BIP340( bytes(Rⱼ) ‖ bytes(Pkⱼ) ‖ mⱼ )
-2. Derive aggregation coefficients:
-      z  = H( "zkCoins/v1/HalfAgg" ‖ bytes(R₁) ‖ Pk₁ ‖ m₁ ‖ … ‖ bytes(R_m) ‖ Pk_m ‖ m_m )
-      aⱼ = H( z ‖ le32(j) )  mod n          // distinct per index, binds the whole batch
-3. s_agg = Σⱼ ( aⱼ · sⱼ )  mod n            // single 32-byte aggregate scalar
-4. AggSig = ( R₁ … R_m , s_agg )            // m nonces (32B each) + one s_agg (32B)
-```
-
-The aggregate verifies with a single multi-scalar check:
-
-```
-s_agg·G  ==  Σⱼ aⱼ·( Rⱼ + eⱼ·Pkⱼ )
-```
-
-This replaces `m` independent `s` values (32 bytes each) with one, while each `Rⱼ` is retained — and each `Rⱼ` remains the sign-to-contract commitment to its transition's off-chain proof (§3.2). The coefficients `aⱼ` MUST be derived as above so the batch is non-malleable: a verifier MUST reject an `AggSig` whose multi-scalar check fails, and MUST treat every constituent `SpendRecord` of a failing batch as unconfirmed.
+No individual spender signature, message, nullifier, or rotating spend key ever touches Bitcoin. The publisher's own signature and its sign-to-contract tweak (§3.2) are the only Schnorr objects that reach the chain. This is the principled separation: per-spender Schnorr-and-S2C objects stay inside the verifying recursion; the chain carries one publisher signature per batch.
 
 ### 3.4 The publisher
 
-A **publisher** is the permissionless agent that moves `SpendRecord`s from off-chain to Bitcoin. Its mapping is **many-to-one**: it collects records from many distinct zkCoins transitions — typically from many users — and inscribes them **together in a single Bitcoin transaction**.
+A **publisher** is the permissionless agent that aggregates many independent `SpendRecord`s into one `BatchBundle`, builds the `AggregateBatchProof`, and inscribes the corresponding `BatchInscription` on Bitcoin (§3.5). Its mapping is **many-to-one**: many spenders → one publisher inscription → one accumulator state transition.
 
 - Running a publisher MUST be permissionless; any participant MAY run one, and a wallet/node MAY act as its own publisher.
-- A publisher MUST NOT be trusted for **correctness**: it cannot forge, alter, reorder-to-steal, or drop-without-detection any record, because (a) each signature and each published `nf` is verified by every scanning node (§3.5–§3.6), and (b) the value-bearing proof and coin plaintext travel off-chain ([Transport & Recovery](#4--transport--recovery)), never through the publisher.
-- A publisher MUST NOT be trusted for **custody**: it never holds a spend key, a coin, or a proof; the worst a faulty or malicious publisher can do is **censor** (refuse to inscribe) or **delay** — both mitigated because anyone else can publish the same record.
-- A publisher SHOULD batch over a bounded interval (e.g. once per Bitcoin block) and SHOULD half-aggregate (§3.3) to minimise per-record cost. Records inscribed redundantly by two publishers are idempotent: a scanner inserts each unique `nf` into the accumulator once, and a second inscription of an already-seen `nf` is a no-op (§3.6).
+- A publisher MUST NOT be trusted for **correctness**: it cannot forge, alter, reorder-to-steal, or include-without-verifying any record, because the on-chain `prev_root → new_root` transition is attested by the `AggregateBatchProof` and verifiable by every scanning node (§3.6). A publisher that signs an inscription whose bundle's aggregate proof does not check is producing nothing — the inscription is rejected.
+- A publisher MUST NOT be trusted for **custody**: it never holds a spend key, a coin, or a per-account proof; the worst a faulty or malicious publisher can do is **censor** (refuse to include a particular SpendRecord) or **delay** (sit on it). Both are mitigated because anyone else can publish — and the censored spender can submit to a different publisher.
+- A publisher SHOULD batch over a bounded interval and SHOULD fit as many member records into one bundle as proving cost and the publisher's own latency budget allow. Larger batches amortise the constant per-batch on-chain cost more aggressively (§3.8); the per-record on-chain footprint approaches zero as the batch grows.
+- **Sequential commitment.** Each `BatchInscription` MUST declare a `prev_root` equal to the most recently admitted `new_root` at the time of publication. Two publishers racing to inscribe on the same `prev_root` is normal; Bitcoin's transaction ordering decides which lands first, and the later inscription is rejected (its `prev_root` no longer matches the live state, §3.6 step 4).
+- **Stale-bundle handling (normative).** A publisher whose `BatchInscription` is rejected as stale **MUST** within a bounded retry window (RECOMMENDED: 6 Bitcoin blocks) either (a) re-batch the member `SpendRecord`s onto the live tip and re-publish with a fresh inscription, or (b) release the member `SpendRecord`s back so each spender MAY submit to an alternative publisher. A spender whose `SpendRecord` has been with a stale publisher for longer than the retry window without admission **MAY** re-submit to any publisher (a `SpendRecord` is idempotent — admitting the same `nf` twice is impossible by §3.7's accumulator transition, so the spender's risk is duplicate effort, not double-spend). Stale `BatchBundle`s are **not** subject to the `k = 3` DA discipline of §4.6, which only applies to admitted bundles.
+
+A publisher is computationally heavier than a plain broadcaster: it must build a recursive aggregate proof per batch (on the order of 100 KB, with proving time that scales sub-linearly in `m` thanks to recursion) and serve the resulting `BatchBundle` until at least `k = 3` independent replicas hold a copy ([Transport & Recovery §4.6](#46-data-availability--replication-factor-k)). It remains a stateless role in the cryptographic sense — every published artefact is publicly verifiable — and a publisher's "right to publish" rests entirely on its ability to (a) reach the bitcoind-broadcast surface and (b) produce a verifying aggregate proof.
 
 ### 3.5 Inscription format
 
-`SpendRecord`s are carried in a Taproot **commit/reveal** inscription. The commit transaction pays to a Taproot output whose internal key is tweaked by a script-path leaf; the reveal transaction spends it, exposing the leaf script, whose witness contains the payload inside an `OP_FALSE OP_IF … OP_ENDIF` envelope (so the data is dropped by Bitcoin script and costs only witness weight).
+A `BatchInscription` is carried in a Taproot **commit/reveal** inscription. The commit transaction pays to a Taproot output whose internal key is tweaked by a script-path leaf; the reveal transaction spends it, exposing the leaf script, whose witness contains the payload inside an `OP_FALSE OP_IF … OP_ENDIF` envelope (so the data is dropped by Bitcoin script and costs only witness weight).
 
-Every zkCoins payload MUST begin with the fixed 2-byte **marker prefix** `0x42 0x42` (`"BB"`), which identifies the envelope as a zkCoins inscription and lets scanners skip all other inscriptions cheaply. The payload layout is:
+Every zkCoins payload MUST begin with the fixed 2-byte **marker prefix** `0x42 0x42` (`"BB"`), identifying the envelope as a zkCoins inscription and letting scanners skip all other inscriptions cheaply. The payload layout is **fixed-size** — there is no record body, no variable-length section, and no count field:
 
 ```
 offset  size  field
 ------  ----  -----------------------------------------------------------
-  0       2   marker             = 0x42 0x42             (zkCoins prefix)
-  2       1   version            = 0x01
-  3       1   format             0x00 = raw records
-                                 0x01 = half-aggregated (§3.3)
-  4       2   count m            big-endian u16, number of records
-  6      32   block_anchor.block_hash   Bitcoin block hash of the tip this batch is anchored to (§3.7)
- 38       4   block_anchor.height       big-endian u32, height of that block (§3.7); cross-checked on acceptance
- 42       …   body               m records, depends on `format` (below)
+  0       2   marker                    = 0x42 0x42                  (zkCoins prefix)
+  2       1   version                   = 0x02                        (Variant-2 batch inscription)
+  3      32   publisher_pubkey          BIP-340 x-only (Pkₚ, §3.2)
+ 35      32   prev_root                 accumulator root the batch builds on (§3.7)
+ 67      32   new_root                  resulting accumulator root after this batch (§3.7)
+ 99      32   bundle_locator            Hc("BatchBundle", serialize(BatchBundle))
+131      32   block_anchor.block_hash   Bitcoin block hash of the tip the proofs are built against
+163       4   block_anchor.height       big-endian u32, height of that block
+167      64   signature                 BIP-340(skₚ, batch_message) with S2C tweak (§3.2)
 
-format 0x00 — raw, records concatenated:
-   per record j:
-      32      Pkⱼ          (x-only)
-      64      signatureⱼ   (R ‖ s)
-      64      messageⱼ     (inr ‖ ocr)
-       1      kⱼ           u8, number of nullifiers spent in this record (0 for a mint)
-   32·kⱼ      nullifiersⱼ  (kⱼ × 32B, each a published nf, ascending byte order)
-
-format 0x01 — half-aggregated, records concatenated, then one shared scalar:
-   per record j:
-      32      Pkⱼ
-      64      messageⱼ     (inr ‖ ocr)
-      32      Rⱼ
-       1      kⱼ
-   32·kⱼ      nullifiersⱼ
-      32      s_agg        (single shared aggregate scalar, §3.3 — appended once, after all m records)
+total: 231 bytes inscribed per batch, ENTIRELY in witness data.
 ```
 
-The inscription carries the spent `nf`s **in the clear**, in the body of each record; there are **no** global tree roots in the header. The double-spend state is therefore not *asserted* by a root the publisher chose — it is *rebuilt* by every node directly from the published `nf`s (§3.6), so no off-chain data and no trust in the publisher is involved. A scanner MUST recompute each record's `inr` as the Poseidon root over its listed `nullifiersⱼ` ([Foundations §1.4](#14-identifiers-and-hashes)) and reject the record if that root does not equal the `inr` carried in `messageⱼ`; this binds the published nullifier list to the signed message.
+The inscription is **constant-size**: a batch covering 1 `SpendRecord` and a batch covering 1 000 `SpendRecord`s cost the same Bitcoin footprint. The records themselves, their per-spender BIP-340 signatures, their nullifiers, and the `AggregateBatchProof` attesting them are entirely off-chain inside the `BatchBundle` ([Transport & Recovery §4.6](#46-data-availability--replication-factor-k)). The accumulator's state transition `prev_root → new_root` is *asserted* on-chain by the publisher's signed inscription and *verified* by every scanner against the bundle's recursive proof (§3.6).
 
-The `block_anchor` is the pair `{ block_hash, height }` identifying the tip a proof is built against. An issuance validity-window height check ([System Architecture §6.5](#65-issuance--versioned-schemas-v1-minimal)) is evaluated **in-circuit against `block_anchor.height`** — prover-supplied and provable in-circuit, the tip the proof is built against, known at proving time — **not** against the actual (later) Bitcoin inclusion height, which is unknown when the proof is produced. A scanner cross-checks on acceptance that `block_anchor.block_hash` is at `block_anchor.height` in its own Bitcoin chain view.
+The `block_anchor` is the pair `{ block_hash, height }` identifying the tip every member spender's CoinProof and the aggregate proof were built against. An issuance validity-window height check ([System Architecture §6.5](#65-issuance--versioned-schemas-v1-minimal)) is evaluated **in-circuit against `block_anchor.height`** — prover-supplied and provable in-circuit, the tip the proofs are built against, known at proving time — **not** against the actual (later) Bitcoin inclusion height, which is unknown when the batch is produced. A scanner cross-checks on acceptance that `block_anchor.block_hash` is at `block_anchor.height` in its own Bitcoin chain view.
 
-**`block_anchor` bound (normative).** Let `inclusion_height` be the height of the Bitcoin block that includes this batch's reveal transaction. A scanner MUST reject the batch unless **both**: (1) `block_anchor.height` is strictly less than `inclusion_height` and `block_anchor.block_hash` is a strict ancestor of the inclusion block (the anchor MUST NOT be the inclusion block itself, a forward block, or off the inclusion block's chain), and (2) the gap is bounded by `N = 100` blocks: `inclusion_height − block_anchor.height ≤ 100`. The first condition rejects forward anchoring; the second rejects stale anchoring. A batch whose `block_anchor` is not a strict ancestor of its inclusion block, or whose gap exceeds `N = 100`, MUST be treated as carrying **zero** valid records.
+**`block_anchor` bound (normative).** Let `inclusion_height` be the height of the Bitcoin block that includes this batch's reveal transaction. A scanner MUST reject the inscription unless **both**: (1) `block_anchor.height` is strictly less than `inclusion_height` and `block_anchor.block_hash` is a strict ancestor of the inclusion block (the anchor MUST NOT be the inclusion block itself, a forward block, or off the inclusion block's chain), and (2) the gap is bounded by `N = 100` blocks: `inclusion_height − block_anchor.height ≤ 100`. The first condition rejects forward anchoring; the second rejects stale anchoring. A `BatchInscription` whose `block_anchor` is not a strict ancestor of its inclusion block, or whose gap exceeds `N = 100`, MUST be treated as carrying **no admitted state transition**.
 
-> Note on sizes: the fixed payload header is `2+1+1+2+32+4 = 42` bytes (marker, version, format, count, `block_anchor.block_hash`, `block_anchor.height`), amortised across the whole batch — the three global-root fields of earlier drafts are gone. A raw record adds `160 + 1 + 32·kⱼ` bytes of body (`Pkⱼ ‖ signatureⱼ ‖ messageⱼ ‖ kⱼ ‖ nullifiersⱼ`); a typical single-input spend (`kⱼ = 1`) is `193` bytes. Half-aggregation removes one 32-byte `s` per record and shares a single `s_agg`, so the marginal cost of an additional record falls to `128 + 1 + 32·kⱼ` bytes. A payload larger than the standardness limit MUST be split across multiple reveal inputs/transactions, each carrying its own marker and header.
+> Note on sizes. The full inscription is 231 witness bytes, or ~58 vBytes amortised over the whole batch (Bitcoin counts witness data at 1/4 weight). Marginal per-record on-chain cost is **zero** — additional records change nothing in the inscription, only in the off-chain bundle. A batch carrying 100 records lands well below one US cent of on-chain footprint per record at typical mempool conditions; the cost equation has shifted from "per-record bytes on Bitcoin" to "per-batch publisher proving cost + bundle DA bandwidth".
 
-Because records are variable-length (each carries its own `kⱼ`), a scanner MUST parse the body **sequentially**: read exactly `m` records by consuming `Pkⱼ`, then `signatureⱼ` (format 0x00) or `Rⱼ` (format 0x01), then `messageⱼ`, then `kⱼ`, then `32·kⱼ` nullifier bytes; for `format 0x01` a single 32-byte `s_agg` follows the last record. The parse MUST consume the body **exactly**: a payload that ends mid-record, declares a `kⱼ` overrunning the body, or leaves trailing bytes (other than the `s_agg` of `format 0x01`) is malformed. The §3.6 structural check (step 2) verifies that exactly `count == m` records parse with no bytes left over; a scanner MUST reject a malformed or truncated payload as carrying **zero** valid records.
+Because the payload is fixed-size, parsing is trivial: a scanner reads exactly 231 bytes after the marker; any payload shorter, longer, or otherwise structurally invalid is malformed and MUST be treated as carrying no admitted state transition. The §3.6 structural check (step 2) verifies the length; subsequent steps verify the signature, the `prev_root` continuity, the bundle binding, and the aggregate proof.
 
-**Metadata (normative note).** Publishing each record's nullifiers in the clear exposes one fact a fixed-size on-chain object would not: the **input count `kⱼ`** of each spend — and in particular `kⱼ = 0` marks a **mint** (or a transition that spends nothing). This is the deliberate price of a chain-rebuildable nullifier set (§3.6–§3.7). Amounts, assets, parties, and the transaction graph remain hidden, so [Requirement 2](/requirements) holds for them; the per-spend input count, however, is an **accepted, bounded leak** *outside* that guarantee, and a deployment MUST treat it as visible. A wallet that wants to blunt it MAY split a many-input spend across several transitions or pad to a fixed `k`, at additional on-chain cost; the protocol mandates no padding.
+**Metadata (normative note).** A `BatchInscription` reveals the publisher's identity `Pkₚ` (so fees can be paid and reputation can accrue), the previous and new accumulator roots, the bundle's content-address, and the anchoring Bitcoin tip — nothing more. The **record count is hidden on-chain**; only by fetching the bundle does a verifier learn `m`. The per-spender input count `kⱼ` is also bundle-only. Amounts, assets, parties, the transaction graph, and even the per-batch throughput remain invisible to a chain-only observer, so [Requirement 2](/requirements) holds for all of them; the publisher identity is the only on-chain link, and a publisher who values its own privacy MAY rotate `Pkₚ` per batch at a small operational cost.
 
 ### 3.6 Chain scanning
 
-Any node rebuilds the global **nullifier accumulator** from Bitcoin alone, trusting no peer ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure), [Requirement 3](/requirements)). For each new Bitcoin block, in canonical order, a node MUST:
+Any node tracks the global **nullifier accumulator** by following the chain of `BatchInscription`s, fetching each batch's `BatchBundle`, verifying its `AggregateBatchProof`, and applying the inscribed `prev_root → new_root` transition ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure), [Requirement 3](/requirements)). For each new Bitcoin block, in canonical order, a node MUST:
 
 1. **Discover.** Identify reveal transactions whose witness contains an inscription envelope beginning with the marker `0x42 0x42` (§3.5). All non-marker inscriptions are ignored.
-2. **Parse.** Decode header and body sequentially (§3.5). Reject any payload failing the structural checks of §3.5.
-3. **Verify signatures.** For `format 0x00`, verify each BIP-340 signature `signatureⱼ` against `(Pkⱼ, messageⱼ)`. For `format 0x01`, verify the single multi-scalar aggregate check of §3.3. A record whose signature does not verify MUST be discarded.
-4. **Verify the nullifier binding.** For each surviving record, recompute the Poseidon root over its published `nullifiersⱼ` and check it equals the `inr` half of `messageⱼ` (§3.5). A record failing this check MUST be discarded — its published list does not match what was signed.
-5. **Order.** Establish a total order over surviving records: primary key = Bitcoin block height; secondary = index of the reveal transaction within the block; tertiary = the record's position `j` within its payload. This order is a deterministic function of the public chain, so every node processes nullifiers in the same sequence.
-6. **Insert nullifiers (first-spend-wins).** In that order, for each record, insert each published `nf` into the global nullifier accumulator ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)). If, during a record's processing, an `nf` is found **already present** in the accumulator, that record is a double-spend attempt: the scanner MUST treat the whole record as **invalid**, MUST roll back any of this record's `nf`s that were inserted earlier within this same record's processing (so the accumulator state after the record is identical to its state immediately before), and MUST treat its output coins as never created. This rollback rule applies both to collisions against earlier-admitted records and to a record listing the same `nf` twice within its own `nullifiersⱼ` list. The first on-chain occurrence of an `nf`, in this canonical order, is the one and only spend of that coin.
+2. **Parse.** Decode the 231-byte fixed-format payload (§3.5). Reject any payload failing the structural check.
+3. **Verify publisher signature.** Check the BIP-340 signature against `(publisher_pubkey, batch_message)` (§3.2). A failure MUST cause the inscription to be discarded.
+4. **Check `prev_root` continuity.** The inscribed `prev_root` MUST equal the node's current admitted accumulator root, ordered by Bitcoin canonical position (primary key = block height; secondary = reveal-tx index within the block). If `prev_root` does not match — because a competing publisher inscribed earlier in the same or a prior block — the inscription is **stale** and MUST be discarded; the affected records MAY be re-batched into a fresh `BatchInscription` whose `prev_root` matches the live tip.
+5. **Fetch the bundle.** Query the relay mesh for the `BatchBundle` whose content-address equals `bundle_locator` ([Transport & Recovery §4.6](#46-data-availability--replication-factor-k)). The node MAY retry across replicas; the `k = 3` replication target makes one reachable holder sufficient. If no replica is reached within the node's bundle-fetch deadline, the inscription is left in state `pending` (§3.10) and re-tried on a back-off schedule.
+6. **Verify bundle binding.** Recompute `Hc("BatchBundle", serialize(BatchBundle))` per the canonical preimage of [§1.4](#14-identifiers-and-hashes) (which excludes the derived `nullifiers` view and the `aggregate_proof` field — the latter is bound separately via the S2C tweak, see [§2.2 clause 6](#22-proof-types)) and check it equals the inscribed `bundle_locator`. Then recompute `H(serialize(AggregateBatchProof))` and check it equals the sign-to-contract tweak input (§3.2). A binding failure MUST cause the inscription to be discarded.
+7. **Verify the aggregate proof.** Verify the `AggregateBatchProof` ([Proofs §2.2](#22-proof-types)) against its public inputs `(prev_root, new_root, bundle_locator)` — the same `prev_root` and `new_root` already inscribed on chain and the same `bundle_locator` already inscribed. The proof is a single recursive PCD attestation that every member spender's transition is valid under its own per-account recursive proof, every member nullifier is correctly derived (`nf = Hc("Nullifier", nk ‖ coin.identifier)`), the bundle's canonical serialisation hashes to `bundle_locator`, and `new_root` equals the deterministic SMT-insertion of all member nullifiers into `prev_root`. The bundle-locator binding closes the gap a `(prev_root, new_root, nfs)`-only public-input would leave: a publisher cannot present two distinct bundles with the same accumulator delta under the same proof. A proof-verification failure MUST cause the inscription to be discarded.
+8. **Apply the transition.** Update the local accumulator from `prev_root` to `new_root`. The list of inserted nullifiers (carried in the bundle) is added to the node's per-`nf` index used to serve membership and non-membership queries (§3.7). The bundle's member `SpendRecord`s and `CoinProof`s are persisted to the node's data store for receiver lookup and for serving future verifiers fetching the same `bundle_locator`.
 
-Because steps 1–6 are a pure function of confirmed Bitcoin data, two honest nodes scanning the same chain MUST arrive at the **identical** nullifier accumulator — no node-supplied root, and no foreign off-chain data, is ever consulted. A wallet or explorer therefore computes the accumulator itself, or checks any served (non-)membership answer against its own copy, never by trusting the server ([Requirement 4](/requirements), [Requirement 10](/requirements)).
+If any of steps 2–4, 6, or 7 fails, the inscription is **`failed`** (§3.10) and contributes no nullifiers and no root update. Two honest nodes scanning the same chain MUST arrive at the **identical** accumulator state, because every step is a deterministic function of confirmed Bitcoin data plus the publicly verifiable, content-addressed bundle.
 
-The operative double-spend check is **per-coin** (§3.7): a verifier checks a specific coin's `nf` for (non-)membership against the accumulator it rebuilt from the chain. There is no global root to fetch and no per-coin membership path needs to travel inside a `CoinProof` bundle, because the verifier holds the whole published `nf` set itself.
+**On bundle unavailability.** Step 5 may transiently return no holder, leaving the inscription in `pending` solely because of data-availability. The accumulator state remains at the last fully-verified `new_root`; the `BatchInscription` lingers in `pending` until the bundle reappears via a different replica, the operator's own backup, or — over a long enough timeline — via the publisher republishing. A `pending`-due-to-DA inscription is **never** silently admitted: verifier integrity strictly requires the aggregate proof to check. Restoring the bundle later lets the node retroactively complete the verification — exactly the same liveness/availability tradeoff as `CoinProof` bundles ([§4.5–§4.6](#46-data-availability--replication-factor-k)).
+
+The operative double-spend check is **per-coin** (§3.7): a verifier checks a specific coin's `nf` for membership against the live accumulator at `NAV(tip)`. There is no per-coin membership path inside a `CoinProof` bundle: a verifier that has run steps 1–8 against every admitted `BatchInscription` holds the full `nf` set itself; a verifier that has not done so SHOULD query a node that does (§3.7) and check the served Merkle path against the on-chain `new_root`.
 
 ### 3.7 The nullifier accumulator
 
-Double-spend protection is enforced **on-chain and trustlessly** by the global **nullifier accumulator** ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)): a sorted-key sparse Merkle tree (SMT) over every nullifier `nf = Hc("Nullifier", nk ‖ coin.identifier)` ([Foundations §1.4](#14-identifiers-and-hashes)) ever **published in a `SpendRecord`**, supporting both **membership** and **non-membership** proofs.
+Double-spend protection is enforced **on-chain and trustlessly** by the global **nullifier accumulator** ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)): a 256-bit-depth sparse Merkle tree (SMT) over every nullifier `nf = Hc("Nullifier", nk ‖ coin.identifier)` ([Foundations §1.4](#14-identifiers-and-hashes)) ever **admitted via a `BatchBundle`** anchored by an admitted `BatchInscription`. It supports both **membership** and **non-membership** proofs.
 
-**Insertion.** When a coin is spent, its `nf` is published in the clear in the spending transition's `SpendRecord` (§3.1, §3.5). Every node folds the published `nf`s into the accumulator in the §3.6 canonical order (step 6, first-spend-wins). There is **no** inscribed accumulator root and **no** off-chain attestation of one: the accumulator is a deterministic function of the published `nf`s, so every honest node computes the same one directly from the chain. It is idempotent and order-independent across the *set* of confirmed nullifiers; the canonical order matters only to decide, between two records publishing the **same** `nf`, which is the valid spend (the earlier) and which the rejected double-spend (the later).
+**State transitions.** The accumulator advances exactly with each admitted `BatchInscription`: each inscription names a `prev_root` (the prior state) and a `new_root` (the resulting state), and the `BatchBundle`'s `AggregateBatchProof` attests in zero knowledge that `new_root = SMT.insert_many(prev_root, batch_nullifiers)` (§3.6 step 7). The accumulator's state at any Bitcoin tip is therefore **deterministically derivable** from the sequence of inscribed roots plus the corresponding bundles, and verifiable by every honest node — no node-asserted root is ever accepted on its own.
 
-**Anchored value.** A non-membership answer is meaningful only **relative to a Bitcoin chain tip**: the canonical value is `NAV(tip) = (accumulator, tip_block_hash, tip_height)`. The `block_anchor = { block_hash, height }` field of every inscription (§3.5) records the tip the proof was built against. A verifier MUST evaluate any membership/non-membership claim **relative to a stated tip**; an answer quoted without its anchoring tip MUST be rejected as ambiguous.
+**Anchored value.** A non-membership answer is meaningful only **relative to a Bitcoin chain tip**: the canonical value is `NAV(tip) = (accumulator, tip_block_hash, tip_height)`. The latest admitted `new_root` at or before `tip` is the live accumulator root. The `block_anchor = { block_hash, height }` field of every inscription (§3.5) records the tip the batch's proofs were built against. A verifier MUST evaluate any membership/non-membership claim **relative to a stated tip**; an answer quoted without its anchoring tip MUST be rejected as ambiguous.
 
-**Double-spend check (per-coin).** To confirm a specific coin is unspent as of `tip`, a verifier checks that coin's `nf` against the accumulator it **rebuilt itself** from the chain at `NAV(tip)` (§3.6) — never against a root supplied by a node:
+**Double-spend check (per-coin).** To confirm a specific coin is unspent as of `tip`, a verifier compares that coin's `nf` against the accumulator at `NAV(tip)`:
 
 - `nf` **absent** ⇒ the coin is **unspent** at `tip`;
 - `nf` **present** ⇒ the coin is **already spent**; a fresh spend of it MUST be rejected.
 
-Because `nf` is unlinkable to the coin without `nk` ([Foundations §1.4](#14-identifiers-and-hashes)), the published nullifiers reveal that *some* coin was spent without revealing which coin or account ([Requirement 2](/requirements)).
+Because `nf` is unlinkable to the coin without `nk` ([Foundations §1.4](#14-identifiers-and-hashes)), the nullifier set reveals that *some* coin was spent without revealing which coin or account ([Requirement 2](/requirements)).
 
-**Light clients (cost of trustless non-membership).** Non-membership is checked against the accumulator, so a verifier that does not hold it has **no free shortcut** — this is the standing cost of nullifier-based double-spend protection, shared with the Shielded CSV paper and with Zcash, not specific to zkCoins. There is no compact on-chain root to verify against in 32 bytes; that earlier-draft shortcut was only ever as trustworthy as an off-chain attestation that this design removes. Two honest options remain:
+**Two equally-trustless verification paths.** There is no on-chain raw `nf` list anymore — the accumulator state on Bitcoin is the **inscribed sequence of roots**. A verifier can establish `(non-)membership` against `NAV(tip)` along either of two paths, both trustless:
 
-- **(i) Maintain the accumulator itself**, by scanning only the marker inscriptions (§3.5) — far cheaper than full Bitcoin validation (on the order of tens of bytes per spend), but its state grows with the total number of spends ever made.
-- **(ii) Delegate** the check to one or more nodes. Delegation has a sharp edge a membership check lacks: a dishonest node can falsely answer *unspent* for an already-spent coin and so trick a receiver into accepting a double-spend. A delegating wallet therefore **SHOULD** query several independent nodes — correctness holds as long as ≥1 is honest ([System Architecture §6.3](#63-node-portability-and-multi-node-operation)) — and **SHOULD** fall back to (i) for high-value receipts.
+- **Path A — maintain the accumulator itself.** Run §3.6 against every admitted `BatchInscription`, fetch each `BatchBundle`, verify each `AggregateBatchProof`, and apply the resulting `prev_root → new_root` transitions. The verifier then holds the full nullifier set locally and answers any `nf` query by direct lookup. Cost: ongoing bundle fetching plus aggregate-proof verification per batch; storage grows with the total number of admitted nullifiers (~32 bytes per `nf` plus indexing).
+- **Path B — light-client: hold only the on-chain roots, delegate the lookup.** Follow the inscribed `new_root` sequence (231 bytes per batch on-chain), then ask any Path-A node for an SMT path of `nf` against the current `new_root`. The path is ~512 bytes (compressed empty subtrees) and self-verifying against the root the light client already knows from Bitcoin. The answering node may serve either an **inclusion path** (proving `nf` is present at the queried key, leaf hash `H_leaf(1)`) or a **non-inclusion path** (proving the queried key is empty, leaf hash `H_leaf(0)`); **both** hash up to the same on-chain `new_root` under the §1.7.6 SMT construction, so the light client's verification is identical in either direction — recompute the path and check equality with `new_root`. Forging either direction against a known root would require breaking the Poseidon hash assumption (second-preimage resistance on internal nodes plus per-level domain separation). Querying multiple independent nodes hardens against denial of service; the correctness check is single-node-honest.
 
-A node **MAY** serve a **checkpoint accumulator root** to help an option-(i) client cross-check its own scan. Because that root is a **deterministic function of the on-chain nullifiers**, anyone who reconstructs the set recomputes and rejects a wrong one — unlike the publisher-asserted root of earlier drafts it carries **no** authority, and it does **not**, by itself, grant a zero-state client trustless non-membership. The protocol therefore inscribes no root and mandates none.
+A Path-B light client distinguishes the two `pending` sub-states of [§3.10](#310-transaction-states) — `pending` due to confirmations vs `pending` due to bundle DA — by querying its serving node for the latest *bundle-verified* `new_root` rather than the latest inscribed root. On-chain ordering plus the serving node's verification state yields the same `(completed, pending-DA, pending-confs)` classification a Path-A verifier derives directly. A light client **MUST NOT** accept a non-membership answer against an inscribed-but-not-bundle-verified root.
 
-**Reorg handling.** If Bitcoin reorganises, every `nf` published only in orphaned blocks MUST be removed and the accumulator recomputed for the new canonical tip, yielding a fresh `NAV(tip')`. Because `NAV` is explicitly tied to a tip, a stale one is self-identifying: a verifier MUST recompute or re-fetch `NAV` for the current canonical tip before acting on a non-membership result, and SHOULD wait for finality (§3.9) so that the anchoring tip is reorg-stable. Storage MAY exploit the tree's sparseness — the never-occupied regions of the 256-bit key space are implicit default subtrees and need not be stored — but the accumulator **cannot** prune by age: nullifiers are uniformly distributed keys, so "old" does not map to a discardable region, and every inserted `nf` must stay represented to answer both membership and arbitrary non-membership against the current tip. Only never-occupied key-space is free; the set of inserted nullifiers itself is not prunable.
+(The path that earlier drafts called "rebuild the accumulator from on-chain nullifiers" is retired in this design: nullifiers no longer appear on Bitcoin. The same trustless property is preserved by Path A — the bundles are content-addressed, recursively verifier-checkable, and `k = 3` replicated — and by the on-chain root commitment.)
 
-### 3.8 Fees and economics (brief)
+**Reorg handling.** If Bitcoin reorganises, every admitted `BatchInscription` published only in orphaned blocks MUST be reverted — its `prev_root → new_root` transition is undone — and re-applied (if its bundle is still available and its `prev_root` still matches in the new canonical chain) under the new canonical tip. Because each batch chains its `prev_root` to the immediately prior admitted `new_root`, a revert of batch `N` invalidates every later batch whose `prev_root` was `N.new_root`: the canonical replay re-derives the entire post-`N` chain deterministically, and any batch whose `prev_root` no longer matches the replayed live root is stale and MUST be re-batched by its publisher onto the new tip (§3.4 sequential-commitment clause). The accumulator state at the new tip is therefore the deterministic replay of admissions in the new canonical order. Because `NAV` is explicitly tied to a tip, a stale one is self-identifying: a verifier MUST recompute or re-fetch `NAV` for the current canonical tip before acting on a non-membership result, and SHOULD wait for finality (§3.9) so that the anchoring tip is reorg-stable.
 
-Publishing a batch costs ordinary Bitcoin transaction fees, paid in BTC; zkCoins has no native token ([Requirement 1](/requirements)).
+**Storage.** A Path-A node MAY exploit the tree's sparseness — the never-occupied regions of the 256-bit key space are implicit default subtrees and need not be stored — but the accumulator **cannot** prune by age: nullifiers are uniformly distributed keys, so "old" does not map to a discardable region, and every inserted `nf` must stay represented to answer both membership and arbitrary non-membership against the current tip. Only never-occupied key-space is free; the set of inserted nullifiers itself is not prunable.
 
-- The **publisher** pays the Bitcoin fee for the inscription it broadcasts (§3.4).
-- A publisher **SHOULD** be reimbursable for that cost, and the spender **MAY** compensate the publisher **without revealing a funding UTXO** — a **broadcaster-paid** model in which the moved value covers the fee inside the off-chain settlement, so the spender's on-chain footprint stays limited to the opaque `SpendRecord`. Concretely, a wallet **MAY** include a publisher fee allowance in the off-chain bundle ([Transport & Recovery](#4--transport--recovery)) that the publisher claims as a zkCoins-native transfer; it **MUST NOT** require the spender to sign or expose a Bitcoin UTXO.
+### 3.8 Fees and economics
+
+Publishing a batch costs ordinary Bitcoin transaction fees, paid in BTC by the publisher; zkCoins has no native token ([Requirement 1](/requirements)).
+
+- **Per-batch on-chain cost is constant.** A `BatchInscription` is 231 witness bytes (~58 vBytes). At a fee rate of 10 sat/vB and a BTC price of $100 000, that is ~$0.58 per batch — regardless of whether the batch covers 1 `SpendRecord` or 1 000.
+- **Per-record amortised cost** therefore approaches `(constant per-batch on-chain cost) / (records per batch)` plus the publisher's per-record proving contribution (one in-circuit signature check and one SMT-insertion step, both folded into the `AggregateBatchProof`). A 100-record batch lands well below one US cent of on-chain footprint per record at typical mempool conditions; a 1 000-record batch lands an order of magnitude lower still.
+- The **publisher** pays the Bitcoin fee for the inscription it broadcasts (§3.4) and bears the cost of building and serving the `BatchBundle` (proving + DA). It **SHOULD** be reimbursable for both, and spenders **MAY** compensate the publisher **without revealing a funding UTXO** — a **broadcaster-paid** model in which the moved value covers the publisher's costs inside an off-chain settlement, so the spender's on-chain footprint stays limited to the opaque inscription. A wallet **MAY** include a publisher-fee allowance in the off-chain settlement portion of its outgoing `CoinProof` bundle ([Transport & Recovery](#4--transport--recovery)) that the publisher claims as a zkCoins-native transfer; it **MUST NOT** require the spender to sign or expose a Bitcoin UTXO.
 - Fee policy is **not** consensus: a publisher **MAY** set any fee, and a wallet that finds a publisher's fee unacceptable **MAY** use another publisher or self-publish (§3.4). No publisher can extract rent, because publishing is permissionless ([Requirement 7](/requirements)).
 
 ### 3.9 Finality
 
-A `SpendRecord` is **published** the instant its reveal transaction enters a Bitcoin block. zkCoins fixes the finality threshold at **6 confirmations**: a record at fewer than 6 confirmations is in state `pending` (§3.10), and a receiver **MUST NOT** treat it as anchored. The protocol assumes Bitcoin has **no reorgs deeper than 5 blocks**; a deeper reorg is treated as a protocol-failure event, not a recoverable state transition.
+A `BatchInscription` is **published** the instant its reveal transaction enters a Bitcoin block. zkCoins fixes the finality threshold at **6 confirmations**: an inscription at fewer than 6 confirmations is in state `pending` (§3.10), and a receiver **MUST NOT** treat its `new_root` as anchored for receive-side use. The protocol assumes Bitcoin has **no reorgs deeper than 5 blocks**; a deeper reorg is treated as a protocol-failure event, not a recoverable state transition.
 
 - A double-spend non-membership result (§3.7) is only as final as the tip it is anchored to; a verifier **MUST** re-evaluate it on any reorg that displaces the inclusion block (§3.10).
 - zkCoins adds no finality assumption beyond Bitcoin's: there is no separate consensus, validator set, or checkpoint ([Requirement 1](/requirements), [Requirement 3](/requirements)).
@@ -822,21 +872,25 @@ A `SpendRecord` is **published** the instant its reveal transaction enters a Bit
 
 ### 3.10 Transaction states
 
-Every `SpendRecord` a verifier observes is classified into **exactly one** of three states. The state is a function of the verifier's own §3.5+§3.6 admission scan and the inclusion block's confirmation depth — **never** of any assertion by a node, courier, or sender. Two honest verifiers at the same canonical Bitcoin tip **MUST** classify every record identically.
+Every `BatchInscription` a verifier observes — and, transitively, every member `SpendRecord` it covers — is classified into **exactly one** of three states. The state is a function of the verifier's own §3.5+§3.6 admission scan and the inclusion block's confirmation depth — **never** of any assertion by a node, publisher, courier, or sender. Two honest verifiers at the same canonical Bitcoin tip **MUST** classify every inscription identically.
 
 | State | Defined as | Receiver MAY credit |
 |---|---|---|
-| **`completed`** | the record is **admitted** under §3.5+§3.6 by the verifier's own scan **AND** its inclusion block has **at least 6 confirmations** (§3.9) | **yes** |
-| **`failed`** | the record is **rejected** by the verifier's scan — any single §3.5 or §3.6 admission rule violated (parser, `block_anchor` bounds, signature, nullifier-`inr` binding, canonical order, first-spend-wins) suffices | **no** (never) |
-| **`pending`** | the record is in neither state — its bytes are inscribed but the inclusion block has fewer than 6 confirmations, or the record is still off-chain | **no** |
+| **`completed`** | the inscription is **admitted** under §3.5+§3.6 by the verifier's own scan (signature, `prev_root` continuity, bundle binding, and aggregate proof all verify) **AND** its inclusion block has **at least 6 confirmations** (§3.9) | **yes** |
+| **`failed`** | the inscription is **rejected** by the verifier's scan — any single §3.5 or §3.6 admission rule violated (parser, `block_anchor` bounds, publisher signature, `prev_root` mismatch, bundle binding, aggregate proof) suffices | **no** (never) |
+| **`pending`** | the inscription is in neither state — its bytes are inscribed but the inclusion block has fewer than 6 confirmations, or the bundle has not yet been fetched and verified (§3.6 step 5) | **no** |
 
-**Relationship to the nullifier accumulator.** The global nullifier accumulator (§3.7) absorbs the `nf`s of every **admitted** record (= `pending` ∪ `completed`), not only of `completed` records. Double-spend protection therefore takes effect **at admission**; the 6-confirmation threshold gates only the receiver's credit behaviour, not the accumulator update. Receive-side non-membership ([Proofs §2.3.3](#233-receive) step 5) runs against this live accumulator, so a coin whose spend has been admitted at the verifier's tip is immediately unavailable for any further spend — even while that spending record is still `pending`.
+**Per-member status.** A `SpendRecord` inherits the state of the `BatchInscription` that anchored its batch. There is no notion of one member admitting while its batch is rejected: the `AggregateBatchProof` is all-or-nothing — it attests every member, or it fails entirely.
 
-**6 confirmations is a hard protocol constant**, not a parameter: zkCoins assumes Bitcoin has no reorgs deeper than 5 blocks (§3.9), and a deeper reorg is treated as a protocol-failure event — not a state transition under §3.10. Under this assumption, **`completed` is absolute**: a record once classified `completed` stays `completed`.
+**Relationship to the nullifier accumulator.** The global nullifier accumulator (§3.7) advances **only** with inscriptions that have reached at least state `pending`-with-bundle-verified — i.e., signature, `prev_root` continuity, bundle binding, and aggregate proof have all succeeded, but the 6-confirmation threshold may not yet be met. Double-spend protection therefore takes effect **at admission**, before final confirmation: a coin whose spend's bundle has verified at the verifier's tip is immediately unavailable for any further spend, even while the inscription is still `pending` purely on confirmation depth. An inscription that is `pending` solely because of bundle DA (its confirmations are sufficient but no replica of the bundle has been reached) is **not** treated as applied: until the aggregate proof verifies, no state transition is admitted.
 
-**`failed` is forward-sticky.** A rejection cannot become an admission by waiting. A reorg **MAY** change *which* of two conflicting records is rejected (e.g. if the canonical order shifts under first-spend-wins, §3.6 step 6), but the property of being rejected by some admission rule cannot be undone by passage of time alone.
+**6 confirmations is a hard protocol constant**, not a parameter: zkCoins assumes Bitcoin has no reorgs deeper than 5 blocks (§3.9), and a deeper reorg is treated as a protocol-failure event — not a state transition under §3.10. Under this assumption, **`completed` is absolute**: an inscription once classified `completed` stays `completed`.
 
-**Receivers SHALL act only on `completed`.** The anchor / receive checks in [Proofs §2.3.3](#233-receive), [Transport & Recovery §4.5](#45-recovery), and [Access & Explorer §5.6 / §5.7](#56-shareable-confirmation-links) all require the relevant `SpendRecord` to be in state `completed`; a record in any other state **MUST NOT** be treated as anchored. The user-facing **status** rendered by an explorer (e.g. Access & Explorer §5.6 step 3) **MUST** be the §3.10 state, not a node-asserted classification.
+**`failed` is forward-sticky.** A rejection cannot become an admission by waiting. A reorg **MAY** change *which* of two inscriptions racing on the same `prev_root` is rejected (e.g. if canonical order shifts under §3.6 step 4), but the property of being rejected by some admission rule cannot be undone by passage of time alone.
+
+**Receivers SHALL act only on `completed` (or `mint-verified` where applicable).** The anchor / receive checks in [Proofs §2.3.3](#233-receive), [Transport & Recovery §4.5](#45-recovery), and [Access & Explorer §5.6 / §5.7](#56-shareable-confirmation-links) all require the relevant `BatchInscription` (and hence its member `SpendRecord`) to be in state `completed`; an inscription in any other state **MUST NOT** be treated as anchored. The sole exception is the `mint-verified` status defined below for non-batched mints, which substitutes direct re-verification of the mint's `InitialProof` for the chain-anchor check. The user-facing **status** rendered by an explorer (e.g. Access & Explorer §5.6 step 3) **MUST** be the §3.10 state (one of `completed`, `failed`, `pending`, or `mint-verified`), not a node-asserted classification.
+
+**Mints not anchored on-chain.** For a mint coin whose issuer chose not to anchor it ([§2.3.1](#231-mint--issuance)), no `BatchInscription` exists and the three §3.10 states do not apply. Such a coin is classified as **`mint-verified`** instead: the receiver re-verifies the mint's `InitialProof` directly and accepts on success; there is no double-spend protection to anchor (a mint introduces no nullifier) and the cryptographic safety of the credit is identical. Explorers and receivers **MUST** render the `mint-verified` status as distinct from `completed`/`pending`/`failed` so the user understands it has no on-chain anchor, and any subsequent spend of this mint coin is anchored normally — the spend's `SpendRecord` reaches the accumulator through a `BatchInscription` just like any other.
 
 
 
@@ -844,7 +898,7 @@ Every `SpendRecord` a verifier observes is classified into **exactly one** of th
 
 > *In one sentence: how the encrypted coin bundle gets from sender to recipient over Nostr, how the recipient finds its own coins on a relay, and how a wallet that lost everything rebuilds its state from seed + Bitcoin + the network.*
 
-This page specifies the **off-chain layer**: how the value-bearing `CoinProof` bundle ([Foundations §1.5](#15-core-data-structures)) travels from sender to recipient, how a recipient discovers its own incoming bundles, how a node recovers its entire state from the **seed** plus Bitcoin, and the data-availability guarantees that make recovery possible. The on-chain layer carries only the opaque `SpendRecord` ([Foundations §1.4](#14-identifiers-and-hashes)); the bundle — which is simultaneously the recipient's receipt and its spend credential — never touches Bitcoin and **MUST** be delivered here.
+This page specifies the **off-chain layer**: how the value-bearing `CoinProof` bundle ([Foundations §1.5](#15-core-data-structures)) travels from sender to recipient, how the spender's `SpendRecord` reaches a publisher, how the publisher's `BatchBundle` is `k`-replicated to peer nodes, how a recipient discovers its own incoming coins, how a node recovers its entire state from the **seed** plus Bitcoin, and the data-availability guarantees that make recovery possible. The on-chain layer carries only the constant-size opaque `BatchInscription` ([Foundations §1.4](#14-identifiers-and-hashes)); every value-bearing or accumulator-bearing object — the per-coin `CoinProof` bundle and the per-batch `BatchBundle` — lives here and **MUST** be delivered with `k`-fold replication (§4.6).
 
 Normative keywords (**MUST**, **MUST NOT**, **SHOULD**, **MAY**) are used per RFC 2119. All primitives, keys, and identifiers are defined in [Foundations](#1--foundations-normative) and used unchanged.
 
@@ -893,7 +947,7 @@ A bundle is delivered as a small Nostr control event that **references** the enc
 
 **Self-delivery of change and account state (normative).** A transition almost always produces a **change coin** that returns value to the spender's *own* account, and it advances the account to a new state whose recursive proof is the credential the **next** spend must extend. The spender's node **MUST** deliver this self-addressed bundle to the spender's **own** advertised relay set under the identical rules above — encrypted to the spender's own `IVPK`, carrying its own `detect_tag` (§4.2), ACK-tracked where applicable, and replicated to `k` independent holders (§4.6). Self-delivery is not optional bookkeeping; it is what makes two situations work, and **without it neither does**:
 
-- **Multiple devices / nodes on one seed.** The Bitcoin chain reveals only that the account **spent** — a `SpendRecord` carrying its rotating key and the spent nullifiers ([Foundations §1.4](#14-identifiers-and-hashes)), which only the owner can tie back to its own account — never the resulting state: not the new `ash`, not the **balance** (`AccountState.balances` is off-chain), and not the **recursive proof** the next spend must extend. A second device therefore learns of a spend made elsewhere **only** by discovering this self-addressed bundle on a shared relay (§4.4) and pulling its blob. Consequently, devices that must stay in sync **MUST** share at least one advertised relay, or one node **MUST** be reachable through the other's pull endpoint ([Access & Explorer §5.1](#51-capability-gated-pull)); otherwise a second device can detect that the head advanced but **cannot reconstruct the spendable state**, and must fall back to emergency reconstruction (§4.5).
+- **Multiple devices / nodes on one seed.** The Bitcoin chain reveals only `BatchInscription`s — publisher identities and accumulator roots — never anything per-spender; even the per-spender `SpendRecord` lives in the publisher's `BatchBundle` off-chain, and even there the spender's rotating key only privately ties back to its own account via the owner's seed. The chain reveals nothing about the resulting state of any individual account: not the new `ash`, not the **balance** (`AccountState.balances` is off-chain), and not the **recursive proof** the next spend must extend. A second device therefore learns of a spend made elsewhere **only** by discovering this self-addressed bundle on a shared relay (§4.4) and pulling its blob. Consequently, devices that must stay in sync **MUST** share at least one advertised relay, or one node **MUST** be reachable through the other's pull endpoint ([Access & Explorer §5.1](#51-capability-gated-pull)); otherwise a second device can detect that an accumulator transition occurred but **cannot reconstruct the spendable state**, and must fall back to emergency reconstruction (§4.5).
 - **Emergency recovery.** Step 5 of §4.5 rebuilds `balances`, `current_pubkey`, and `send_counter` from exactly these self-addressed change/outgoing bundles; they are retrievable only because they were self-delivered and replicated here.
 
 The chain guarantees the **integrity** of the head; self-delivery is what guarantees the **availability** of the content behind it. As with all transport, a relay can withhold this bundle but can never forge or alter it (§4.1) — so self-delivery is a liveness precondition, never a trust assumption.
@@ -922,7 +976,7 @@ invoice_message = H( "zkCoins/v1/Invoice" ‖ amount ‖ recipient ‖ pk0 ‖ a
 
 The two signatures' preimage is a **fixed concatenation** in exactly the field order above (mirroring `grant_message`, [Access & Explorer §5.2](#52-view-grant)); `H` and the input ordering are per [Foundations §1.4, §1.7](#14-identifiers-and-hashes). The optional `memo` contributes the empty byte string when absent, and `relays` is concatenated in its listed order. Reordering any field changes the digest and **MUST** be rejected. `serialize(fields)` is **not** used; only this explicit order is signed and verified.
 
-The sender **MUST** verify, in order: (i) `H(pk0) == recipient` (so the named `pk0` is the actual address preimage); (ii) `addr_sig` valid under `pk0` over `invoice_message` (proves the address-holder authorised these exact contents — `ivpk`, `op_pubkey`, `relays`, amount, asset, memo); (iii) `sig` valid under `op_pubkey` over `invoice_message` (carries the per-issuance authorisation by the recipient's online `op`). Any of these checks failing **MUST** reject the `Invoice`. Check (ii) is the **address ↔ rest binding**: without it, a party that observes `Pk₀` from an on-chain `SpendRecord` could publish a malicious `Invoice` claiming the legitimate `recipient`/`pk0` but with **their own** `ivpk`/`op_pubkey`, and the sender would encrypt the bundle to the attacker. `addr_sig` makes that forgery infeasible under BIP-340 EUF-CMA. The operational consequence is that **issuing an `Invoice` requires the wallet** (`sk₀` is SPEND-branch, wallet-only) — the same custody boundary that already governs sending. The per-issuance `sig` remains because the recipient's `op` is the online actor that signs the wire-format event the relay sees; it is not redundant with `addr_sig` operationally (one offline, one online).
+The sender **MUST** verify, in order: (i) `H(pk0) == recipient` (so the named `pk0` is the actual address preimage); (ii) `addr_sig` valid under `pk0` over `invoice_message` (proves the address-holder authorised these exact contents — `ivpk`, `op_pubkey`, `relays`, amount, asset, memo); (iii) `sig` valid under `op_pubkey` over `invoice_message` (carries the per-issuance authorisation by the recipient's online `op`). Any of these checks failing **MUST** reject the `Invoice`. Check (ii) is the **address ↔ rest binding**: without it, a party that observes `Pk₀` from a publicly-served member `SpendRecord` inside a `BatchBundle` (bundles are content-addressed and `k = 3`-replicated by §4.6, so `Pk₀` is publicly observable to anyone fetching them) could publish a malicious `Invoice` claiming the legitimate `recipient`/`pk0` but with **their own** `ivpk`/`op_pubkey`, and the sender would encrypt the bundle to the attacker. `addr_sig` makes that forgery infeasible under BIP-340 EUF-CMA. The operational consequence is that **issuing an `Invoice` requires the wallet** (`sk₀` is SPEND-branch, wallet-only) — the same custody boundary that already governs sending. The per-issuance `sig` remains because the recipient's `op` is the online actor that signs the wire-format event the relay sees; it is not redundant with `addr_sig` operationally (one offline, one online).
 
 When no `Invoice` is available, a recipient **MAY** publish the same `{pk0, ivpk, op_pubkey, relays}` tuple as a **profile** event (a replaceable Nostr event) carrying the same `addr_sig` over an `invoice_message` computed with the **profile-fixed values** `amount = 0`, `asset_id` = the all-zero 32-byte value, and `memo` = empty — so the sender and recipient derive a **bit-identical** preimage and the signature verifies; any other values for these three fields **MUST NOT** be used in a profile event — discoverable on well-known relays by `op_pubkey`. The sender verifies the profile by the same three-check rule above. Resolution by `address` alone, with **no** recipient-published record carrying `addr_sig`, is **not** supported.
 
@@ -949,23 +1003,36 @@ The seed is the **only** required backup ([Requirement 6](/requirements)). Recov
 The fallback procedure is fully deterministic and trustless:
 
 1. **Re-derive keys.** From the seed, re-derive the account root `A` and thereby `ivk`, `dk`, `ovk`, `op`, the nullifier key `nk`, and the spend keys ([Foundations §1.2](#12-key-hierarchy)). This alone restores the address/identity, decryption ability, and the deterministic detection tags.
-2. **Rebuild the public index from Bitcoin.** Scan Bitcoin for zkCoins `SpendRecord`s and rebuild the global **nullifier accumulator** from the published nullifiers ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)). It is derived from the chain and requires no trust. Because each record carries the signer's rotating public key, the operator can privately recognise its **own** records (its seed derives the keys; outsiders cannot link the rotating keys) and so reconstruct the skeleton of its own activity.
+2. **Rebuild the public index from Bitcoin + bundles.** Scan Bitcoin for zkCoins `BatchInscription`s, fetch each batch's `BatchBundle` from the relay mesh ([§4.6](#46-data-availability--replication-factor-k)) by its `bundle_locator`, verify the publisher's `AggregateBatchProof`, and apply the inscribed `prev_root → new_root` transition. The resulting global **nullifier accumulator** ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)) is derived from confirmed Bitcoin data plus content-addressed, recursively verifier-checkable bundles, and requires no trust in any peer. Because each member `SpendRecord` inside a bundle carries the spender's rotating public key `Pkᵢ` and the operator's seed re-derives the spender side of all its own past transitions, the operator can privately recognise its **own** member SpendRecords (the publisher and any third party cannot link them — they see only the publisher's identity on-chain) and so reconstruct the skeleton of its own activity. Recovery is therefore conditional on bundle DA: if every replica of a past `BatchBundle` has been lost, the operator can still verify the on-chain root continuity but cannot reconstruct the member set of that batch on its own — in practice the `k = 3` replication and operator backups ([§4.6](#46-data-availability--replication-factor-k)) make this a rare degraded case.
 3. **Pull candidate bundles.** Query the network's capability-gated pull endpoints ([Access & Explorer](#5--access--explorer)) by proving ownership (sign a challenge with the identity key) or by presenting the deterministic `detect_tag` set from `dk`. Cooperating nodes return every bundle matching the proof/tags. The network here is an **untrusted blob cache**.
-4. **Verify each bundle against Bitcoin.** For every returned bundle, the node **MUST** independently verify the recursive proof, the coin's inclusion in the committed `output_coins_root`, that the root is anchored in a `SpendRecord` in state `completed` ([On-chain §3.10](#310-transaction-states)), and that the coin is unspent against the nullifier accumulator it rebuilt from the chain ([Foundations §1.4](#14-identifiers-and-hashes), [Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)). A bundle failing any check **MUST** be discarded. A node can only **withhold**, never forge — correctness is guaranteed by the chain.
+4. **Verify each bundle against Bitcoin.** For every returned bundle, the node **MUST** independently verify the recursive per-account proof, the coin's inclusion in the committed `output_coins_root`, that the root is anchored in a `SpendRecord` whose containing `BatchInscription` is in state `completed` ([On-chain §3.10](#310-transaction-states)) (for a non-batched mint, that the mint's recursive proof verifies directly), and that the coin is unspent against the nullifier accumulator at `NAV(tip)` per [On-chain §3.7](#37-the-nullifier-accumulator) ([Foundations §1.4](#14-identifiers-and-hashes), [Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)). A bundle failing any check **MUST** be discarded. A node can only **withhold**, never forge — correctness is guaranteed by the chain, the per-spender recursive proofs, and the publisher's `AggregateBatchProof`s.
 5. **Rebuild `AccountState` and balances.** From the accepted incoming and outgoing coins, reconstruct the per-asset `balances`, the coin-history SMT, `current_pubkey`, and `send_counter` ([Foundations §1.5](#15-core-data-structures), [Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)).
 
-The coin **values** of incoming coins are choices others made; they exist only in the bundles and cannot be derived from the seed or a hash. They come back solely through step 3 — which is why the data-availability guarantee of §4.6 is a precondition for the emergency path. Asset ids fall out of the coins themselves; only the human-readable asset `name` is external and never recoverable from the chain.
+The coin **values** of incoming coins are choices others made; they exist only in the `CoinProof` bundles and cannot be derived from the seed or a hash. They come back solely through step 3 — which is why the data-availability guarantee of §4.6 is a precondition for the emergency path. Likewise, the **member identity** of a past batch (which spenders' SpendRecords were aggregated) exists only inside the `BatchBundle`, so accumulator reconstruction beyond the on-chain root chain depends on the same DA guarantee. Asset ids fall out of the coins themselves; only the human-readable asset `name` is external and never recoverable from the chain.
 
 ### 4.6 Data availability — replication factor `k`
 
-A bundle is custody. If every holder drops it before the recipient (or a recovering owner) fetches it, the coin becomes unspendable. The protocol therefore fixes a **replication factor `k`**:
+Two off-chain object classes carry the bulk of zkCoins data — `CoinProof` bundles (per coin, value-bearing) and `BatchBundle`s (per publisher batch, accumulator-update-bearing) — and both are protected by the **same** replication discipline.
 
-- Before a delivery is considered **complete**, its encrypted bundle blob and delivery event **MUST** be replicated to at least `k` **independent** nodes/relays. "Independent" means distinct operators/hosts; `k` copies on one operator do not count.
+#### CoinProof bundles
+
+A `CoinProof` bundle is custody. If every holder drops it before the recipient (or a recovering owner) fetches it, the coin becomes unspendable.
+
+#### BatchBundles
+
+A `BatchBundle` carries the publisher's `AggregateBatchProof` and the member `SpendRecord`s for one inscribed batch. The on-chain `BatchInscription`'s `prev_root → new_root` transition is unverifiable without the bundle: a scanner that cannot reach any replica cannot admit the batch and the inscription lingers in state `pending` ([On-chain §3.10](#310-transaction-states)). Universal long-term unavailability of a `BatchBundle` would leave its accumulator transition forever unconfirmable — a soft fork of the network into "nodes that admitted it before DA loss" and "nodes that never could". The replication regime below makes that outcome economically and operationally unlikely.
+
+#### Replication factor `k` (normative)
+
+- Before a delivery is considered **complete**, the relevant blob (encrypted `CoinProof` bundle and its delivery event, or a `BatchBundle` and its serialised `AggregateBatchProof`) **MUST** be replicated to at least `k` **independent** nodes/relays. "Independent" means distinct operators/hosts; `k` copies on one operator do not count.
 - The default is **`k = 3`**. Rationale: `k = 3` survives the simultaneous loss of any two replicas — covering single-disk failure plus one node being offline during recovery — without imposing the storage and bandwidth cost of higher fan-out. It mirrors the de-facto three-way replication used by durable distributed stores. Deployments **MAY** raise `k` for higher durability; `k` **MUST NOT** be less than 2.
-- The recommended replica set is: the recipient's own node, the sender's own node (retained until ACK, §4.2), and at least one additional relay from the recipient's advertised set — yielding `k = 3` from parties that each have an incentive to retain.
-- A sender **MUST NOT** drop its retained copy until **both** a valid ACK (§4.2) and confirmation that the blob is held by at least `k` independent replicas.
+- **For `CoinProof` bundles**, the recommended replica set is: the recipient's own node, the sender's own node (retained until ACK, §4.2), and at least one additional relay from the recipient's advertised set — yielding `k = 3` from parties that each have an incentive to retain. A sender **MUST NOT** drop its retained copy until **both** a valid ACK (§4.2) and confirmation that the blob is held by at least `k` independent replicas.
+- **For `BatchBundle`s**, the publisher acts as the original holder and is responsible for distributing the bundle to at least `k − 1` independent replicas before broadcasting the `BatchInscription`. The recommended replica set is: the publisher's own node, the publisher's advertised peer-publisher set (at least one peer), and at least one well-known relay or archival service — yielding `k = 3`. A publisher SHOULD use a `dispersal` push pattern (broadcast the bundle to all `k − 1` peers in parallel, await acknowledgement from at least `k − 2` before broadcasting the inscription) so that admission liveness is decoupled from any single replica's reachability. A publisher **MUST NOT** broadcast the `BatchInscription` until at least `k` independent holders (including itself) confirm they hold the bundle; broadcasting earlier leaves the inscription unverifiable and risks `failed` admission once the bundle-fetch deadline elapses at scanning nodes.
+- **Long-term retention by scanners (normative).** A `CoinProof` bundle has a natural long-term holder (the recipient — it is the recipient's custody), but a `BatchBundle` does not, so this rule supplies one: every node that admits a `BatchInscription` and verifies its `BatchBundle` (§3.6 steps 5–8) **MUST** retain that bundle as part of its own data store, and **SHOULD** serve it on request, indefinitely (or until protocol-defined pruning rules become available in a future version). A node that prunes an admitted bundle **MUST** first verify that at least `k = 3` independent peer nodes still hold it. The practical replica count of any admitted `BatchBundle` therefore grows monotonically with the size of the scanning-node network, so universal long-term unavailability of an admitted bundle requires the simultaneous loss of every honest scanner that ever processed it — a failure mode far stronger than a single publisher dropping a bundle after broadcast.
 
-**Safety invariant (normative).** Custody safety **MUST NOT** depend on availability. Losing availability impairs **recovery** (a bundle may be unrecoverable) but can **never** cause **theft**: an unavailable bundle cannot be spent by anyone else, and a returned bundle is only accepted after verification against Bitcoin (§4.5). Availability is therefore a liveness property, never a safety property.
+#### Safety invariant (normative)
+
+Custody safety **MUST NOT** depend on availability. Losing availability impairs **recovery** (a bundle may be unrecoverable) but can **never** cause **theft**: an unavailable `CoinProof` bundle cannot be spent by anyone else, an unavailable `BatchBundle` cannot retroactively credit a forged spend, and a returned bundle is only accepted after verification against Bitcoin (§4.5, [On-chain §3.6](#36-chain-scanning)). Availability is a liveness property, never a safety property.
 
 ### 4.7 Metadata and privacy tradeoffs
 
@@ -984,7 +1051,7 @@ Continue to [Access & Explorer](#5--access--explorer) for the capability-gated p
 
 This page specifies how Private data ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)) is released by a node, the structure of viewing capabilities, and the explorer that renders them. All primitives, keys, identifiers, and tags are defined in [Foundations](#1--foundations-normative) and used here unchanged. Normative keywords follow RFC 2119.
 
-Recall the relevant key material from [Foundations §1.2](#12-key-hierarchy): a subject's identity is its `address = H(Pk₀)` ([§1.4](#14-identifiers-and-hashes)); the **operational key** `op` is the node-held Nostr/identity key that signs grants and acknowledgements but cannot spend; `ivk`/`ovk` are the viewing keys; and `K_tx` ([§1.3](#13-per-coin-keys-note-encryption--detection)) is the per-coin note key that decrypts exactly one coin. The on-chain `SpendRecord` ([§1.4](#14-identifiers-and-hashes)) is the only object written to Bitcoin and the integrity anchor for everything below.
+Recall the relevant key material from [Foundations §1.2](#12-key-hierarchy): a subject's identity is its `address = H(Pk₀)` ([§1.4](#14-identifiers-and-hashes)); the **operational key** `op` is the node-held Nostr/identity key that signs grants and acknowledgements but cannot spend; `ivk`/`ovk` are the viewing keys; and `K_tx` ([§1.3](#13-per-coin-keys-note-encryption--detection)) is the per-coin note key that decrypts exactly one coin. The on-chain `BatchInscription` ([§1.4](#14-identifiers-and-hashes), [§3.1](#31-the-on-chain-object)) is the only object written to Bitcoin and the integrity anchor for everything below; the per-spender `SpendRecord` lives inside the publisher's off-chain `BatchBundle` ([§4.6](#46-data-availability--replication-factor-k)).
 
 **Disclosure is holder-initiated and account-granular.** All disclosure is opt-in: absent one, [Requirement 2](/requirements) holds in full. Because accounts and addresses are one-to-one ([Foundations §1.2](#12-key-hierarchy)), every account-level disclosure covers the **whole** account; there is no "one address out of many." To keep some activity outside a disclosure, it must live in a **separate account**. This page specifies the disclosure spectrum, narrowest first ([Requirement 9](/requirements)):
 
@@ -1002,7 +1069,7 @@ Every node exposes exactly one endpoint for Private data — the **pull endpoint
 
 The bearer view capabilities (`zkview`, [§5.3](#53-per-coin-view-capability); `zkavk`, [§5.8](#58-address-view-full-history)) and the balance attestation ([§5.7](#57-balance-attestation-history-private)) are **not** server authorisations: they are client-side decryption secrets, or a self-contained proof, that an explorer applies to bundles it obtains from the relay mesh ([Transport & Recovery](#4--transport--recovery)) or by self-hosted scanning. They never cause a node to release a Private record it would not otherwise serve; they widen what the *holder of the secret* can read from already-public, encrypted material.
 
-The endpoint **MUST** be unauthenticated only for the Public projection of [§5.5](#55-two-explorer-modes) (on-chain `SpendRecord`s and the global nullifier set), which carry no Private data by construction.
+The endpoint **MUST** be unauthenticated only for the Public projection of [§5.5](#55-two-explorer-modes) (on-chain `BatchInscription`s with their `prev_root → new_root` transitions and publisher identities), which carry no Private data by construction.
 
 A request proceeds as a challenge–response so that captured transcripts cannot be replayed:
 
@@ -1117,7 +1184,7 @@ The two **account-wide** capabilities — ownership proof and account view key �
 
 The same node data ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure): plaintext leaves Private, roots Public) is presented in two modes that differ **only** in the capability supplied.
 
-**Public mode.** No capability is presented. The explorer renders **only** Public on-chain data: the stream of `SpendRecord`s, the global nullifier set rebuilt from the chain ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)), and aggregate counts, with signature- and anchoring-checks against Bitcoin. It **MUST NOT** display amounts, `asset_id`s or asset names, balances, addresses, senders, or recipients — none of which are derivable from Public data. (A record's byte length **MAY** hint at the transaction *type* — e.g. a mint publishes no nullifier; never its content.)
+**Public mode.** No capability is presented. The explorer renders **only** Public on-chain data: the stream of `BatchInscription`s with their `prev_root → new_root` transitions and publisher identities, the global nullifier accumulator tracked through them ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure), [On-chain §3.7](#37-the-nullifier-accumulator)), and aggregate counts (number of batches, batch admission rate, accumulator size), with signature- and aggregate-proof-checks against Bitcoin and the relay-mesh `BatchBundle`s. It **MUST NOT** display amounts, `asset_id`s or asset names, balances, addresses, senders, recipients, individual member SpendRecords' counts, or anything sourced from a `CoinProof` bundle — none of which are derivable from Public data. (A publisher's identity is the only on-chain link; per-spender activity remains hidden behind the bundle boundary.)
 
 **Authorised mode.** The viewer supplies the subject's signed **view grant** ([§5.2](#52-view-grant)) (or, for self-view, an ownership proof). The explorer then drives the pull endpoint of [§5.1](#51-capability-gated-pull) on the viewer's behalf and renders that subject's real transactions **within the grant's scope** — and nothing beyond it. Disclosure stays under the subject's control: the subject chooses the grantee, the asset set, and the time window. The explorer is a client of the capability model; it gains **no** privilege the presented capability does not already confer.
 
@@ -1156,7 +1223,7 @@ An explorer **MAY** render the same pair as a clickable web URL — `https://<ex
 
 1. **Fetch** the `CoinProof` bundle by `blob_id` from the relay mesh ([Transport & Recovery §4.2, §4.6](#42-bundle-delivery)) — any of the `k` replicas holding the blob answers — and verify `H(ciphertext) == blob_id` (content-addressed self-check).
 2. **Decrypt** the coin with `<view>` (`K_tx`); render the single transaction — **amount, asset, time, status** (the [On-chain §3.10](#310-transaction-states) transaction state).
-3. **Verify against Bitcoin.** Check the coin's inclusion in `output_coins_root`; locate the on-chain `SpendRecord` carrying that `ocr` and confirm it is in state **`completed`** ([On-chain §3.10](#310-transaction-states)); verify the recursive validity proof ([Foundations §1.4, §1.5](#14-identifiers-and-hashes)). The viewer trusts **Bitcoin and the proof — never the explorer's assertion**.
+3. **Verify against Bitcoin.** Check the coin's inclusion in `output_coins_root`; locate the spender's `SpendRecord` carrying that `ocr` inside the publisher `BatchBundle` it was batched into, fetch the corresponding `BatchInscription` (via the bundle's `bundle_locator`), and confirm the inscription is in state **`completed`** ([On-chain §3.10](#310-transaction-states)); verify the spender's recursive validity proof ([Foundations §1.4, §1.5](#14-identifiers-and-hashes)) and (optionally, for full chain-anchor verification) the publisher's `AggregateBatchProof` ([§2.2](#22-proof-types)). For a coin produced by a **non-batched mint** ([§2.3.1](#231-mint--issuance)), there is no `BatchInscription` to anchor against; the explorer instead verifies the mint's `InitialProof` directly and renders the **`mint-verified`** status ([§3.10](#310-transaction-states)) — the user MUST be shown this status as distinct from `completed`, so they understand the coin has no on-chain anchor. The viewer trusts **Bitcoin and the proofs — never the explorer's assertion**.
 
 **Properties.**
 
@@ -1172,7 +1239,7 @@ The explorer is a **self-hostable presentation layer** and **MUST NOT** be a tru
 
 The narrowest *account-level* disclosure proves a balance **without exposing a single transaction**. The subject produces a zero-knowledge proof that its on-chain-committed account state holds a given balance of one asset, and hands over only that proof. It reveals the address, the asset, and the number — never any coin, counterparty, amount-flow, or history.
 
-It re-uses the account's own recursive validity proof ([Proofs §2.2](#22-proof-types)) as the anchor — there is no global account-keyed tree to point at ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)). That proof's public input `new_account_state_hash` is the hash of the very `AccountState` being attested, and the on-chain `SpendRecord` that settled the state binds that proof through its sign-to-contract nonce ([On-chain §3.2](#32-spendrecord-signing-bip-340--sign-to-contract)). The attestation therefore stands on the **real, Bitcoin-anchored** state; it cannot assert a false one.
+It re-uses the account's own recursive validity proof ([Proofs §2.2](#22-proof-types)) as the anchor — there is no global account-keyed tree to point at ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)). That proof's public input `new_account_state_hash` is the hash of the very `AccountState` being attested. The proof was bound — by the spender's sign-to-contract nonce — into a `SpendRecord` carried inside a publisher `BatchBundle` whose `BatchInscription` is on Bitcoin in state `completed`. The attestation therefore stands on the **real, Bitcoin-anchored** state via the bundle and its inscription; it cannot assert a false one.
 
 ```
 BalanceAttestation:
@@ -1180,22 +1247,29 @@ BalanceAttestation:
     { subject : address,
       asset_id,
       balance : B,
-      anchor  : { txid, j, block_hash, height } }    // the on-chain SpendRecord that settled the state
+      anchor  : { txid, j, block_hash, height,
+                  bundle_locator } }                 // BatchInscription + position j of the
+                                                     //   SpendRecord inside its BatchBundle
 
   witness (hidden):
     { AccountState S,
       pi,                                             // the account's recursive validity proof for S
-      R_prime }                                       // sign-to-contract opening of the anchor's signature
+      SpendRecordⱼ,                                   // member j of the BatchBundle at bundle_locator
+      R_prime }                                       // sign-to-contract opening of SpendRecordⱼ.signature
 
   statement (domain tag "zkCoins/v1/BalanceProof"):
     1. S.owner == subject
     2. S.balances[asset_id] == B
     3. pi verifies under the canonical verifier data, and pi.ProofData.new_account_state_hash == ash(S)
-    4. the SpendRecord at `anchor` commits to pi: its signature nonce opens, with R_prime, to
-       t = H(R_prime ‖ H(pi.ProofData))    (sign-to-contract, On-chain §3.2)
+    4. SpendRecordⱼ.signature opens, with R_prime, to t = H(R_prime ‖ H(pi.ProofData))
+                                                                              (per-spender S2C, On-chain §3.2)
+    5. SpendRecordⱼ is the j-th member in serialize(BatchBundle) for which
+       Hc("BatchBundle", serialize(BatchBundle)) == bundle_locator
+    6. the BatchInscription at (txid, block_hash, height) carries this bundle_locator and is in state
+       completed  (Onchain §3.10)
 ```
 
-The verifier checks the proof and that the `SpendRecord` at `anchor` (`txid:j`) is in state `completed` ([On-chain §3.10](#310-transaction-states)) at `{block_hash, height}`. No node, relay, or explorer is trusted.
+The verifier checks the proof and that the `BatchInscription` at `anchor` (`txid`) — which contains the `bundle_locator` whose `BatchBundle` carries `SpendRecordⱼ` at position `j` — is in state `completed` ([On-chain §3.10](#310-transaction-states)) at `{block_hash, height}`. No node, relay, or explorer is trusted.
 
 **Reference link** (any self-hostable instance is equivalent):
 
@@ -1239,7 +1313,7 @@ zkcoins:addr/<address>/<zkavk>
 
 The secret travels in the fragment per the link-transport rules in [§5.6](#56-shareable-confirmation-links).
 
-**Flow.** The explorer derives the detection key from `ivk` ([Foundations §1.3](#13-per-coin-keys-note-encryption--detection)), finds the account's coins by scanning the relay mesh ([Transport & Recovery](#4--transport--recovery)) for the derived `detect_tags` (a `;h=<locator>` fragment hint, if present, only speeds resolution), decrypts incoming coins with `ivk` and recovers outgoing-coin plaintext with `ovk`, and renders the full history — checking every transaction against Bitcoin (coin inclusion → `completed` SpendRecord ([On-chain §3.10](#310-transaction-states)) → recursive proof, as in [§5.6](#56-shareable-confirmation-links)). The explorer is never trusted.
+**Flow.** The explorer derives the detection key from `ivk` ([Foundations §1.3](#13-per-coin-keys-note-encryption--detection)), finds the account's coins by scanning the relay mesh ([Transport & Recovery](#4--transport--recovery)) for the derived `detect_tags` (a `;h=<locator>` fragment hint, if present, only speeds resolution), decrypts incoming coins with `ivk` and recovers outgoing-coin plaintext with `ovk`, and renders the full history — checking every transaction against Bitcoin (coin inclusion → containing `BatchBundle` → `completed` `BatchInscription` ([On-chain §3.10](#310-transaction-states)) → recursive proof, as in [§5.6](#56-shareable-confirmation-links)). For non-batched mint coins, the chain step is replaced by direct re-verification of the `InitialProof` and the entry is rendered with `mint-verified` status, as in §5.6. The explorer is never trusted.
 
 **Properties.**
 
@@ -1266,9 +1340,9 @@ zkCoins is exactly three components. The split between them is **packaging, not 
 
 The node is the always-on workhorse. It **MUST** be runnable as a single self-contained container with no operator-specific dependencies ([Requirement 7](/requirements)). Its responsibilities:
 
-- **Bitcoin scanner.** Reads Bitcoin L1, extracts inscribed `SpendRecord`s (Foundations §1.4), and rebuilds the global nullifier accumulator (Foundations §1.6) from the public chain **alone** — the spent nullifiers are published in the clear, so no off-chain data is needed. See [On-chain Layer](#3--on-chain-layer).
-- **Prover.** Builds the recursive validity proofs for transactions it is asked to construct. See [Proofs & State Transitions](#2--proofs--state-transitions).
-- **Nostr relay.** Stores and serves the off-chain `CoinProof` bundles, performs `detect_tag` discovery, and carries gift-wrapped transport. See [Transport & Recovery](#4--transport--recovery).
+- **Bitcoin scanner.** Reads Bitcoin L1, extracts inscribed `BatchInscription`s (Foundations §1.4), fetches each batch's `BatchBundle` from the relay mesh, verifies the publisher's `AggregateBatchProof`, and applies the inscribed `prev_root → new_root` transitions to maintain the global nullifier accumulator (Foundations §1.6). Verification is recursively trustless — every artefact is publicly checkable — and `BatchBundle` data availability is the only liveness dependency, mitigated by `k = 3` replication. See [On-chain Layer](#3--on-chain-layer).
+- **Prover.** Builds the per-account recursive validity proofs for transactions it is asked to construct. A node that *also* acts as a publisher additionally builds `AggregateBatchProof`s over collected member `SpendRecord`s. See [Proofs & State Transitions](#2--proofs--state-transitions).
+- **Nostr relay.** Stores and serves the off-chain `CoinProof` bundles and `BatchBundle`s, performs `detect_tag` discovery for coin bundles, and carries gift-wrapped transport. See [Transport & Recovery](#4--transport--recovery).
 - **Data store.** Persists bundles and rebuilt tree state; provides the operator's own backup ([Requirement 6](/requirements)).
 - **Capability-gated API.** Answers reads only against a valid ownership proof or view grant, and accepts transaction submissions. See [Access & Explorer](#5--access--explorer) and §6.4 below.
 
@@ -1281,7 +1355,7 @@ The node is the always-on workhorse. It **MUST** be runnable as a single self-co
 The wallet holds the **seed** and is the sole custodian of the SPEND branch (`A/0'`, i.e. `skᵢ` and `nk`; Foundations §1.2). Its responsibilities:
 
 - Derive all keys deterministically from the seed (Foundations §1.2); hold **no** node-specific state.
-- Sign each transition — produce `BIP-340(skᵢ, message)` over `message = inr ‖ ocr` (Foundations §1.4) — and compute nullifiers `nf = Hc("Nullifier", nk ‖ coin.identifier)`.
+- Sign each transition — produce `BIP-340(skᵢ, message)` over `message = inr ‖ ocr` (Foundations §1.4) with the sign-to-contract tweak that binds the spender's off-chain `ProofData` — and compute nullifiers `nf = Hc("Nullifier", nk ‖ coin.identifier)`. The resulting `SpendRecord` is handed to a publisher off-chain ([Transport & Recovery §4.6](#46-data-availability--replication-factor-k)); the wallet does **not** itself touch Bitcoin.
 - Delegate the operational bundle to its **own** node, or issue a scoped view grant to a **foreign** node (§6.2).
 - Fetch authoritative state from its node(s) and **independently verify** it against Bitcoin before signing or accepting a received coin ([Requirement 4](/requirements)).
 
@@ -1344,14 +1418,14 @@ Before it signs, the wallet **MUST** fetch the current authoritative state (the 
 
 ### 6.3 Node portability and multi-node operation
 
-[Requirement 10](/requirements) is met structurally: **a wallet depends on no node-specific state.** Every key, identifier, nullifier, and detection tag is derived from the seed (Foundations §1.2–§1.4), and the one global structure — the nullifier accumulator — is rebuildable by any node from the public chain alone (Foundations §1.6). Therefore:
+[Requirement 10](/requirements) is met structurally: **a wallet depends on no node-specific state.** Every key, identifier, nullifier, and detection tag is derived from the seed (Foundations §1.2–§1.4), and the one global structure — the nullifier accumulator — is reconstructable by any node from the chain of `BatchInscription` roots plus the content-addressed `BatchBundle`s served by the relay mesh (Foundations §1.6, [On-chain §3.6–§3.7](#36-chain-scanning)). The bundles are publicly verifiable (every `AggregateBatchProof` is a recursive PCD proof) and `k = 3` replicated, so the requirement reduces to reaching at least one honest replica per past batch — never trusting one.
 
 - A wallet **MAY** switch nodes at any time, by configuration alone, with no migration step. No node can lock a wallet in.
 - A wallet **MAY** use **multiple nodes simultaneously** — querying several, submitting through one or more.
 
-**Why multi-node is safe.** The wallet verifies every answer against Bitcoin (§6.2, [Requirement 4](/requirements)). An honest node returns verifiable truth; a dishonest one cannot forge a valid proof or a valid on-chain `SpendRecord`. So when the wallet fans a query out to several nodes, it **MUST** keep the answer that verifies and **MAY** ignore all others. This is the **"at least one honest node"** property: correctness holds as long as ≥1 queried node is honest. It depends on client-side verification — without it, more nodes would not help. The configurations this yields are tabulated in the [Trust Model](/architecture/trust-model).
+**Why multi-node is safe.** The wallet verifies every answer against Bitcoin (§6.2, [Requirement 4](/requirements)). An honest node returns verifiable truth; a dishonest one cannot forge a valid recursive proof, a valid `AggregateBatchProof`, or a valid on-chain `BatchInscription`. So when the wallet fans a query out to several nodes, it **MUST** keep the answer that verifies and **MAY** ignore all others. This is the **"at least one honest node"** property: correctness holds as long as ≥1 queried node is honest. It depends on client-side verification — without it, more nodes would not help. The configurations this yields are tabulated in the [Trust Model](/architecture/trust-model).
 
-**Selecting the latest state under multiple verifying answers.** Multi-node fan-out can return **more than one** answer that verifies — typically because the queried nodes are at different sync states (each holds a valid snapshot of the lineage at a different `send_counter`). The wallet **MUST** select as authoritative "latest" the answer with the **highest `send_counter`** among those whose anchoring `SpendRecord` is in state `completed` ([§3.10](#310-transaction-states)) before signing the next transition. Two verifying answers with the **same** `send_counter` but **different** `new_account_state_hash` are an account-level fork — the SPEND-key holder signed two parallel transitions at the same counter. A wallet that detects this **MUST NOT** sign a further transition until the user resolves it, because sole legitimate control of `sk₀` and `skᵢ` never produces equivocation; detection here means either operator error (the same seed driven from two wallet instances against stale state) or a custody breach of the SPEND branch. The protocol does **not** automatically pick a fork-winner; the choice is the holder's. When **no** candidate has a `completed` anchor (e.g. every recent spend is still within finality), the wallet **MAY** build the next transition against the highest-counter `pending` candidate, accepting the reorg risk that the inclusion block of the chosen prev state could be displaced before the §3.9 finality bound; deployments handling extreme value **SHOULD** wait for `completed` before extending.
+**Selecting the latest state under multiple verifying answers.** Multi-node fan-out can return **more than one** answer that verifies — typically because the queried nodes are at different sync states (each holds a valid snapshot of the lineage at a different `send_counter`). The wallet **MUST** select as authoritative "latest" the answer with the **highest `send_counter`** among those whose anchoring `BatchInscription` is in state `completed` ([§3.10](#310-transaction-states)) before signing the next transition. Two verifying answers with the **same** `send_counter` but **different** `new_account_state_hash` are an account-level fork — the SPEND-key holder signed two parallel transitions at the same counter. A wallet that detects this **MUST NOT** sign a further transition until the user resolves it, because sole legitimate control of `sk₀` and `skᵢ` never produces equivocation; detection here means either operator error (the same seed driven from two wallet instances against stale state) or a custody breach of the SPEND branch. The protocol does **not** automatically pick a fork-winner; the choice is the holder's. When **no** candidate has a `completed` anchor (e.g. every recent spend is still within finality), the wallet **MAY** build the next transition against the highest-counter `pending` candidate, accepting the reorg risk that the inclusion block of the chosen prev state could be displaced before the §3.9 finality bound; deployments handling extreme value **SHOULD** wait for `completed` before extending.
 
 ### 6.4 External interfaces (abstract)
 
@@ -1362,7 +1436,7 @@ The node exposes four interface families, specified here at an implementation-ne
 | **read.account** | wallet/node → node (pull) | an **ownership proof** (sign the challenge with `sk₀`) **or** an `op`-signed **view grant** | fetch `AccountState`, balances, owned coins, and their bundles | [Access & Explorer](#5--access--explorer) |
 | **read.proof** | wallet → node (pull) | ownership proof | fetch a `CoinProof` and its `inclusion_proof` for re-verification | [Access & Explorer](#5--access--explorer) · [Proofs](#2--proofs--state-transitions) |
 | **submit.tx** | wallet → node (push) | none (proof is self-authenticating) | submit a transition for proving and on-chain publication | [On-chain Layer](#3--on-chain-layer) |
-| **relay.\*** | any ↔ node (Nostr) | NIP-44 / NIP-59 envelope; `detect_tag` for discovery | publish/fetch off-chain bundles, gift-wrapped delivery, note discovery | [Transport & Recovery](#4--transport--recovery) |
+| **relay.\*** | any ↔ node (Nostr) | NIP-44 / NIP-59 envelope; `detect_tag` for `CoinProof` discovery; content-address (`bundle_locator`) for `BatchBundle` fetch | publish/fetch off-chain bundles (per-coin and per-batch), gift-wrapped delivery, note discovery, k-replication | [Transport & Recovery](#4--transport--recovery) |
 | **explorer.read** | explorer → mesh / node | a bearer view secret (`zkview` per coin, `zkavk` for full history) or a balance attestation, applied **client-side** | render a disclosed view: one transaction, full account history, or a balance | [Access & Explorer](#5--access--explorer) |
 
 The `read.account` path is **capability-gated**: a node **MUST** reject a request that does not present a valid ownership proof or `op`-signed view grant. Bearer view secrets (`zkview`/`zkavk`) and balance attestations are **not** node authorisations — the explorer applies them client-side to bundles obtained from the relay mesh or a holder, so `explorer.read` widens only what the secret-holder can decrypt from already-public material ([Access & Explorer §5.1](#51-capability-gated-pull)). The `submit.tx` path needs no capability because the submitted transition carries its own validity proof and self-authenticating `SpendRecord`; a node **MUST** verify that proof before publishing.
@@ -1414,7 +1488,7 @@ The human-readable `name` is **never** placed on-chain (Foundations §1.4).
 
 ### 6.6 Threat model and trust configurations
 
-Custody is **cryptographically safe in every configuration**: no node holds a SPEND-branch key (Foundations §1.2), value integrity is enforced by proof soundness and the nullifier accumulator, and every spend publishes its nullifier in an immutable on-chain `SpendRecord`. The three wallet–node configurations differ only in **privacy** and in **whom you trust for correctness and availability** — never in custody. The authoritative matrix lives in the [Trust Model](/architecture/trust-model); summarised:
+Custody is **cryptographically safe in every configuration**: no node holds a SPEND-branch key (Foundations §1.2), value integrity is enforced by proof soundness and the nullifier accumulator, and every spend's nullifier reaches the accumulator only via a publisher `AggregateBatchProof` anchored by an immutable on-chain `BatchInscription`. The three wallet–node configurations differ only in **privacy** and in **whom you trust for correctness and availability** — never in custody. The authoritative matrix lives in the [Trust Model](/architecture/trust-model); summarised:
 
 - **Own wallet + own node.** Full privacy, trustless correctness, safe custody. The node sees your plaintext, but you are the operator, so nothing leaks.
 - **Own wallet + multiple foreign nodes.** Plaintext is disclosed to all of them; correctness is safe **as long as ≥1 is honest** (§6.3); custody safe.
@@ -1461,12 +1535,18 @@ A short, scannable reference for the jargon, notation, and identifier names used
 - **AccountState** — `{owner, balances, current_pubkey, send_counter, coin_history_root}`; private bookkeeping, never on-chain in plaintext. Its hash `ash` is bound by every transition's proof. ([§1.5](#15-core-data-structures))
 - **AccountUpdateProof** — the proof type for any transition after the first; consumes the account's previous proof and emits a new one (PCD). ([§2.2](#22-proof-types))
 - **`address`** — `H(Pk₀)`; the protocol's only identity, fixed at account creation, encoded as Bech32m `zk`. ([§1.4](#14-identifiers-and-hashes))
+- **AggregateBatchProof** — recursive PCD proof produced by a publisher's batch-aggregation circuit `C_batch` that attests, in zero knowledge, every member `SpendRecord`'s per-account validity, the integrity of the batch's nullifier set, the binding to the bundle's `bundle_locator`, and that `new_root = SMT.insert_many(prev_root, batch_nullifiers)`; constant-size in member count `m`, ~100 KB typical. ([§2.2](#22-proof-types), [§3.1](#31-the-on-chain-object))
 - **`ash` (account_state_hash)** — `Hc("AccountState", serialize(AccountState))`. ([§1.4](#14-identifiers-and-hashes), [§1.7.4](#174-serializeaccountstate))
 - **`asset_id`** — `Hc("AssetId", genesis_tag ‖ Pk₀ ‖ H(name) ‖ decimals ‖ issuance_version)`; globally unique per asset, binds the creator's `Pk₀` and the issuance-schema version, never carries the human-readable name on-chain. ([§1.4](#14-identifiers-and-hashes), [§6.5](#65-issuance--versioned-schemas-v1-minimal))
 - **`balances`** — `map<asset_id, amount>` in `AccountState`; the account's multi-asset bookkeeping. ([§1.5](#15-core-data-structures))
+- **BatchBundle** — `{prev_root, new_root, spend_records, aggregate_proof, nullifiers (derived view)}`; off-chain, content-addressed (`bundle_locator = Hc("BatchBundle", serialize(BatchBundle))` with canonical preimage `prev_root ‖ new_root ‖ u32-be(m) ‖ SpendRecord₁ ‖ … ‖ SpendRecord_m` — the derived `nullifiers` view and the `aggregate_proof` are excluded from the preimage; see [§1.4](#14-identifiers-and-hashes)), `k = 3` replicated; carries every member `SpendRecord` plus the `AggregateBatchProof`. ([§1.4](#14-identifiers-and-hashes), [§3.1](#31-the-on-chain-object), [§4.6](#46-data-availability--replication-factor-k))
+- **BatchInscription** — `{publisher_pubkey, prev_root, new_root, bundle_locator, block_anchor, signature}`; the **only** object zkCoins writes to Bitcoin; constant 231 bytes per batch; anchors the publisher's accumulator state transition. ([§3.1](#31-the-on-chain-object), [§3.5](#35-inscription-format))
 - **Bech32m** — text encoding used for addresses (`zk`), view grants (`zkgrant`), per-coin view caps (`zkview`), bearer account view keys (`zkavk`). ([§1.7.7](#177-bech32m-and-bitcoin-conventions))
 - **`block_anchor`** — `{block_hash, height}` of the Bitcoin tip a batch's proofs are built against; bounded by `N = 100` blocks behind the inclusion block. ([§3.5](#35-inscription-format))
+- **Bundle (BatchBundle)** — see *BatchBundle*.
 - **Bundle (CoinProof)** — `{coin, proof, inclusion_proof, creating_prev_ash, epk, ciphertext, detect_tag}`; the off-chain object that is *simultaneously* the recipient's receipt and its spend credential. ([§1.5](#15-core-data-structures))
+- **`bundle_locator`** — `Hc("BatchBundle", serialize(BatchBundle))`; the 32-byte content address of a `BatchBundle`, inscribed in every `BatchInscription` so any scanner can fetch and verify the bundle. ([§3.1](#31-the-on-chain-object), [§3.5](#35-inscription-format))
+- **`C_batch`** — the publisher's batch-aggregation circuit; produces the `AggregateBatchProof` over `m` member `SpendRecord`s and their per-account proofs. Verifier data is fixed (network-tagged for chain separation). ([§2.2](#22-proof-types))
 - **Cap (per coin)** — see *capability*; the smallest is `zkview` per-coin. ([§5.3](#53-per-coin-view-capability))
 - **Capability** — a cryptographic permission to view some Private record (ownership proof, view grant, bearer view key, per-coin view cap, balance attestation). ([§5.4](#54-capabilities-at-a-glance))
 - **Capability-gated pull** — the node API serves Private records only after the requester presents a valid capability. ([§5.1](#51-capability-gated-pull))
@@ -1475,22 +1555,22 @@ A short, scannable reference for the jargon, notation, and identifier names used
 - **`coin.identifier`** — `Hc("Coin", prev_account_state_hash ‖ asset_id ‖ coin_index)`; the `prev_account_state_hash` is the **prior** `ash` of the transition that creates the coin (breaks the would-be recursion with `new_ash`, see [§1.4](#14-identifiers-and-hashes)). Fixed at creation. ([§1.4](#14-identifiers-and-hashes))
 - **CoinProof** — see *Bundle*.
 - **CoinTemplate** — `{recipient, amount, asset_id}`; the sender's per-payee instruction inside a `Send`. ([§1.5](#15-core-data-structures))
-- **`completed` (transaction state)** — `SpendRecord` is admitted under §3.5+§3.6 AND its inclusion block has ≥ 6 confirmations; the only state in which a receiver MAY credit; absolute under the "no reorgs deeper than 5 blocks" assumption. ([§3.10](#310-transaction-states))
+- **`completed` (transaction state)** — `BatchInscription` is admitted under §3.5+§3.6 (publisher signature + `prev_root` continuity + bundle binding + aggregate proof all verify) AND its inclusion block has ≥ 6 confirmations; member `SpendRecord`s inherit this state; the only state in which a receiver MAY credit; absolute under the "no reorgs deeper than 5 blocks" assumption. ([§3.10](#310-transaction-states))
 - **Cyclic recursion** — one fixed circuit verifies proofs of itself; verifier data is constant, so proof size and verification time are constant. ([§2.2](#22-proof-types))
 - **DeliveryEvent** — Nostr event carrying `{detect_tag, epk, blob_id, blob_locators, ack_nonce}` plaintext, NIP-44 encrypted to `IVPK`, NIP-59 gift-wrapped under an ephemeral key. The `ack_nonce` is a fresh sender-chosen 32-byte value the recipient echoes in the ACK signature, binding the ACK to this delivery attempt. ([§4.2](#42-bundle-delivery))
 - **`detect_tag`** — `Hc("DetectTag", dk ‖ epk)`; per-coin, all-distinct, recipient-side scan only — no relay filter and no cross-coin linkability. ([§1.3](#13-per-coin-keys-note-encryption--detection), [§4.4](#44-note-discovery))
 - **`dk` (detection key)** — `HKDF("DetectKey", ivk)`; lets a holder of `ivk` recognise its own incoming coins by recomputing `detect_tag` per candidate event. ([§1.3](#13-per-coin-keys-note-encryption--detection))
 - **`epk` (ephemeral pubkey)** — `esk·G`, drawn fresh per output coin; the recipient's `K_tx` and `detect_tag` are derived from it. ([§1.3](#13-per-coin-keys-note-encryption--detection))
-- **`failed` (transaction state)** — `SpendRecord` rejected by the scan (parser, `block_anchor` bounds, signature, `inr` binding, canonical order, or first-spend-wins violated); receiver MUST NOT credit; forward-sticky in time, can only flip via reorg. ([§3.10](#310-transaction-states))
+- **`failed` (transaction state)** — `BatchInscription` rejected by the scan (parser, `block_anchor` bounds, publisher signature, `prev_root` mismatch, bundle binding, or aggregate proof violated); member `SpendRecord`s inherit this state; receiver MUST NOT credit; forward-sticky in time, can only flip via reorg. ([§3.10](#310-transaction-states))
 - **Field, field element** — a value in 𝔽 (Goldilocks, `p = 2^64 − 2^32 + 1`); a Poseidon digest is **four** field elements (32 bytes). ([§1.1](#11-cryptographic-primitives), [§1.7.1](#171-poseidon-instance-and-digest-encoding))
 - **Fuzzy message detection (FMD)** — OPTIONAL probabilistic relay-side pre-filter; reduces the recipient's download volume, not its linkability (the per-coin scheme already has none). ([§1.3](#13-per-coin-keys-note-encryption--detection), [§4.7](#47-metadata-and-privacy-tradeoffs))
 - **Goldilocks** — the proof field `𝔽` with prime `p = 2^64 − 2^32 + 1`; pinned for Poseidon. ([§1.1](#11-cryptographic-primitives))
-- **Half-aggregation** — non-interactive compression of many BIP-340 signatures into one shared aggregate scalar `s_agg`, retaining each `Rⱼ`. ([§3.3](#33-half-aggregation))
+- **Half-aggregation** — non-interactive compression of many BIP-340 signatures into one shared aggregate scalar `s_agg`, retaining each `Rⱼ`; used **off-chain** inside the publisher's `AggregateBatchProof` witness as a proving-cost optimisation. ([§3.3](#33-off-chain-signature-handling))
 - **`Hc`** — see *Notation*.
 - **HKDF** — HKDF-SHA-256, used for symmetric/derived secrets (`K_tx`, `dk`). ([§1.1](#11-cryptographic-primitives))
 - **InitialProof** — the first transition of an account; `prev_proof` is absent and `prev_account_state` is the canonical empty account. ([§2.2](#22-proof-types))
 - **`inr` (input_nullifiers_root)** — Poseidon Merkle root over a transition's spent `nf`s under tag `NullifiersRoot`. ([§1.4](#14-identifiers-and-hashes), [§1.7.5](#175-poseidon-merkle-tree-used-for-ocr-and-inr))
-- **Inscription** — Taproot commit/reveal envelope whose witness payload starts with the 2-byte marker `0x42 0x42` and carries `SpendRecord`s. ([§3.5](#35-inscription-format))
+- **Inscription** — Taproot commit/reveal envelope whose witness payload starts with the 2-byte marker `0x42 0x42` and carries one constant-size `BatchInscription`. ([§3.5](#35-inscription-format))
 - **Invoice** — `{amount, recipient, asset_id, memo?, pk0, ivpk, op_pubkey, relays, addr_sig, sig}`; the off-chain payer-facing addressing object. `addr_sig` is a BIP-340 signature by `sk₀` that chains the address-holder to every field, including the choice of `ivpk` and `op_pubkey`; `sig` is the per-issuance BIP-340 signature by `op` that the recipient's online relay applies. Both are required. ([§1.5](#15-core-data-structures), [§4.3](#43-addressing-for-delivery))
 - **`IssuanceTerms`** — the versioned record bound to an `asset_id` that fixes its mint rules. v1 is creator-only with no protocol-enforced cap, quantum, or time window — `{asset_id, issuance_version=1, name_hash, decimals, terms_hash}`. Later versions MAY add protocol-enforced supply rules. ([§6.5](#65-issuance--versioned-schemas-v1-minimal))
 - **`issuance_version`** — `u8` schema version under which an asset is created (`1` in this spec); bound into `asset_id` so coins minted under different versions are distinct. ([§1.4](#14-identifiers-and-hashes), [§6.5](#65-issuance--versioned-schemas-v1-minimal))
@@ -1499,34 +1579,38 @@ A short, scannable reference for the jargon, notation, and identifier names used
 - **`K_tx`** — `HKDF("NoteKey", ss ‖ epk)`; per-coin symmetric note key; decrypts exactly one coin's ciphertext. ([§1.3](#13-per-coin-keys-note-encryption--detection))
 - **Lineage (account)** — the account's chain of recursive proofs, each consuming its predecessor; carried in constant size by PCD. ([§2.2](#22-proof-types))
 - **`message`** — `inr ‖ ocr`; the BIP-340-signed payload of a `SpendRecord` (64 bytes). ([§1.4](#14-identifiers-and-hashes))
-- **Mint** — the issuance transition; produces a creator-owned coin under the asset's `IssuanceTerms_v1` (the creator of the asset is its sole minter; anyone can create their own asset, no one can mint someone else's); publishes an empty `nullifiers` list on-chain. ([§2.3.1](#231-mint--issuance), [§6.5](#65-issuance--versioned-schemas-v1-minimal))
+- **Mint** — the issuance transition; produces a creator-owned coin under the asset's `IssuanceTerms_v1` (the creator of the asset is its sole minter; anyone can create their own asset, no one can mint someone else's); spends no coin, has an empty `nullifiers` list, and does not require a `BatchInscription` — its receiver verifies it directly against the recursive `InitialProof`. A creator MAY optionally batch a mint into a `BatchInscription` for a publicly anchored "first appearance"; this is publisher policy, not protocol-required. ([§2.3.1](#231-mint--issuance), [§6.5](#65-issuance--versioned-schemas-v1-minimal))
+- **`mint-verified` (transaction state)** — a coin produced by a non-batched mint ([§2.3.1](#231-mint--issuance)) whose `InitialProof` has been re-verified by the receiver. No `BatchInscription` exists; cryptographic safety is identical to `completed` but there is no on-chain anchor. Explorers MUST render `mint-verified` distinct from `completed`/`pending`/`failed` so the user understands the absence of a chain anchor. Any subsequent spend of the mint coin is anchored normally. ([§3.10](#310-transaction-states))
 - **MMR** — *deprecated*; no Merkle Mountain Range is used in v1 (the v0 Commitment-MMR was removed; see [§1.6](#16-trees-one-global-structure-one-per-account-structure)).
 - **`NAV(tip)`** — `(accumulator, tip_block_hash, tip_height)`; the accumulator's value at a stated Bitcoin tip; a non-membership answer is meaningful only relative to a `NAV`. ([§3.7](#37-the-nullifier-accumulator))
 - **`nf` (nullifier)** — `Hc("Nullifier", nk ‖ coin.identifier)`; revealed in the clear when the coin is spent, unlinkable to the coin without `nk`. ([§1.4](#14-identifiers-and-hashes))
 - **NIP-44 v2** — encrypted message format (ECDH-secp256k1 → HKDF-SHA-256 → ChaCha20 + HMAC-SHA-256); used for the delivery payload and acknowledgements. ([§1.1](#11-cryptographic-primitives), [§4.2](#42-bundle-delivery))
 - **NIP-59** — Nostr gift-wrap; outer envelope under a fresh ephemeral key so a relay sees neither sender nor recipient. ([§1.1](#11-cryptographic-primitives), [§4.2](#42-bundle-delivery))
 - **`nk`** — nullifier key (SPEND branch, account-level); used only in-circuit to compute `nf`s. ([§1.2](#12-key-hierarchy))
-- **Nullifier accumulator** — global, sorted-key SMT over every published `nf`; rebuilt by every node directly from the chain; the only global structure. ([§1.6](#16-trees-one-global-structure-one-per-account-structure), [§3.7](#37-the-nullifier-accumulator), [§1.7.6](#176-nullifier-accumulator-sparse-merkle-tree))
+- **Nullifier accumulator** — global, 256-bit-depth SMT over every admitted `nf`; advanced by inscribed `prev_root → new_root` transitions whose validity is attested by each batch's `AggregateBatchProof`; the only global structure. ([§1.6](#16-trees-one-global-structure-one-per-account-structure), [§3.7](#37-the-nullifier-accumulator), [§1.7.6](#176-nullifier-accumulator-sparse-merkle-tree))
 - **`ocr` (output_coins_root)** — Poseidon Merkle root over a transition's output `coin.identifier`s under tag `CoinsRoot`. ([§1.4](#14-identifiers-and-hashes), [§1.7.5](#175-poseidon-merkle-tree-used-for-ocr-and-inr))
 - **`op`** — operational/Nostr identity key; held by the node; signs view grants and acknowledgements; cannot spend. ([§1.2](#12-key-hierarchy))
 - **`ovk`** — outgoing viewing key (VIEW branch); recovers outgoing-coin plaintext; cannot spend. ([§1.2](#12-key-hierarchy))
 - **Ownership proof** — a BIP-340 signature by `sk₀` over a node-issued challenge; grants the subject's full Private view. ([§5.1(a)](#a-ownership-proof))
+- **Path A (verifier path)** — a verifier that maintains the full nullifier accumulator itself by running §3.6 against every admitted `BatchInscription`, fetching each `BatchBundle`, verifying each `AggregateBatchProof`, and applying the resulting `prev_root → new_root` transition. Answers `(non-)membership` queries by direct local lookup. Storage grows with admitted nullifiers. ([§3.7](#37-the-nullifier-accumulator))
+- **Path B (verifier path)** — a light-client verifier that holds only the on-chain inscribed `new_root` sequence and asks any Path-A node for a self-verifying SMT inclusion or non-inclusion path; the answering node cannot forge a path against the on-chain root, so correctness holds against any honest answering node. ([§3.7](#37-the-nullifier-accumulator))
 - **PCD (Proof-Carrying Data)** — a recursion-based proof system: each transition consumes a previous proof and emits a new one; one constant-size proof attests the entire history. ([§2](#2--proofs--state-transitions))
-- **`pending` (transaction state)** — `SpendRecord` classified as neither `completed` nor `failed`: either still off-chain or inclusion block has < 6 confirmations; receiver MUST NOT credit, but its `nf`s are already in the nullifier accumulator (double-spend protection applies). ([§3.10](#310-transaction-states))
+- **`pending` (transaction state)** — `BatchInscription` classified as neither `completed` nor `failed`: either inclusion block has < 6 confirmations, or its `BatchBundle` has not yet been fetched and verified; member `SpendRecord`s inherit this state; receiver MUST NOT credit. If the bundle has verified (only confirmations are missing), the batch's `nf`s are already in the nullifier accumulator and double-spend protection applies. ([§3.10](#310-transaction-states))
 - **`Pkᵢ`** — `skᵢ·G`; the rotating per-transition signing pubkey (x-only); `Pk₀` fixes the address. ([§1.2](#12-key-hierarchy))
+- **`Pkₚ`** — `skₚ·G`; the publisher's long-lived BIP-340 x-only identity key; signs each `BatchInscription` (sign-to-contract bound to the off-chain `AggregateBatchProof`); MAY rotate per batch for publisher privacy. ([§3.2](#32-batchinscription-signing-bip-340--sign-to-contract))
 - **Poseidon** — algebraic hash over Goldilocks used inside the proof circuit; reference instance is Plonky2's `PoseidonGoldilocksConfig`. ([§1.1](#11-cryptographic-primitives), [§1.7.1](#171-poseidon-instance-and-digest-encoding))
 - **`ProofData`** — `{new_account_state_hash, output_coins_root, input_nullifiers_root, coin_history_root}`; the proof's public inputs. ([§1.4](#14-identifiers-and-hashes), [§2.1 clause 9](#21-the-compliance-predicate))
-- **Publisher** — permissionless agent that batches `SpendRecord`s into Bitcoin inscriptions; cannot forge, only censor or delay. ([§3.4](#34-the-publisher))
+- **Publisher** — permissionless agent that aggregates off-chain `SpendRecord`s into a `BatchBundle`, builds the `AggregateBatchProof`, and inscribes the constant-size `BatchInscription` on Bitcoin; cannot forge (the aggregate proof must verify), only censor or delay. ([§3.4](#34-the-publisher))
 - **Recursive verification** — see *PCD*; clause 1 of the predicate. ([§2.1](#21-the-compliance-predicate))
 - **`send_counter`** — monotonic counter inside `AccountState`; increments per transition. ([§1.5](#15-core-data-structures))
 - **`serialize(AccountState)`** — canonical byte serialization; preimage for `ash`. ([§1.7.4](#174-serializeaccountstate))
-- **Sign-to-contract (S2C)** — the BIP-340 signature's nonce is tweaked by `t = H(R' ‖ H(ProofData))`, anchoring the off-chain proof to this exact `SpendRecord` with no extra on-chain bytes. ([§3.2](#32-spendrecord-signing-bip-340--sign-to-contract))
+- **Sign-to-contract (S2C)** — a BIP-340 signature's nonce is tweaked by `t = H(R' ‖ digest)`, anchoring an off-chain object to that signature with no extra on-chain bytes. Used twice in zkCoins: by each spender to bind their off-chain `ProofData` into the `SpendRecord` signature (verified in-circuit by the publisher's `AggregateBatchProof`), and by the publisher to bind the off-chain `AggregateBatchProof` into the `BatchInscription` signature ([§3.2](#32-batchinscription-signing-bip-340--sign-to-contract)). ([§3.2](#32-batchinscription-signing-bip-340--sign-to-contract))
 - **`skᵢ`** — rotating per-transition signing key (SPEND branch); `sk₀` is the initial key that fixes the address. ([§1.2](#12-key-hierarchy))
 - **SMT (Sparse Merkle Tree)** — 256-bit-depth Merkle tree with default-hashed empty subtrees; used for the coin-history root and the global nullifier accumulator. ([§1.6](#16-trees-one-global-structure-one-per-account-structure), [§1.7.6](#176-nullifier-accumulator-sparse-merkle-tree))
-- **SpendRecord** — `{public_key, nullifiers, signature, message}`; the **only** object zkCoins writes to Bitcoin. ([§1.4](#14-identifiers-and-hashes), [§3.1](#31-the-on-chain-object))
+- **SpendRecord** — `{public_key, nullifiers, signature, message}`; an **off-chain** object: a spender produces one per transition and hands it to a publisher; the publisher aggregates many into a `BatchBundle` whose `AggregateBatchProof` is the actual artefact that anchors them to Bitcoin via a `BatchInscription`. ([§1.4](#14-identifiers-and-hashes), [§3.4](#34-the-publisher))
 - **`ss` (shared secret)** — `ECDH(esk, IVPK) = ECDH(ivk, epk)`; the input to `K_tx`. ([§1.3](#13-per-coin-keys-note-encryption--detection))
 - **Tag (domain-separation tag)** — the string `"zkCoins/v1/<context>"` prefixed to every `Hc`/`HKDF` call; reusing a tag for two purposes is forbidden. ([§1.1](#11-cryptographic-primitives))
-- **Transaction state** — see `completed`, `failed`, `pending` ([§3.10](#310-transaction-states)).
+- **Transaction state** — see `completed`, `failed`, `pending`, and `mint-verified` ([§3.10](#310-transaction-states)).
 - **Transition** — one execution of the compliance predicate `C` (mint, send, or receive). ([§2.3](#23-state-transitions))
 - **View grant** — `op`-signed delegated viewing key (Bech32m `zkgrant`), scoped by `asset_ids` and time. ([§5.2](#52-view-grant))
 - **`zkavk`** — bearer account view key (Bech32m), payload `ivk ‖ ovk`; sees the full account history; non-revocable. ([§5.8](#58-address-view-full-history))
@@ -1621,43 +1705,46 @@ For each value below, the formula is fixed; the bytes MUST be produced by the re
 | `ocr@0` | Poseidon Merkle root over `[coin.identifier@0]`, tag `CoinsRoot` (one leaf, padded to one) per [§1.7.5](#175-poseidon-merkle-tree-used-for-ocr-and-inr) | `<REGEN>` |
 | `inr@0` | Poseidon Merkle root over the empty list of nullifiers (a mint), tag `NullifiersRoot` — equals the `L_⊥` leaf-hash | `<REGEN>` |
 | `message@0` | `inr@0 ‖ ocr@0` (concatenation of the two 32-byte values above) | derived from the two above |
-| `H(ProofData@0)` | per [On-chain §3.2](#32-spendrecord-signing-bip-340--sign-to-contract): `SHA-256(ash@0 ‖ ocr@0 ‖ inr@0 ‖ coin_history_root@0)` | derived from the four above |
+| `H(ProofData@0)` | per [On-chain §3.2](#32-batchinscription-signing-bip-340--sign-to-contract): `SHA-256(ash@0 ‖ ocr@0 ‖ inr@0 ‖ coin_history_root@0)` | derived from the four above |
 
 ### V.5 `SpendRecord` byte layout (pinned for the SHA-256 / structural parts)
 
-For the InitialProof (mint) using the values above, the on-chain `SpendRecord` (format `0x00`, raw, per [§3.5](#35-inscription-format)) per record:
+The `SpendRecord` is an **off-chain** object: a spender produces it and hands it to a publisher (see [§3.4](#34-the-publisher), [§4.6](#46-data-availability--replication-factor-k)). It does not appear on Bitcoin directly. Its canonical byte serialisation matters because the publisher's `AggregateBatchProof` ([§2.2](#22-proof-types)) binds each member SpendRecord into the proof transcript, and the `BatchBundle` (whose `bundle_locator` is inscribed) serialises every member SpendRecord deterministically.
+
+For a send that spends one input coin, the per-record byte layout inside a `BatchBundle` is:
 
 ```
-Pkⱼ          (32B): 5dcffebb708081e3cc78b22f54d260467022c095a67da835f50713a36ee40746   ← Pk₀_sample
-                                                                                     (initial transition signs with Pk₀)
-signatureⱼ   (64B): <REGEN — BIP-340(skᵢ, message@0) with S2C tweak t = H(R' ‖ H(ProofData@0))>
-messageⱼ     (64B): <message@0 = inr@0 ‖ ocr@0, both <REGEN>>
-kⱼ           ( 1B): 00                                                                ← a mint spends 0 coins
-nullifiersⱼ  ( 0B): (empty)                                                            ← kⱼ = 0
-                                                                                     
-Record size: 161 bytes for a raw mint (32 + 64 + 64 + 1 + 0).
+Pkᵢ          (32B): <Pkᵢ — spender's current per-transition signing pubkey, x-only>
+signature    (64B): <REGEN — BIP-340(skᵢ, message) with S2C tweak t = H(R' ‖ H(ProofData))>
+message      (64B): <message = inr ‖ ocr>
+k            ( 1B): 01                                                                ← one input coin
+nullifiers   (32B): <nf = Hc("Nullifier", nk ‖ coin.identifier)>
+
+Record size: 193 bytes for a typical single-input spend (32 + 64 + 64 + 1 + 32·k = 32 + 64 + 64 + 1 + 32).
 ```
 
-For a send that spends one input coin (`kⱼ = 1`), the record additionally carries that single 32-byte `nf` after `kⱼ`, for **193 bytes** raw — consistent with [§3.5](#35-inscription-format).
+The mint InitialProof case has `k = 0` (an empty nullifier list, 161 bytes total) and need not be batched at all: a creator who chooses not to anchor a mint hands the receiver only the `CoinProof` bundle, and the mint's validity is checked by direct recursive verification of the `InitialProof` ([§2.3.1](#231-mint--issuance)).
 
-### V.6 Inscription header (pinned)
+### V.6 `BatchInscription` byte layout (pinned for the structural parts)
 
-A batch carrying `m = 1` raw record, anchored at Bitcoin block height `0x000A1234` (illustrative) with a fixed sample block hash:
+A `BatchInscription` carries a constant-size 231-byte payload regardless of the number of member SpendRecords in the batch. Sample values are illustrative; the publisher's identity key and S2C-tweaked signature are produced by the publisher and `<REGEN>`:
 
 ```
-Header (42 bytes):
+Payload (231 bytes):
    marker                    ( 2B): 4242
-   version                   ( 1B): 01
-   format                    ( 1B): 00
-   count m                   ( 2B): 0001
-   block_anchor.block_hash   (32B): <Bitcoin chain-specific; pinned per deployment, not by this spec>
-   block_anchor.height       ( 4B): 000a1234
+   version                   ( 1B): 02                                ← Variant-2 batch inscription
+   publisher_pubkey          (32B): <Pkₚ — publisher's BIP-340 x-only identity key>
+   prev_root                 (32B): <accumulator root the batch builds on, §3.7>
+   new_root                  (32B): <resulting accumulator root after this batch, §3.7>
+   bundle_locator            (32B): <Hc("BatchBundle", serialize(BatchBundle)) — content address>
+   block_anchor.block_hash   (32B): <REGEN — Bitcoin chain-specific; pinned per deployment, not by this spec>
+   block_anchor.height       ( 4B): <REGEN — illustrative u32 big-endian Bitcoin block height>
+   signature                 (64B): <REGEN — BIP-340(skₚ, batch_message) with S2C tweak t = H(R' ‖ H_agg)>
 
-Body follows: m × <SpendRecord bytes> as in §V.5.
-Total inscription = 42 + 161 = 203 bytes for a mint with one record.
+Total inscription: 231 bytes inscribed, ENTIRELY in witness data, ~58 vBytes amortised.
 ```
 
-This matches the size note in [§3.5](#35-inscription-format).
+The `batch_message` preimage (covered by the BIP-340 challenge) is the fixed concatenation `prev_root ‖ new_root ‖ bundle_locator ‖ block_anchor.block_hash ‖ block_anchor.height` (160 bytes total). The S2C input `H_agg = H(serialize(AggregateBatchProof))` is computed once over the canonical serialisation of the publisher's recursive proof carried in the `BatchBundle`. This matches the size note in [§3.5](#35-inscription-format).
 
 ### V.7 How to use these vectors
 
@@ -1665,7 +1752,7 @@ This matches the size note in [§3.5](#35-inscription-format).
 2. Compute each `<REGEN>` row of V.4, in order (later rows depend on earlier).
 3. Substitute the regenerated values into V.3 (`asset_id`, `coin_history_root`) and V.5 (`message@0`).
 4. Compute `ash@0` from the resulting `serialize(AccountState)` per [§1.7.4](#174-serializeaccountstate) and verify it matches the V.4 entry.
-5. Compute the BIP-340 signature with sign-to-contract per [§3.2](#32-spendrecord-signing-bip-340--sign-to-contract) and fill in V.5's `signature`. The signing key is a real secp256k1 key derived from a real BIP-32 path; a separate test-key fixture is needed because the V.1 illustrative `Pk₀_sample` is a raw 32-byte string, not a curve point.
+5. Compute the BIP-340 signature with sign-to-contract per [§3.2](#32-batchinscription-signing-bip-340--sign-to-contract) and fill in V.5's `signature`. The signing key is a real secp256k1 key derived from a real BIP-32 path; a separate test-key fixture is needed because the V.1 illustrative `Pk₀_sample` is a raw 32-byte string, not a curve point.
 6. Submit the completed vectors back to the spec as a PR; once two independent implementations agree on the same hex, the reference is locked.
 
 Until V.4 is filled in by a reference implementation, no `<REGEN>` row should be treated as authoritative. **Do not invent Poseidon digests.** A wrong vector is worse than no vector: it would lead two implementations to validate against each other's mistakes.
