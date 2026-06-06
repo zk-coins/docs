@@ -188,7 +188,7 @@ Notation:
 - **Identifiers and per-coin derivations** — `AssetId`, `Coin`, `AccountState`, `Nullifier`, `NoteKey`, `DetectKey`, `DetectTag`.
 - **Per-transition Merkle roots** — `CoinsRoot`, `CoinsRoot/Leaf`, `CoinsRoot/Node`, `NullifiersRoot`, `NullifiersRoot/Leaf`, `NullifiersRoot/Node`.
 - **Sparse Merkle accumulators** — `NfAcc/Leaf`, `NfAcc/Node` (global nullifier accumulator, §1.7.6); `CoinHist/Leaf`, `CoinHist/Node` (per-account coin-history SMT, §1.7.6).
-- **On-chain / off-chain protocol messages** — `Grant`, `Invoice`, `PullChallenge`, `PullHost` (channel binding, [Access & Explorer §5.1](#51-capability-gated-pull)), `IssuanceTerms`, `HalfAgg`, `BalanceProof`.
+- **On-chain / off-chain protocol messages** — `Grant`, `Invoice`, `PullChallenge`, `PullHost` (channel binding, [Access & Explorer §5.1](#51-capability-gated-pull)), `IssuanceTerms`, `HalfAgg`, `BalanceProof`, `Ack` (delivery acknowledgement, §4.2).
 
 Reusing a context for two purposes is forbidden. Where a later section writes shorthand such as `Hc("Coin", …)` or `H("Invoice" ‖ …)`, this is equivalent to the full prefixed form `Hc("zkCoins/v1/Coin", …)` / `H("zkCoins/v1/Invoice" ‖ …)`; **implementations MUST use the full prefixed string**, the shorthand is a notation convenience. The address derivation `address = H(Pk₀)` ([§1.4](#14-identifiers-and-hashes)) is the one identifier with no context prefix — by design, since `Pk₀` itself is its input and the value is already SHA-256-collision-bound.
 
@@ -774,7 +774,7 @@ Any node rebuilds the global **nullifier accumulator** from Bitcoin alone, trust
 3. **Verify signatures.** For `format 0x00`, verify each BIP-340 signature `signatureⱼ` against `(Pkⱼ, messageⱼ)`. For `format 0x01`, verify the single multi-scalar aggregate check of §3.3. A record whose signature does not verify MUST be discarded.
 4. **Verify the nullifier binding.** For each surviving record, recompute the Poseidon root over its published `nullifiersⱼ` and check it equals the `inr` half of `messageⱼ` (§3.5). A record failing this check MUST be discarded — its published list does not match what was signed.
 5. **Order.** Establish a total order over surviving records: primary key = Bitcoin block height; secondary = index of the reveal transaction within the block; tertiary = the record's position `j` within its payload. This order is a deterministic function of the public chain, so every node processes nullifiers in the same sequence.
-6. **Insert nullifiers (first-spend-wins).** In that order, for each record, insert each published `nf` into the global nullifier accumulator ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)). If an `nf` is **already present**, that record is a double-spend attempt: the scanner MUST treat the whole record as **invalid** — its `nf`s are not re-inserted and its output coins are treated as never created. The first on-chain occurrence of an `nf`, in this canonical order, is the one and only spend of that coin.
+6. **Insert nullifiers (first-spend-wins).** In that order, for each record, insert each published `nf` into the global nullifier accumulator ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)). If, during a record's processing, an `nf` is found **already present** in the accumulator, that record is a double-spend attempt: the scanner MUST treat the whole record as **invalid**, MUST roll back any of this record's `nf`s that were inserted earlier within this same record's processing (so the accumulator state after the record is identical to its state immediately before), and MUST treat its output coins as never created. This rollback rule applies both to collisions against earlier-admitted records and to a record listing the same `nf` twice within its own `nullifiersⱼ` list. The first on-chain occurrence of an `nf`, in this canonical order, is the one and only spend of that coin.
 
 Because steps 1–6 are a pure function of confirmed Bitcoin data, two honest nodes scanning the same chain MUST arrive at the **identical** nullifier accumulator — no node-supplied root, and no foreign off-chain data, is ever consulted. A wallet or explorer therefore computes the accumulator itself, or checks any served (non-)membership answer against its own copy, never by trusting the server ([Requirement 4](/requirements), [Requirement 10](/requirements)).
 
@@ -871,11 +871,13 @@ A bundle is delivered as a small Nostr control event that **references** the enc
      detect_tag,                 // per-coin detection tag (Foundations §1.3)
      epk,                        // ephemeral pubkey for the coin (Foundations §1.3)
      blob_id,                    // content hash of the encrypted bundle
-     blob_locators               // ordered hints to nodes/stores holding the blob
+     blob_locators,              // ordered hints to nodes/stores holding the blob
+     ack_nonce                   // 32 random bytes, sender-chosen; binds the ACK to this
+                                 //   delivery attempt (§4.2 ACK rule). Fresh per retry.
    }
    ```
 
-   The payload carries **no** amount, asset, recipient address, or sender — those live only inside `ciphertext`. Note that `K_tx` itself is **never** placed in the delivery event; the recipient re-derives it from `ivk` and `epk`.
+   The payload carries **no** amount, asset, recipient address, or sender — those live only inside `ciphertext`. Note that `K_tx` itself is **never** placed in the delivery event; the recipient re-derives it from `ivk` and `epk`. The `ack_nonce` is generated fresh per delivery attempt and is what the recipient signs in the ACK (below); the sender therefore knows that a returned ACK corresponds to **this** delivery, not a captured-and-replayed ACK from an earlier round.
 
 4. The sender encrypts the delivery event to the recipient's **incoming-view public key** `IVPK = ivk·G` ([Foundations §1.3](#13-per-coin-keys-note-encryption--detection)) with **NIP-44 v2**, then **NIP-59** gift-wraps the result under a fresh ephemeral key. The outer wrapped event is addressed to that ephemeral key, so a relay sees neither sender nor recipient — only an opaque blob stored at some time.
 5. The sender publishes the gift-wrapped event to the recipient's advertised relay set (§4.3) and replicates per §4.6.
@@ -885,7 +887,7 @@ A bundle is delivered as a small Nostr control event that **references** the enc
 **ACK + retry (normative).** Delivery is reliable, not best-effort:
 
 - The sender **MUST** retain its own copy of the bundle (and `K_tx`) until it receives a valid acknowledgement.
-- On successful receipt and verification (§4.5), the recipient's node **MUST** return an **acknowledgement**: a NIP-44-encrypted, NIP-59 gift-wrapped event addressed back to the sender, carrying `detect_tag` and `blob_id` and signed by the recipient's `op`. The sender verifies the `op` signature against the recipient's published `op` pubkey.
+- On successful receipt and verification (§4.5), the recipient's node **MUST** return an **acknowledgement**: a NIP-44-encrypted, NIP-59 gift-wrapped event addressed back to the sender, carrying `{detect_tag, blob_id, ack_nonce}` (echoing the `ack_nonce` from the delivery event's plaintext payload) and a BIP-340 signature by the recipient's `op` over `ack_message = H("zkCoins/v1/Ack" ‖ detect_tag ‖ blob_id ‖ ack_nonce)`. The sender verifies (i) the `op` signature against the recipient's published `op` pubkey **and** (ii) that the echoed `ack_nonce` matches the nonce the sender chose for this delivery attempt. The nonce binding ensures a captured ACK cannot be replayed against a later retry (a fresh attempt uses a fresh `ack_nonce`, so a stale ACK fails verification (ii)).
 - Until a valid ACK arrives, the sender **MUST** re-publish the delivery event on an exponential-backoff schedule (RECOMMENDED: initial 30 s, doubling, capped at 1 h) to every relay in the recipient's set.
 - After a valid ACK the sender **MAY** drop its retained copy. The sender **MUST NOT** drop the copy before both a valid ACK and the replication target `k` (§4.6) are confirmed.
 
@@ -1468,7 +1470,7 @@ A short, scannable reference for the jargon, notation, and identifier names used
 - **CoinTemplate** — `{recipient, amount, asset_id}`; the sender's per-payee instruction inside a `Send`. ([§1.5](#15-core-data-structures))
 - **`completed` (transaction state)** — `SpendRecord` is admitted under §3.5+§3.6 AND its inclusion block has ≥ 6 confirmations; the only state in which a receiver MAY credit; absolute under the "no reorgs deeper than 5 blocks" assumption. ([§3.10](#310-transaction-states))
 - **Cyclic recursion** — one fixed circuit verifies proofs of itself; verifier data is constant, so proof size and verification time are constant. ([§2.2](#22-proof-types))
-- **DeliveryEvent** — Nostr event carrying `{detect_tag, epk, blob_id, blob_locators}` plaintext, NIP-44 encrypted to `IVPK`, NIP-59 gift-wrapped under an ephemeral key. ([§4.2](#42-bundle-delivery))
+- **DeliveryEvent** — Nostr event carrying `{detect_tag, epk, blob_id, blob_locators, ack_nonce}` plaintext, NIP-44 encrypted to `IVPK`, NIP-59 gift-wrapped under an ephemeral key. The `ack_nonce` is a fresh sender-chosen 32-byte value the recipient echoes in the ACK signature, binding the ACK to this delivery attempt. ([§4.2](#42-bundle-delivery))
 - **`detect_tag`** — `Hc("DetectTag", dk ‖ epk)`; per-coin, all-distinct, recipient-side scan only — no relay filter and no cross-coin linkability. ([§1.3](#13-per-coin-keys-note-encryption--detection), [§4.4](#44-note-discovery))
 - **`dk` (detection key)** — `HKDF("DetectKey", ivk)`; lets a holder of `ivk` recognise its own incoming coins by recomputing `detect_tag` per candidate event. ([§1.3](#13-per-coin-keys-note-encryption--detection))
 - **`epk` (ephemeral pubkey)** — `esk·G`, drawn fresh per output coin; the recipient's `K_tx` and `detect_tag` are derived from it. ([§1.3](#13-per-coin-keys-note-encryption--detection))
