@@ -15,7 +15,7 @@ zkCoins uses **Proof-Carrying Data (PCD)** — the central cryptographic abstrac
 - Because the proof carries the whole history, outputs stay trustworthy without re-checking any prior step.
 - **Proof size is constant** — independent of the account's or coin's transaction history.
 - **Verification time is constant** — an account that transitioned 1000 times verifies as fast as a fresh one.
-- With Zero-Knowledge, the proof hides amounts, balances, accounts, and the transaction graph. What becomes public is only the spent-coin **nullifiers** (carried in the off-chain, `k = 3`-replicated [`BatchBundle`](/specification#31-the-on-chain-object), not on Bitcoin) and the **accumulator roots** anchored on Bitcoin — never senders, recipients, amounts, or account links.
+- With Zero-Knowledge, the proof hides amounts, balances, accounts, and the transaction graph. What becomes public is only the spent-coin **nullifiers** (carried in the off-chain, `k = 3`-replicated [`BatchBundle`](/specification#46-data-availability--replication-factor-k), not on Bitcoin) and the **accumulator roots** anchored on Bitcoin — never senders, recipients, amounts, or account links.
 
 ## Two circuits
 
@@ -28,7 +28,7 @@ The protocol uses **two** PCD circuits ([Proof types §2.2](/specification#22-pr
 |---|---|---|---|
 | `InitialProof` | `C` | first transition of an account (creation, optionally an issuance) | account creation is valid against the canonical empty account for `owner = H(Pk₀)`; no `prev_proof` |
 | `AccountUpdateProof` | `C` | every subsequent transition | the previous proof was valid (recursive) **and** the new transition is valid |
-| `AggregateBatchProof` | `C_batch` | one per [`BatchBundle`](/specification#31-the-on-chain-object), built by the publisher | every member's per-account validity, the batch's nullifier-set integrity, and `new_root = SMT.insert_many(prev_root, nfs)` |
+| `AggregateBatchProof` | `C_batch` | one per [`BatchBundle`](/specification#46-data-availability--replication-factor-k), built by the publisher | every member's per-account validity, the batch's nullifier-set integrity, and `new_root = SMT.insert_many(prev_root, nfs)` |
 
 ## Plonky2 + Poseidon-Goldilocks
 
@@ -70,7 +70,7 @@ zkCoins keeps **exactly two** Merkle structures. There is **no** global, account
 | **Coin-history SMT** | per account (Private) | sparse Merkle tree keyed by `coin.identifier`; provides in-circuit non-inclusion for double-spend prevention; its root is folded into the account-state hash `ash` and never leaves the proving context |
 | **Nullifier accumulator** | global | 256-bit-depth SMT over every admitted nullifier; supports membership and non-membership; the protocol's **only** global structure |
 
-Why no global account-keyed tree? A structure keyed by a stable account identifier would have to be **either** rebuildable from publicly verifiable data **or** privacy-preserving — never both. zkCoins keeps [privacy (Requirement 2)](/requirements) and [rebuildability (Requirement 10)](/requirements) at once by removing that structure entirely and anchoring double-spend protection in the nullifier accumulator alone ([Trees §1.6](/specification#16-trees-one-global-structure-one-per-account-structure)).
+Why no global account-keyed tree? A structure keyed by a stable account identifier would have to be **either** rebuildable from publicly verifiable data **or** privacy-preserving — never both. zkCoins keeps [privacy (Requirement 2)](/requirements) and [node portability (Requirement 10)](/requirements) at once by removing that structure entirely and anchoring double-spend protection in the nullifier accumulator alone ([Trees §1.6](/specification#16-trees-one-global-structure-one-per-account-structure)).
 
 The accumulator's **state transitions** are anchored on Bitcoin — each [`BatchInscription`](/specification#31-the-on-chain-object) commits `prev_root → new_root` — and each transition's **validity** is attested by the off-chain `AggregateBatchProof` carried in the content-addressed, `k = 3`-replicated [`BatchBundle`](/specification#46-data-availability--replication-factor-k). Any honest node therefore tracks the accumulator by following the inscribed roots and verifying each batch's recursive proof: a pure function of confirmed Bitcoin data plus publicly verifiable bundles, identical for every node and requiring **no** trust in any peer.
 
