@@ -150,6 +150,15 @@ The same node data ([Foundations §1.6](foundations): plaintext leaves Private, 
 
 This is the case of [Requirement 9](/requirements): a sender (A) who paid a recipient (B) hands B — or a third party — a link that confirms exactly that one payment, *"here is verifiable proof I sent it."* The link carries just two things: **where to fetch** the one coin's bundle, and **the key to read it**. Everything else — which on-chain record, the amount, the proof — is recovered from the bundle and verified against Bitcoin.
 
+**Carrying the link secret (normative — governs the shareable links of §5.6–§5.8).** Each shareable link carries a **bearer secret** (a `zkview` `K_tx`, a `zkavk`, or a balance proof). It **MUST** be transported so the secret never reaches a server:
+
+- **Custom-scheme form (canonical, preferred):** a `zkcoins:…` URI is dispatched **locally** by a registered handler (wallet/explorer app); the secret never enters a network request. Carrying it in the URI path is therefore safe.
+- **HTTPS fallback:** the secret — and **every** other link component after the app route (in §5.6 the bundle locator; in §5.7 the address, `asset_id` and proof; in §5.8 the address; plus any optional holder hint) — **MUST** be placed in the URL **fragment** (`#…`); the HTTPS path is only the app route (e.g. `/tx`) and the link **MUST** carry **no query string**. A browser never transmits the fragment to the server, so the secret appears in **no** server log, **no** proxy — including a TLS-terminating one — and **no** `Referer` header. The explorer **MUST** be a **client-side** application that reads the fragment, fetches the bundle from the relay mesh, and **decrypts and verifies entirely on the client**. A conforming explorer **MUST NOT** transmit a `K_tx`, `zkavk`, or balance proof to any server, and **MUST** serve its pages with `Referrer-Policy: no-referrer`.
+- **Scope of "never reaches a server" (normative).** The fragment keeps the secret and all link components from the **explorer (app) host** and every HTTP intermediary (server logs, proxies, `Referer`). It does **not** hide (a) that the **relay serving the bundle learns `blob_id`** when the bundle is fetched, nor (b) the **DNS/SNI metadata** revealing which explorer host was contacted. Both are addressed only by self-hosting the explorer/relay or using Tor — so the "never reaches a server" guarantee is scoped to the **explorer/app host and HTTP intermediaries**, not the relay.
+- An explorer **SHOULD** be self-hostable and **MAY** be served as a Tor onion service, so even the host metadata (DNS/SNI) is the operator's own.
+
+**Residual (non-normative).** On an untrusted device the fragment still persists in local browser history and memory; no link scheme protects a compromised endpoint. A bearer link **SHOULD NOT** be opened on a device the holder does not trust; if unavoidable, use a private/ephemeral session and clear history afterward.
+
 **Link grammar.** A confirmation link is two Bech32m values — a content **locator** and a per-coin **view capability** — under a host-independent URI:
 
 ```
@@ -165,7 +174,7 @@ zkcoins:tx/<bundle>/<view>
 
 The `/` delimiter is unambiguous: a Bech32m string contains neither `/` nor `:`. The two HRPs `zkbid` and `zkview` ([Foundations §1.7.7](foundations)) are distinct, so a viewer **MUST** reject a value presented under the wrong HRP and can never confuse the locator for the key.
 
-An explorer **MAY** render the same pair as a clickable web URL — `https://<explorer-host>/tx/<bundle>/<view>` — but the host is only a renderer: any instance is equivalent and self-hostable, and a viewer **MUST** treat the `<bundle>`/`<view>` pair, not the host, as authoritative. A holder hint **MAY** be appended as `?h=<locator>` (`op:<op-pubkey>` or `@<relay-url>`) to speed resolution; it is an optimisation only and is never required.
+An explorer **MAY** render the same pair as a clickable web URL — `https://<explorer-host>/tx#<bundle>/<view>` — where `/tx` is only the app route and the `<bundle>`/`<view>` pair lives in the URL **fragment** (per the link-transport rules above, so the secret never reaches the server). The host is only a renderer: any instance is equivalent and self-hostable, and a viewer **MUST** treat the `<bundle>`/`<view>` pair, not the host, as authoritative. A holder hint **MAY** be appended **inside the fragment** as `…#<bundle>/<view>;h=<locator>` (`op:<op-pubkey>` or `@<relay-url>`) to speed resolution; it travels in the fragment, **never** as a query or path component, so it is never sent to any server. It is an optimisation only and is never required.
 
 **Flow.** The viewer (an explorer that is neither A nor B, or one the viewer self-hosts):
 
@@ -216,9 +225,11 @@ The verifier checks the proof and that the `SpendRecord` at `anchor` (`txid:j`) 
 
 ```
 zkcoins:balance/<address>/<asset_id>?proof=<attestation>
-  — an explorer MAY render it as https://<explorer-host>/balance/<address>/<asset_id>?proof=<attestation>
-  — the <attestation> MAY instead be referenced by a content handle when too large for a URL
+  — an explorer MAY render it as https://<explorer-host>/balance#<address>/<asset_id>/<proof>
+  — the <proof> (attestation) MAY instead be referenced by a content handle when too large for a URL
 ```
+
+The secret/proof travels in the fragment per the link-transport rules in [§5.6](#56-shareable-confirmation-links).
 
 **Properties.**
 
@@ -243,12 +254,16 @@ zkavk = Bech32m( HRP = "zkavk", data = ivk ‖ ovk )    // 64B; ivk = incoming, 
 
 zkcoins:addr/<address>/<zkavk>
   <address> = Bech32m( HRP "zk", H(Pk₀) )   ; the account whose full history is disclosed
-  — an explorer MAY render it as https://<explorer-host>/addr/<address>/<zkavk>
-  — a holder hint MAY be appended as ?h=<locator>; it is an optimisation only. The account's
-    coins are found by deriving detect_tags from ivk and scanning the mesh, so no locator is required.
+  — an explorer MAY render it as https://<explorer-host>/addr#<address>/<zkavk>
+  — a holder hint MAY be appended INSIDE the fragment as …#<address>/<zkavk>;h=<locator>; it travels
+    in the fragment, never as a query or path component, so it is never sent to any server. It is an
+    optimisation only. The account's coins are found by deriving detect_tags from ivk and scanning
+    the mesh, so no locator is required.
 ```
 
-**Flow.** The explorer derives the detection key from `ivk` ([Foundations §1.3](foundations)), finds the account's coins by scanning the relay mesh ([Transport & Recovery](transport-recovery)) for the derived `detect_tags` (a `?h=<locator>` hint, if present, only speeds resolution), decrypts incoming coins with `ivk` and recovers outgoing-coin plaintext with `ovk`, and renders the full history — checking every transaction against Bitcoin (coin inclusion → `completed` SpendRecord ([On-chain §3.10](onchain)) → recursive proof, as in [§5.6](#56-shareable-confirmation-links)). The explorer is never trusted.
+The secret travels in the fragment per the link-transport rules in [§5.6](#56-shareable-confirmation-links).
+
+**Flow.** The explorer derives the detection key from `ivk` ([Foundations §1.3](foundations)), finds the account's coins by scanning the relay mesh ([Transport & Recovery](transport-recovery)) for the derived `detect_tags` (a `;h=<locator>` fragment hint, if present, only speeds resolution), decrypts incoming coins with `ivk` and recovers outgoing-coin plaintext with `ovk`, and renders the full history — checking every transaction against Bitcoin (coin inclusion → `completed` SpendRecord ([On-chain §3.10](onchain)) → recursive proof, as in [§5.6](#56-shareable-confirmation-links)). The explorer is never trusted.
 
 **Properties.**
 
