@@ -11,11 +11,11 @@ Recall the relevant key material from [Foundations §1.2](foundations): a subjec
 
 **Disclosure is holder-initiated and account-granular.** All disclosure is opt-in: absent one, [Requirement 2](/requirements) holds in full. Because accounts and addresses are one-to-one ([Foundations §1.2](foundations)), every account-level disclosure covers the **whole** account; there is no "one address out of many." To keep some activity outside a disclosure, it must live in a **separate account**. This page specifies the disclosure spectrum, narrowest first ([Requirement 9](/requirements)):
 
-| Tier | Reveals | Mechanism | Section |
-|---|---|---|---|
-| One transaction | exactly 1 payment | bearer per-coin capability `zkview` | [§5.3](#53-per-coin-view-capability), [§5.6](#56-shareable-confirmation-links) |
-| Balance (history-private) | one asset's balance, no history | ZK balance attestation (a proof, no key) | [§5.7](#57-balance-attestation-history-private) |
-| Full account history | every transaction of the account | view grant `zkgrant` (revocable) **or** bearer account view key `zkavk` | [§5.8](#58-address-view-full-history) |
+| Tier | Reveals | Mechanism |
+|---|---|---|
+| One transaction | 1 payment | bearer `zkview` ([§5.6](#56-shareable-confirmation-links)) |
+| Balance | one asset, no history | ZK attestation ([§5.7](#57-balance-attestation-history-private)) |
+| Full history | every transaction | `zkgrant` (revocable) or bearer `zkavk` ([§5.8](#58-address-view-full-history)) |
 
 Every disclosure is **read-only** (never the spend branch) and every disclosed fact is **verifiable against Bitcoin**, never asserted by a node or explorer.
 
