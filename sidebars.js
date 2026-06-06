@@ -3,19 +3,7 @@ const sidebars = {
   docs: [
     'intro',
     'requirements',
-    {
-      type: 'category',
-      label: 'Specification',
-      items: [
-        'specification/index',
-        'specification/foundations',
-        'specification/proofs',
-        'specification/onchain',
-        'specification/transport-recovery',
-        'specification/access-explorer',
-        'specification/architecture',
-      ],
-    },
+    'specification',
     {
       type: 'category',
       label: 'Architecture',
