@@ -25,7 +25,7 @@ A's node holds A's entire bookkeeping; none of it leaves on its own:
 - **A's balances** — 80 TFREAK after the transfer, A's current rotating public key, A's address.
 - **A's coins** — the coin objects A still holds, with their amounts and asset ids.
 - **A's full history** — the issuance of 100, the send of 20, every proof A produced.
-- **The Tapfreak definition** — `asset_id = H(A's key ‖ "Tapfreak" ‖ decimals)` and its supply rules; A is the creator.
+- **The Tapfreak definition** — `asset_id = H(A's key ‖ "Tapfreak" ‖ decimals ‖ issuance_version)` and its supply rules; A is the creator.
 - **A's copy of the global trees** (account SMT, commitment MMR) — A has them, but they are _derived from Bitcoin_, not secret to A.
 
 A reveals nothing except the single coin it chooses to send B.
@@ -194,7 +194,7 @@ The network is reduced to an **untrusted blob cache** checked against Bitcoin.
 - **Simple:** items tagged with your public key (the store learns the recipient);
 - **Private:** deterministic, seed-bound tags that look random to the store (you compute your own; the store cannot link them to you).
 
-**Asset id falls out of the bundles.** It is part of every coin (`asset_id = H(creator ‖ name ‖ decimals)`), so it is not a separate recovery input; only the human-readable **name** is external (never on-chain, not in the hash). The effective inputs reduce to **seed + Bitcoin + the (honest, replicated) network**.
+**Asset id falls out of the bundles.** It is part of every coin (`asset_id = H(creator ‖ name ‖ decimals ‖ issuance_version)`), so it is not a separate recovery input; only the human-readable **name** is external (never on-chain, not in the hash). The effective inputs reduce to **seed + Bitcoin + the (honest, replicated) network**.
 
 This data-availability layer is the **hardest part** of any client-side-validation protocol. Solving it as a **network pull verified against Bitcoin** — rather than the manual file backups RGB / Taproot Assets rely on — is a concrete advantage.
 
