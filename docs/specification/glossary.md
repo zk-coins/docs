@@ -26,7 +26,7 @@ A short, scannable reference for the jargon, notation, and identifier names used
 - **`balances`** — `map<asset_id, amount>` in `AccountState`; the account's multi-asset bookkeeping. ([§1.5](foundations#15-core-data-structures))
 - **Bech32m** — text encoding used for addresses (`zk`), view grants (`zkgrant`), per-coin view caps (`zkview`), bearer account view keys (`zkavk`). ([§1.7.7](foundations#177-bech32m-and-bitcoin-conventions))
 - **`block_anchor`** — `{block_hash, height}` of the Bitcoin tip a batch's proofs are built against; bounded by `N = 100` blocks behind the inclusion block. ([§3.5](onchain#35-inscription-format))
-- **Bundle (CoinProof)** — `{coin, proof, inclusion_proof, epk, ciphertext, detect_tag}`; the off-chain object that is *simultaneously* the recipient's receipt and its spend credential. ([§1.5](foundations#15-core-data-structures))
+- **Bundle (CoinProof)** — `{coin, proof, inclusion_proof, creating_prev_ash, epk, ciphertext, detect_tag}`; the off-chain object that is *simultaneously* the recipient's receipt and its spend credential. ([§1.5](foundations#15-core-data-structures))
 - **Cap (per coin)** — see *capability*; the smallest is `zkview` per-coin. ([§5.3](access-explorer#53-per-coin-view-capability))
 - **Capability** — a cryptographic permission to view some Private record (ownership proof, view grant, bearer view key, per-coin view cap, balance attestation). ([§5.4](access-explorer#54-capabilities-at-a-glance))
 - **Capability-gated pull** — the node API serves Private records only after the requester presents a valid capability. ([§5.1](access-explorer#51-capability-gated-pull))
