@@ -13,6 +13,7 @@ const config = {
   projectName: 'zkcoins-app',
 
   onBrokenLinks: 'throw',
+  onBrokenAnchors: 'throw',
   onBrokenMarkdownLinks: 'warn',
 
   markdown: {
