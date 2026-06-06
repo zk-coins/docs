@@ -118,24 +118,41 @@ The node exposes four interface families, specified here at an implementation-ne
 
 The `read.account` path is **capability-gated**: a node **MUST** reject a request that does not present a valid ownership proof or `op`-signed view grant. Bearer view secrets (`zkview`/`zkavk`) and balance attestations are **not** node authorisations — the explorer applies them client-side to bundles obtained from the relay mesh or a holder, so `explorer.read` widens only what the secret-holder can decrypt from already-public material ([Access & Explorer §5.1](access-explorer)). The `submit.tx` path needs no capability because the submitted transition carries its own validity proof and self-authenticating `SpendRecord`; a node **MUST** verify that proof before publishing.
 
-## 6.5 Issuance — trustless, permissionless emission
+## 6.5 Issuance — versioned schemas, v1 (minimal)
 
-A new asset is created by fixing its `asset_id` per Foundations §1.4 and binding **open-mint terms** into the issuance circuit. The terms are public; the per-mint *amount* stays hidden like any other coin. Because the terms are enforced **in-circuit**, anyone can mint within them without a privileged minter, and no one can mint outside them ([Requirements 3 & 8](/requirements)).
+A new asset is created by fixing its `asset_id` ([Foundations §1.4](foundations)) and binding **versioned issuance terms** into the mint circuit. Issuance is **schema-versioned**: each asset is created under one `IssuanceTerms` version, the version is bound into `asset_id` itself, and every coin minted under that asset inherits its version through `asset_id`. Versions are added over time; a coin's version determines which rule set governs its mints, and a coin minted under one version can never be misinterpreted under another.
+
+**Single-issuer model (v1).** The asset's `asset_id` commits to `creator_pubkey = Pk₀` of the issuing account (Foundations §1.4). Only the holder of `sk₀` of that account can sign a transition for it; mint authority is therefore **monopolised on the creator** by construction. *"Permissionless issuance"* in this spec means **anyone can create their own asset** — not that anyone can mint someone else's. Within their own asset, the creator **MAY** mint any amount at any time; v1 imposes no protocol-level cap. Supply discipline is a **creator's commitment**, not a protocol guarantee — holders trust the creator the way they would any single-issuer asset. Account-level forks (a creator signing two parallel histories with the same `Pk₀`) are publicly observable on Bitcoin because the rotating per-transition pubkey `Pkᵢ` would appear in two distinct `SpendRecord`s, and that observability is the holders' detection point if a creator over-issues against an off-chain promise.
+
+### v1 issuance terms
 
 ```
-IssuanceTerms = {
-  asset_id        : field,        // = Hc("AssetId", genesis_tag ‖ creator_pubkey
-                                  //               ‖ H(name) ‖ decimals)   (Foundations §1.4)
-  cap_total       : amount,       // hard maximum ever mintable for this asset
-  amount_per_mint : amount,       // fixed amount each open mint emits
-  start_height    : u32,          // first Bitcoin block height at which minting is valid
-  end_height      : u32,          // last valid height (end_height ≥ start_height); 0 = open-ended
-  terms_hash      : field         // = Hc("IssuanceTerms", asset_id ‖ cap_total
-                                  //               ‖ amount_per_mint ‖ start_height ‖ end_height)
+IssuanceTerms_v1 = {
+  asset_id          : field,        // = Hc("AssetId", genesis_tag ‖ creator_pubkey
+                                    //         ‖ H(name) ‖ decimals ‖ issuance_version)
+                                    //   (Foundations §1.4)
+  issuance_version  : u8 = 1,       // the schema version this asset is created under
+  name_hash         : digest,       // = H(name); the human-readable name is NEVER on-chain
+  decimals          : u8,           // display precision; bound into asset_id, no in-circuit effect
+  terms_hash        : field         // = Hc("IssuanceTerms", asset_id ‖ issuance_version)
+                                    //   (v1 has no fields beyond what asset_id already binds;
+                                    //   later versions extend this list)
 }
 ```
 
-The mint proof (see [Proofs & State Transitions](proofs)) **MUST** verify, in-circuit, that: (a) the coin's `asset_id` matches the terms; (b) the minted amount equals `amount_per_mint`; (c) the cumulative minted supply after this mint does not exceed `cap_total`; and (d) the height `h` satisfies `start_height ≤ h` and (`end_height = 0` **or** `h ≤ end_height`). Here `h` is **`block_anchor.height`** — the height of the Bitcoin tip the proof is built against (`block_anchor = { block_hash, height }`), known at proving time ([On-chain Layer §3.5](onchain)) — **not** the actual, later inclusion height, which is unknown when the proof is produced; the validity-window check is therefore evaluated against `block_anchor.height` and avoids any circularity. `terms_hash` binds the whole term set so that no party can substitute relaxed terms after creation. The human-readable `name` is **never** placed on-chain (Foundations §1.4).
+The v1 mint proof (see [Proofs & State Transitions](proofs)) **MUST** verify, in-circuit, that:
+
+- (a) `IssuanceTerms.issuance_version == 1` — this circuit accepts only v1 mints;
+- (b) the coin's `asset_id` equals `IssuanceTerms.asset_id`;
+- (c) `terms_hash` recomputes from `asset_id ‖ issuance_version` per the formula above.
+
+There is no clause (d), (e), or beyond in v1: no protocol-enforced cap, no per-mint quantum, no time window, no signer set beyond the creator. Those are deliberately deferred to later versions.
+
+### Forward compatibility: future versions
+
+Later issuance schemas — `IssuanceTerms_v2`, `v3`, … — **MAY** introduce protocol-enforced supply rules (cap_total, per-mint quantum, time windows, multi-signer mint authority, redemption mechanisms, etc.). Each new version is a separate `IssuanceTerms` schema with its own circuit-enforced rules; the version-binding through `asset_id` (Foundations §1.4) guarantees that a coin minted under one version cannot be misinterpreted under another. The dispatch model — single-circuit-with-version-branch vs separate-circuit-per-version — is an **open architectural question** to be decided when v2 is in scope; it does not affect v1.
+
+The human-readable `name` is **never** placed on-chain (Foundations §1.4).
 
 ## 6.6 Threat model and trust configurations
 
