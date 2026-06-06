@@ -5,9 +5,9 @@ title: 6 · System Architecture
 
 # 6 · System Architecture
 
-> *In one sentence: how node, wallet, and explorer fit together, why running your own node is the trustless default, and how permissionless issuance and node portability come out of the same design.*
+> *In one sentence: how node, wallet, and explorer fit together, why running your own node is the trustless default, and how permissionless asset creation and node portability come out of the same design.*
 
-This page specifies **how the parts fit together**: the three components (node, wallet, explorer), the wallet↔node relationship, node portability and multi-node operation ([Requirement 10](/requirements)), the node's external interfaces, trustless issuance ([Requirement 8](/requirements)), and the threat model. It builds strictly on [Foundations](foundations) — the key hierarchy (§1.2), per-coin keys (§1.3), identifiers (§1.4), and the nullifier accumulator (§1.6) — and references the sibling sections for the mechanisms they own rather than re-specifying them.
+This page specifies **how the parts fit together**: the three components (node, wallet, explorer), the wallet↔node relationship, node portability and multi-node operation ([Requirement 10](/requirements)), the node's external interfaces, versioned issuance ([Requirement 8](/requirements)), and the threat model. It builds strictly on [Foundations](foundations) — the key hierarchy (§1.2), per-coin keys (§1.3), identifiers (§1.4), and the nullifier accumulator (§1.6) — and references the sibling sections for the mechanisms they own rather than re-specifying them.
 
 Normative keywords (**MUST**, **MUST NOT**, **SHOULD**, **MAY**) are used per RFC 2119.
 
@@ -136,7 +136,9 @@ IssuanceTerms_v1 = {
   decimals          : u8,           // display precision; bound into asset_id, no in-circuit effect
   terms_hash        : field         // = Hc("IssuanceTerms", asset_id ‖ issuance_version)
                                     //   (v1 has no fields beyond what asset_id already binds;
-                                    //   later versions extend this list)
+                                    //   issuance_version is re-absorbed here as belt-and-
+                                    //   suspenders explicit version-binding — redundant with
+                                    //   asset_id but harmless; later versions extend this list)
 }
 ```
 
@@ -150,7 +152,9 @@ There is no clause (d), (e), or beyond in v1: no protocol-enforced cap, no per-m
 
 ### Forward compatibility: future versions
 
-Later issuance schemas — `IssuanceTerms_v2`, `v3`, … — **MAY** introduce protocol-enforced supply rules (cap_total, per-mint quantum, time windows, multi-signer mint authority, redemption mechanisms, etc.). Each new version is a separate `IssuanceTerms` schema with its own circuit-enforced rules; the version-binding through `asset_id` (Foundations §1.4) guarantees that a coin minted under one version cannot be misinterpreted under another. The dispatch model — single-circuit-with-version-branch vs separate-circuit-per-version — is an **open architectural question** to be decided when v2 is in scope; it does not affect v1.
+Later issuance schemas — `IssuanceTerms_v2`, `v3`, … — **MAY** introduce protocol-enforced supply rules (cap_total, per-mint quantum, time windows, multi-signer mint authority, redemption mechanisms, etc.). Each new version is a separate `IssuanceTerms` schema with its own circuit-enforced rules; the version-binding through `asset_id` ([Foundations §1.4](foundations#14-identifiers-and-hashes)) guarantees that a coin minted under one version cannot be misinterpreted under another.
+
+The dispatch model is **fixed by the cyclic-recursion constraint** of [Proofs §2.1 clause 1](proofs#21-the-compliance-predicate): the verifier data **MUST** be fixed and identical in prover and verifier, so a single account's recursive lineage cannot cross verifier-data boundaries. Adding a v2 schema therefore **MUST** take the form of an **in-circuit version branch within the same circuit** `C` — extending `C` to accept both `issuance_version == 1` and `issuance_version == 2` mints — *not* a separate per-version circuit, which would break cyclic recursion the moment an account that minted v1 attempts to mint v2 in the same lineage. The single-circuit-with-version-branching dispatch is therefore the only PCD-compatible option; the open question for v2 is the *contents* of the version branch (which protocol-enforced rules to add), not the dispatch.
 
 The human-readable `name` is **never** placed on-chain (Foundations §1.4).
 
@@ -179,6 +183,6 @@ How this architecture maps to the [Requirements](/requirements) at a glance:
 | **5 · Custody only in wallet** | SPEND branch never leaves the wallet; only the operational bundle / view grants are delegated (§6.2). |
 | **6 · Recovery** | Node store is the normal backup; seed + chain + replicated bundles are the emergency fallback (§6.1). |
 | **7 · Self-hostable** | Node ships as one self-contained container with no operator-specific dependencies (§6.1). |
-| **8 · Multi-asset** | `asset_id` plus in-circuit issuance terms create any number of assets equally (§6.5). |
+| **8 · Multi-asset** | `asset_id` plus `issuance_version`-bound `IssuanceTerms_v1` lets anyone create their own asset; the creator is the sole minter of their asset (§6.5). |
 | **9 · Explorer** | Stateless explorer resolves one transaction from a per-coin `K_tx`, verified against Bitcoin (§6.1). |
 | **10 · Node portability** | No node-specific wallet state; switch and multi-node by configuration alone (§6.3). |

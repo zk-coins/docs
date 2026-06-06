@@ -30,7 +30,7 @@ Every decision below follows from one idea — **complete self-sovereignty, zero
 | Recovery from seed + Bitcoin + the network | no central backup custodian |
 | Capability-gated disclosure; self-hostable, verifiable explorer | the owner alone decides who sees what; no trusted authority |
 | Any node — switchable, several at once | no lock-in to any operator |
-| Permissionless issuance | no privileged minter |
+| Permissionless asset creation | anyone can create their own asset; each asset's minter is its creator |
 
 These are not features bolted on. They are the same principle, followed to its conclusion.
 
