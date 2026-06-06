@@ -33,7 +33,7 @@ w = {
   output_templates[],         // CoinTemplate list (Foundations §1.5)
   nk,                         // nullifier key (SPEND branch, Foundations §1.2)
   next_pubkey   = Pkᵢ₊₁,      // rotated spend pubkey for the new state
-  asset_issuance?             // present only for issuance: {asset_id, name_hash, amount, decimals}
+  asset_issuance?             // present only for issuance: {asset_id, creator_pubkey = Pk₀, issuance_version, name_hash, amount, decimals}
 }
 ```
 
@@ -47,7 +47,14 @@ w = {
    b. `input_coins[j]` is included in the prior **coin-history SMT** (per-account, [Foundations](foundations) §1.6) via `input_auth[j].history_path` against the root referenced in clause 1;
    c. `input_coins[j].identifier` is recomputed in-circuit as `Hc("Coin", input_auth[j].creating_prev_ash ‖ asset_id ‖ coin_index)` — using the witnessed `creating_prev_ash` (the **prior** `account_state_hash` of the transition that produced this coin, i.e. the `ash` of the creating account *before* its creating transition, delivered to the spender inside the coin's `CoinProof` bundle) — and **MUST** match the supplied identifier. The per-input witness `input_auth[]` **MUST** therefore include each input coin's `creating_prev_ash`. This matches [Foundations](foundations) §1.4: a coin's identifier binds the creating account's **prior** state, breaking the would-be recursion between `coin.identifier` and `new_account_state_hash`.
 
-3. **Per-asset balance conservation.** Let `In(a) = Σ { input_coins[j].amount : input_coins[j].asset_id = a }` and `Out(a) = Σ { output_templates[k].amount : output_templates[k].asset_id = a }`, plus `Mint(a)` from any `asset_issuance` for asset `a` (zero otherwise). For **every** `asset_id` `a` appearing in inputs or outputs: `In(a) + Mint(a) ≥ Out(a)`. All amounts are range-checked to a fixed non-negative integer width so no sum can wrap the field; any amount outside range invalidates the proof. The difference `In(a) + Mint(a) − Out(a)` is retained by the account (a change coin) — funds are conserved, never created except by an explicit, predicate-checked `Mint(a)`.
+3. **Per-asset balance conservation.** Let `In(a) = Σ { input_coins[j].amount : input_coins[j].asset_id = a }` and `Out(a) = Σ { output_templates[k].amount : output_templates[k].asset_id = a }`, plus `Mint(a)` from any `asset_issuance` for asset `a` (zero otherwise). For **every** `asset_id` `a` appearing in inputs or outputs: `In(a) + Mint(a) ≥ Out(a)`. All amounts are range-checked to a fixed non-negative integer width so no sum can wrap the field; any amount outside range invalidates the proof. The difference `In(a) + Mint(a) − Out(a)` is retained by the account (a change coin) — funds are conserved, never created except by an explicit, predicate-checked `Mint(a)`. When `asset_issuance` is present, the v1 mint clauses of [Architecture §6.5](architecture#65-issuance--versioned-schemas-v1-minimal) **MUST** all hold — these are the normative content of the v1 mint circuit, and they hook §6.5 into the predicate enumerated here. In summary:
+
+   - (a) `asset_issuance.issuance_version == 1` (the circuit accepts only v1 mints);
+   - (b) `H(asset_issuance.creator_pubkey) == prev_account_state.owner` (binds the issuance to the asset's creator account; the witness carries `creator_pubkey = Pk₀` because the SPEND key rotates per transition and `Pk₀` is otherwise irrecoverable in-circuit from its SHA-256 image `owner`);
+   - (c) `asset_issuance.asset_id == Hc("AssetId", genesis_tag ‖ asset_issuance.creator_pubkey ‖ asset_issuance.name_hash ‖ asset_issuance.decimals ‖ asset_issuance.issuance_version)` (the v1 `IssuanceTerms.asset_id` derivation of [Foundations §1.4](foundations#14-identifiers-and-hashes));
+   - (d) `terms_hash == Hc("IssuanceTerms", asset_issuance.asset_id ‖ asset_issuance.issuance_version)` (the v1 `IssuanceTerms.terms_hash` recomputation).
+
+   Together with `Mint(asset_issuance.asset_id) = asset_issuance.amount` flowing into the `In(a) + Mint(a) ≥ Out(a)` check above, these complete the v1 issuance discipline.
 
 4. **Nullifier derivation.** For every `input_coins[j]`, compute `nf_j = Hc("Nullifier", nk ‖ input_coins[j].identifier)` ([Foundations §1.4](foundations)) in-circuit from the witnessed `nk`. All `nf_j` within one transition **MUST** be pairwise distinct, and they form the leaves whose root is `ProofData.input_nullifiers_root`. These `nf_j` are the values published **in the clear** in this transition's `SpendRecord` ([On-chain §3.5](onchain)); the proof binds them (through `input_nullifiers_root`, which the on-chain `message` and the sign-to-contract tweak both cover, [Foundations §1.4](foundations)), but the proof makes **no** in-circuit claim of global non-membership. Global double-spend protection is enforced **outside** the circuit, by the published nullifier set: a scanner rejects any `SpendRecord` reusing an `nf` already on-chain, and a receiver checks non-membership against the live on-chain accumulator (§2.3.3 step 5, [On-chain §3.7](onchain)). Within the account, clause 2(b) together with the coin-history update (clause 8) prevent the account from spending the same coin twice along its own lineage.
 
@@ -90,7 +97,7 @@ The three operations are the only ways state changes. Each is one execution of `
 
 ### 2.3.1 Mint / issuance
 
-Creates an account and/or issues a new asset's first coins. Issuance is **permissionless and trustless**: no privileged signer exists; the asset's identity is bound to its creator by construction, and supply rules are enforced by the predicate and by every future receiver re-verifying the chain. The open-mint terms (who may mint, supply caps, and ongoing emission policy) are detailed in [System Architecture](architecture).
+Creates an account and/or issues coins of a newly-created asset. Issuance is **versioned and creator-bound**: each asset is created under a specific `IssuanceTerms` version ([System Architecture §6.5](architecture#65-issuance--versioned-schemas-v1-minimal)), and the asset's identity binds to its creator's `Pk₀` *and* its `issuance_version` by construction ([Foundations §1.4](foundations#14-identifiers-and-hashes)). *"Permissionless"* means anyone can create their own asset, not that anyone can mint someone else's: only the holder of `sk₀` of the issuing account can sign mint transitions for it. **v1 imposes no protocol-level supply cap, per-mint quantum, or time window** — within their own asset, the creator MAY mint any amount at any time; supply discipline is a creator's commitment, not a protocol guarantee (see [Architecture §6.5](architecture#65-issuance--versioned-schemas-v1-minimal)).
 
 ```
 Inputs (wallet → node):
@@ -101,13 +108,16 @@ Inputs (wallet → node):
 Wallet:
   1. derive Pk₀ = sk₀·G; sign the transition signature BIP-340(sk₀, message = inr ‖ ocr)
      (a mint spends no coin, so inr is the empty-set root; signed by Pk₀, i.e. sk₀; current_pubkey rotates to Pk₁)
-  2. derive name_hash = H(name); asset_id = Hc("AssetId", genesis_tag ‖ Pk₀ ‖ name_hash ‖ decimals)   (Foundations §1.4)
+  2. derive name_hash = H(name); asset_id = Hc("AssetId", genesis_tag ‖ Pk₀ ‖ name_hash ‖ decimals ‖ issuance_version=1)   (Foundations §1.4)
   3. provide nk and next_pubkey Pk₁ from the SPEND branch
 
 Node / prover:
-  4. build the witness with empty inputs, asset_issuance = {asset_id, name_hash, amount, decimals},
-     and one output coin {recipient = owner, amount, asset_id}
-  5. run C as an InitialProof (clause 1, InitialProof path): Mint(asset_id) = amount,
+  4. build the witness with empty inputs, asset_issuance = {asset_id, creator_pubkey = Pk₀,
+     issuance_version = 1, name_hash, amount, decimals}, and one output coin
+     {recipient = owner, amount, asset_id}
+  5. run C as an InitialProof (clause 1, InitialProof path): the v1 issuance circuit checks
+     the four §6.5 mint clauses — issuance_version == 1, H(creator_pubkey) == owner,
+     asset_id derivation, and terms_hash recomputation; Mint(asset_id) = amount,
      In(asset_id) = 0, so balance clause 3 admits exactly `amount` of the new asset
   6. obtain π, new ash, ocr, and ProofData
 
@@ -117,7 +127,7 @@ CoinProof produced:  for self-held supply, none is delivered; the node retains t
   proof, and inclusion proof locally as spend credential.
 ```
 
-`asset_id` is globally unique because it commits to the creator pubkey; two creators cannot collide, and the same creator distinguishes assets by `name_hash = H(name)`/`decimals`. The human-readable `name` travels only inside bundles, never on-chain ([Foundations](foundations) §1.4).
+`asset_id` is globally unique because it commits to the creator pubkey, `name_hash = H(name)`, `decimals`, and the `issuance_version`; two creators cannot collide, the same creator distinguishes assets by `name_hash`/`decimals`, and two assets created under different `IssuanceTerms` versions are also distinct. The human-readable `name` travels only inside bundles, never on-chain ([Foundations](foundations) §1.4).
 
 ### 2.3.2 Send
 
