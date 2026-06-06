@@ -4,7 +4,7 @@ zkCoins uses the Shielded CSV protocol for private off-chain transactions, but t
 
 ## The Problem
 
-Shielded CSV creates a separate transaction system that uses Bitcoin only for **data availability** (publishing nullifiers as Taproot inscriptions). Coins within the system are virtual — they have no direct link to on-chain BTC.
+Shielded CSV creates a separate transaction system that uses Bitcoin only for **data availability** (publishing compact commitments as Taproot inscriptions). Coins within the system are virtual — they have no direct link to on-chain BTC.
 
 To handle real Bitcoin, a **bridge** is needed: a mechanism that locks BTC on-chain and issues equivalent shielded coins, and vice versa.
 

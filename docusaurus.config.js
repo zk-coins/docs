@@ -13,7 +13,12 @@ const config = {
   projectName: 'zkcoins-app',
 
   onBrokenLinks: 'throw',
+  onBrokenAnchors: 'throw',
   onBrokenMarkdownLinks: 'warn',
+
+  markdown: {
+    mermaid: true,
+  },
 
   i18n: {
     defaultLocale: 'en',
@@ -37,6 +42,10 @@ const config = {
     ],
   ],
 
+  plugins: [require.resolve('./plugins/llms-txt')],
+
+  themes: ['@docusaurus/theme-mermaid'],
+
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
@@ -44,6 +53,9 @@ const config = {
         defaultMode: 'dark',
         disableSwitch: false,
         respectPrefersColorScheme: false,
+      },
+      mermaid: {
+        theme: { light: 'neutral', dark: 'dark' },
       },
       navbar: {
         title: 'zkCoins',
@@ -88,8 +100,8 @@ const config = {
                 href: 'https://github.com/zk-coins/zkcoins-app/tree/develop/rust/client',
               },
               {
-                label: 'SP1 Circuit',
-                href: 'https://github.com/zk-coins/zkcoins-app/tree/develop/rust/program',
+                label: 'Plonky2 Circuit',
+                href: 'https://github.com/zk-coins/node/tree/develop/program-plonky2',
               },
             ],
           },

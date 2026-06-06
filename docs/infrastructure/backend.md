@@ -5,7 +5,7 @@ title: Backend
 
 # Backend
 
-The zkCoins backend is a Rust/Axum REST API server that manages account state, generates ZK proofs, scans the Bitcoin blockchain, and publishes nullifiers.
+The zkCoins backend is a Rust/Axum REST API server that manages account state, generates ZK proofs, scans the Bitcoin blockchain, and publishes commitments.
 
 ## Architecture
 
@@ -56,7 +56,7 @@ The zkCoins backend is a Rust/Axum REST API server that manages account state, g
 ## Bitcoin Node Requirement
 
 :::warning Bitcoin node required
-The zkCoins server **requires a Bitcoin node** to operate. The server continuously scans the blockchain for Taproot Inscriptions containing nullifiers. Without a node, no transactions can be verified or published.
+The zkCoins server **requires a Bitcoin node** to operate. The server continuously scans the blockchain for Taproot Inscriptions containing zkCoins commitments. Without a node, no transactions can be verified or published.
 :::
 
 ### What the server needs from the node

@@ -42,6 +42,7 @@ Jonas Nick on the difference:
 - [Authors & Ecosystem](/research/authors) — Who built this, related projects
 - [Community Discussion](/research/community) — Bitcoin-Dev mailing list, talks, criticism
 - [Sources](/research/sources) — Complete link collection (40+ references)
+- [Adoptable Elements](/research/adoptable-elements) — What zkCoins could learn from related protocols, mapped to roadmap gaps
 
 ## Primary Sources (Full Text, Archived)
 

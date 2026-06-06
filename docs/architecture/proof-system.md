@@ -53,6 +53,8 @@ data.verify(proof)?;
 
 ### Merkle Mountain Range (MMR)
 
+> **Note:** the global Commitment-SMT/MMR below describes the earlier (v0) design. The current normative model uses the published-nullifier **accumulator** as the only global structure and no MMR — see [Foundations §1.6](/specification#16-trees-one-global-structure-one-per-account-structure) and the [glossary](/specification#glossary). A full rewrite of this page is tracked separately.
+
 - Append-only accumulator for commitment history
 - Stores one SMT root per block
 - Proves "this commitment appeared in block N"

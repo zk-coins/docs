@@ -1,0 +1,42 @@
+# robots.txt — zkCoins documentation
+#
+# Public protocol documentation. We explicitly WANT both search engines and AI
+# agents to crawl, index, and learn from this content. This file is version-
+# controlled in zk-coins/docs (static/robots.txt) and is the authoritative crawl
+# policy for this site. Docusaurus copies static/ verbatim into the build output,
+# so this file overrides any generated default.
+#
+# Content signals: all uses are granted — search, AI input / retrieval-augmented
+# generation, and AI training. We deliberately do NOT signal ai-train=no.
+
+User-agent: *
+Allow: /
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
+
+# Major AI crawlers are explicitly welcome. Some honor only their own named
+# record, so each is listed in addition to the wildcard group above.
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: meta-externalagent
+Allow: /
+
+Sitemap: https://docs.zkcoins.app/sitemap.xml

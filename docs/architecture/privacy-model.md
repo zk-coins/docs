@@ -24,9 +24,9 @@ This is achieved through Proof-Carrying Data (PCD) — each transaction produces
 
 Two things are visible on-chain:
 
-### 1. Nullifier existence
+### 1. Commitment existence
 
-The 64-byte nullifier is published as a Bitcoin Taproot Inscription. An observer can see that *some* Shielded CSV transaction occurred, but not its contents. Nullifiers look like random data — they are indistinguishable from each other.
+A compact commitment is published as a Bitcoin Taproot Inscription. Today this is the full commitment (signing public key, Schnorr signature, and message, ~177 bytes); the paper targets a 64-byte half-aggregated nullifier (see [Nullifier Design](nullifier-design)). Either way, an observer can see that *some* Shielded CSV transaction occurred, but not its contents. Commitments look like opaque, random data — they are indistinguishable from each other.
 
 ### 2. Approximate coin creation time
 
@@ -53,7 +53,7 @@ Unlike CoinJoin (Wasabi, Samourai) or mixer contracts (Tornado Cash), Shielded C
 - **No coordinator** — no central service that can be sanctioned
 - **No smart contract** — no on-chain address to blacklist
 - **Peer-to-peer** — the protocol is as decentralized as Bitcoin itself
-- **64-byte opaque nullifiers** — technically difficult to filter without breaking legitimate Bitcoin usage
+- **Opaque commitments** — the inscribed bytes are indistinguishable random-looking data, technically difficult to filter without breaking legitimate Bitcoin usage
 
 ## Backend visibility
 

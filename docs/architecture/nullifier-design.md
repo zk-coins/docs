@@ -5,11 +5,15 @@ title: Nullifier Design
 
 # Nullifier Design
 
-The nullifier is the only piece of data that touches the Bitcoin blockchain. Understanding its design is key to understanding how Shielded CSV achieves both privacy and double-spend protection.
+In the Shielded CSV design, the nullifier is the compact spent-marker that anchors a spend on Bitcoin. Understanding its design is key to understanding how Shielded CSV achieves both privacy and double-spend protection.
+
+:::note Paper design vs. current implementation
+The **64-byte half-aggregated nullifier** and the **on-chain nullifier accumulator** described on this page are the Shielded CSV **paper's design target**. The **current zkCoins implementation** instead inscribes the *full commitment* (signing public key + Schnorr signature + message, on the order of ~177 bytes) in the Taproot reveal, and enforces double-spend protection **inside the proof circuit** (proof of non-inclusion in the per-account coin history) — not via a verifier-queryable on-chain nullifier set. Schnorr half-aggregation and a global, queryable accumulator are roadmap items (strand **S2**). See [Information Flow](information-flow) → *Status & caveats*.
+:::
 
 ## What is a nullifier?
 
-A nullifier is a **64-byte cryptographic commitment** that marks a coin as spent. It is published on the Bitcoin blockchain as a Taproot Inscription. Full nodes verify one Schnorr signature per nullifier — nothing else.
+In the paper's final (step 5) design, a nullifier is a **64-byte cryptographic commitment** that marks a coin as spent. It is published on the Bitcoin blockchain as a Taproot Inscription, and full nodes verify one Schnorr signature per nullifier — nothing else. (As noted above, today's implementation inscribes the full commitment rather than the compressed nullifier.)
 
 ## Evolution (from the paper)
 
