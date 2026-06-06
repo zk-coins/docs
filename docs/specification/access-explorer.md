@@ -5,6 +5,8 @@ title: 5 · Access & Explorer
 
 # 5 · Access & Explorer
 
+> *In one sentence: the three ways an account can disclose its data on purpose — one transaction, a balance, or the whole history — and the self-hostable explorer that renders each, always cryptographically verifiable against Bitcoin, never trust-based.*
+
 This page specifies how Private data ([Foundations §1.6](foundations)) is released by a node, the structure of viewing capabilities, and the explorer that renders them. All primitives, keys, identifiers, and tags are defined in [Foundations](foundations) and used here unchanged. Normative keywords follow RFC 2119.
 
 Recall the relevant key material from [Foundations §1.2](foundations): a subject's identity is its `address = H(Pk₀)` ([§1.4](foundations)); the **operational key** `op` is the node-held Nostr/identity key that signs grants and acknowledgements but cannot spend; `ivk`/`ovk` are the viewing keys; and `K_tx` ([§1.3](foundations)) is the per-coin note key that decrypts exactly one coin. The on-chain `SpendRecord` ([§1.4](foundations)) is the only object written to Bitcoin and the integrity anchor for everything below.

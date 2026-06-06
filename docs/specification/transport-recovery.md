@@ -5,6 +5,8 @@ title: 4 · Transport & Recovery
 
 # 4 · Transport & Recovery
 
+> *In one sentence: how the encrypted coin bundle gets from sender to recipient over Nostr, how the recipient finds its own coins on a relay, and how a wallet that lost everything rebuilds its state from seed + Bitcoin + the network.*
+
 This page specifies the **off-chain layer**: how the value-bearing `CoinProof` bundle ([Foundations §1.5](foundations)) travels from sender to recipient, how a recipient discovers its own incoming bundles, how a node recovers its entire state from the **seed** plus Bitcoin, and the data-availability guarantees that make recovery possible. The on-chain layer carries only the opaque `SpendRecord` ([Foundations §1.4](foundations)); the bundle — which is simultaneously the recipient's receipt and its spend credential — never touches Bitcoin and **MUST** be delivered here.
 
 Normative keywords (**MUST**, **MUST NOT**, **SHOULD**, **MAY**) are used per RFC 2119. All primitives, keys, and identifiers are defined in [Foundations](foundations) and used unchanged.
@@ -87,11 +89,11 @@ Each published delivery event carries the per-coin `detect_tag` (§4.2, [Foundat
 A recipient (or its always-on node, holding `ivk`) finds its own incoming bundles as follows:
 
 1. Derive the detection key `dk = HKDF("zkCoins/v1/DetectTag", ivk)` ([Foundations §1.3](foundations)).
-2. Subscribe to / scan its relay set, **filtering by `detect_tag`**. Because the recipient cannot know the `epk` of an inbound coin in advance, discovery proceeds by retrieving candidate delivery events and recomputing, for each candidate's published `epk`, the expected tag `Hc("zkCoins/v1/DetectTag", dk ‖ epk)`; a match selects the event as a candidate for this recipient.
+2. Pull candidate delivery events from its relay set. The relay **cannot** pre-filter for the recipient (it lacks `dk`), so the recipient — having `dk` — performs the match itself: for each candidate's published `epk` it recomputes `Hc("zkCoins/v1/DetectTag", dk ‖ epk)` and checks it against the event's `detect_tag`. A match selects the event as the recipient's; a non-match is discarded after one Poseidon hash, with no AEAD attempt.
 3. For each matched candidate, derive `K_tx = HKDF("zkCoins/v1/NoteKey", ss ‖ epk)` where `ss = ECDH(ivk, epk)` ([Foundations §1.3](foundations)), fetch the blob by `blob_id`, and **trial-decrypt** with `K_tx`. Successful NIP-44 authentication confirms the coin is the recipient's.
 4. Verify the decrypted bundle against Bitcoin (§4.5) before accepting it.
 
-**Privacy tradeoff (normative note).** `detect_tag` is deterministic and seed-derivable — the same property that makes it the recovery scan key ([Foundations §1.3](foundations)). A relay that stores tags can therefore **link** the events sharing one recipient's tag-set, even though it learns nothing of content, amount, or identity. This is an accepted, bounded leak. A **fuzzy message detection** layer (probabilistic per-coin tags with tunable false-positive rate) is an **OPTIONAL** privacy upgrade that removes the linkability; it changes only the tag computation and the scan filter and **MUST** leave every other interface in this page unchanged.
+**Privacy tradeoff (normative note).** Because every coin uses a fresh `epk`, each recipient's events carry **all-distinct** `detect_tag`s ([Foundations §1.3](foundations)): a tag does not link two of one recipient's coins, and a relay that lacks `dk` can **neither** filter for the recipient **nor** correlate the recipient's events. The residual cost is therefore not linkability but **bandwidth**: detection is not server-side filterable, so the recipient pulls the candidate set in full and pays one cheap Poseidon hash per scanned event. **Fuzzy message detection** (probabilistic per-coin tags with tunable false-positive rate) is an **OPTIONAL scan-efficiency upgrade** that lets a relay return a smaller candidate set without learning who the recipient is; it changes only the tag computation and the scan filter and **MUST** leave every other interface in this page unchanged. It does **not** repair a linkability the deterministic scheme does not introduce.
 
 ## 4.5 Recovery
 
@@ -124,7 +126,7 @@ A bundle is custody. If every holder drops it before the recipient (or a recover
 ## 4.7 Metadata and privacy tradeoffs
 
 - **What a relay learns.** Only that an opaque, gift-wrapped, NIP-44-encrypted event was stored at some time — not sender, recipient, amount, asset, or proof (§4.1–§4.2). Because each node is a full relay, coin-delivery events blend into ordinary Nostr traffic (cover traffic).
-- **Deterministic-tag linkability.** As stated in §4.4, a tag-storing relay can link one recipient's events to each other without learning who that recipient is; the OPTIONAL fuzzy-message-detection upgrade removes this.
+- **Detection scan vs. linkability.** Per-coin `detect_tag`s are all-distinct (fresh `epk` per coin, §4.4), so a relay cannot link or filter for the recipient. The genuine residual cost is **bandwidth**: detection runs recipient-side over the candidate set. The OPTIONAL fuzzy-message-detection upgrade reduces that bandwidth.
 - **Network presence.** Operating a relay exposes the operator's network address (IP) to peers. Operators that require location privacy **SHOULD** run the relay behind an anonymity network (e.g. a Tor hidden service).
 - **Recovery disclosure.** Pulling by `detect_tag` reveals the tag-set to the serving node; pulling by ownership proof reveals the requester's identity to that node. Both are consensual, scoped to the requester's own data, and never expose spend authority.
 

@@ -5,6 +5,8 @@ title: 6 · System Architecture
 
 # 6 · System Architecture
 
+> *In one sentence: how node, wallet, and explorer fit together, why running your own node is the trustless default, and how permissionless issuance and node portability come out of the same design.*
+
 This page specifies **how the parts fit together**: the three components (node, wallet, explorer), the wallet↔node relationship, node portability and multi-node operation ([Requirement 10](/requirements)), the node's external interfaces, trustless issuance ([Requirement 8](/requirements)), and the threat model. It builds strictly on [Foundations](foundations) — the key hierarchy (§1.2), per-coin keys (§1.3), identifiers (§1.4), and the nullifier accumulator (§1.6) — and references the sibling sections for the mechanisms they own rather than re-specifying them.
 
 Normative keywords (**MUST**, **MUST NOT**, **SHOULD**, **MAY**) are used per RFC 2119.

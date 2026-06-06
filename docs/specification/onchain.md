@@ -5,6 +5,8 @@ title: 3 · On-chain Layer
 
 # 3 · On-chain Layer
 
+> *In one sentence: the single object zkCoins writes to Bitcoin (the `SpendRecord`), how publishers batch many records into one Bitcoin transaction, and how every node rebuilds the global nullifier set from the chain alone.*
+
 This page specifies the Bitcoin-facing layer of zkCoins: how a transition's `SpendRecord` ([Foundations §1.4](foundations)) is signed and embedded, how many records are aggregated and published in a single Bitcoin transaction, how any node rebuilds the global **nullifier accumulator** from the chain ([Foundations §1.6](foundations)), and how that accumulator provides trustless double-spend protection. It introduces **no** change to Bitcoin consensus and **no** native token ([Requirement 1](/requirements)).
 
 Normative keywords (**MUST**, **MUST NOT**, **SHOULD**, **MAY**) are used per RFC 2119. All primitives, identifiers, and domain-separation tags are those defined in [Foundations](foundations) and are used unchanged.

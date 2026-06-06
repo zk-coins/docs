@@ -9,6 +9,10 @@ This document is **a possible** technical specification of the **zkCoins protoco
 
 > Private payments on Bitcoin — no new chain, no token, no consensus change, no trusted operator. Only Bitcoin, zero-knowledge proofs, and the user's own keys.
 
+:::tip In one paragraph (plain language)
+zkCoins lets you send value on Bitcoin without anyone seeing the amount, the asset, who paid, or who received. Bitcoin stores only **opaque markers** that a spend happened — *not* the coin's contents, which travel privately between sender and receiver as a small encrypted bundle. **Double-spend protection** is the chain's job: each spent coin publishes a one-time random-looking *nullifier* on Bitcoin, and any second appearance is rejected. Your **seed phrase** derives every key, your **wallet** is the only thing that can spend, **any node** can serve you, and you check every figure against Bitcoin yourself.
+:::
+
 :::info What this is — and what it isn't
 This is **one** concrete realization, not the only one possible: wherever the source papers leave a choice open, this specification takes the established, Bitcoin-consistent option and defines it exactly. It builds faithfully on the whitepapers' core and carries their philosophy into every layer they did not formalize — delivery, recovery, access, and operation. It describes the **target design** and is intentionally independent of any current implementation.
 :::
@@ -38,6 +42,50 @@ These are not features bolted on. They are the same principle, followed to its c
 
 Each is rare on its own elsewhere; here they hold **together** — see [Comparisons](/comparisons).
 
+## How the data moves
+
+**What lives where.** Bitcoin holds only opaque markers; everything that says *which coin, how much, between whom* lives off-chain and is encrypted to the recipient:
+
+```mermaid
+flowchart LR
+  subgraph chain ["Bitcoin L1 — Public"]
+    sr["SpendRecord<br/>= rotating pubkey Pkᵢ<br/>+ nullifiers (plain)<br/>+ signature<br/>+ inr ‖ ocr"]
+  end
+  subgraph offchain ["Off-chain — Private to wallet/node"]
+    coin["Coin plaintext<br/>= amount, asset, recipient"]
+    proof["Recursive validity proof<br/>(constant size, hides everything)"]
+    state["AccountState<br/>= balances, keys, counters"]
+    bundle["CoinProof bundle<br/>(coin + proof + inclusion + envelope)"]
+  end
+  state -- transition produces --> sr
+  state -- transition produces --> proof
+  proof -- attests --> coin
+  proof -- packed into --> bundle
+  coin -- packed into --> bundle
+  sr -. anchors via sign-to-contract .-> proof
+```
+
+**A payment, end to end.** A pays B; both run their own wallet+node; only Bitcoin is shared:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as Alice (wallet + node)
+    participant N as Nostr relay mesh
+    participant BTC as Bitcoin
+    participant B as Bob (wallet + node)
+    A->>A: build SpendRecord + recursive proof
+    A->>N: publish encrypted CoinProof bundle (NIP-44/59)
+    A->>BTC: inscribe SpendRecord (nullifiers in the clear)
+    Note over BTC: every node folds the new nfs<br/>into its nullifier accumulator
+    B->>N: scan candidates, match detect_tag (one Poseidon hash per event)
+    N-->>B: gift-wrapped bundle blob
+    B->>B: decrypt with K_tx, verify recursive proof
+    B->>BTC: check coin inclusion + non-membership of nf
+    B->>B: credit coin (trustless)
+    B-->>A: encrypted ACK; A may now drop its retained copy
+```
+
 ## Scope
 
 The specification covers every component that will exist: the **node** (validator · prover · relay · data store), the **wallet** (thin key-holder), and the **explorer** (public and authorised views) — together with the cryptography that binds them. For every key, hash, and identifier it states exactly **how it is derived**; for every requirement, **how it is met**.
@@ -58,8 +106,10 @@ The whole specification exists to satisfy these (in full on the [Requirements](/
 | 4 | [Transport & Recovery](transport-recovery) | Off-chain delivery, note discovery, seed recovery, data availability |
 | 5 | [Access & Explorer](access-explorer) | Capability-gated pull, view grants, and the disclosure spectrum: per-transaction links, balance attestations, full-account views |
 | 6 | [System Architecture](architecture) | Node, wallet, explorer; portability, multi-node, issuance, threat model |
+| — | [Glossary](glossary) | Every term, identifier, and notation, alphabetical, one line each |
+| — | [Test vectors](test-vectors) | Worked-example values and a conformance harness for implementations |
 
-New here? Read **Foundations** first — everything else builds on it.
+New here? Read **Foundations** first — everything else builds on it. Stuck on a term? Jump to the **Glossary**.
 
 ## Requirements traceability
 
