@@ -131,6 +131,10 @@ IssuanceTerms_v1 = {
   asset_id          : field,        // = Hc("AssetId", genesis_tag ‖ creator_pubkey
                                     //         ‖ H(name) ‖ decimals ‖ issuance_version)
                                     //   (Foundations §1.4)
+  creator_pubkey    : 32 bytes,     // = Pk₀ of the issuing account (x-only); the circuit
+                                    //   verifies H(creator_pubkey) == prev_account_state.owner
+                                    //   because the SPEND key rotates per transition and Pk₀
+                                    //   is otherwise irrecoverable in-circuit from owner = H(Pk₀)
   issuance_version  : u8 = 1,       // the schema version this asset is created under
   name_hash         : digest,       // = H(name); the human-readable name is NEVER on-chain
   decimals          : u8,           // display precision; bound into asset_id, no in-circuit effect
@@ -144,11 +148,12 @@ IssuanceTerms_v1 = {
 
 The v1 mint proof (see [Proofs & State Transitions](proofs)) **MUST** verify, in-circuit, that:
 
-- (a) `IssuanceTerms.issuance_version == 1` — this circuit accepts only v1 mints;
-- (b) the coin's `asset_id` equals `IssuanceTerms.asset_id`;
-- (c) `terms_hash` recomputes from `asset_id ‖ issuance_version` per the formula above.
+- (a) `issuance_version == 1` — this circuit accepts only v1 mints;
+- (b) `H(creator_pubkey) == prev_account_state.owner` — binds the issuance to the asset's creator account (only the holder of `sk₀` can produce a witnessed `creator_pubkey` whose SHA-256 image matches `owner`, since SHA-256 is preimage-resistant in-circuit);
+- (c) `asset_id == Hc("AssetId", genesis_tag ‖ creator_pubkey ‖ name_hash ‖ decimals ‖ issuance_version)` — the v1 `asset_id` derivation of [Foundations §1.4](foundations#14-identifiers-and-hashes);
+- (d) `terms_hash == Hc("IssuanceTerms", asset_id ‖ issuance_version)` — the `terms_hash` recomputation.
 
-There is no clause (d), (e), or beyond in v1: no protocol-enforced cap, no per-mint quantum, no time window, no signer set beyond the creator. Those are deliberately deferred to later versions.
+Mint clauses (a)–(d) are the entire v1 mint circuit: no protocol-enforced cap, no per-mint quantum, no time window, no signer set beyond the creator. Those are deliberately deferred to later versions. The `Mint(asset_id) = amount` flow into [Proofs §2.1 clause 3](proofs#21-the-compliance-predicate) (per-asset balance conservation) is the only other constraint a v1 mint participates in.
 
 ### Forward compatibility: future versions
 
