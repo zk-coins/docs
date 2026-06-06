@@ -87,16 +87,6 @@ Content starts here.
 - **No marketing language** — be technical and precise
 - **Code blocks** — always specify the language (`typescript`, `rust`, `bash`, `json`)
 
-### Diagrams
-
-Use **ASCII or Mermaid** diagrams — no images, no external tools:
-
-```
-┌──────────┐     ┌──────────┐
-│ Browser  │────▶│ Backend  │
-└──────────┘     └──────────┘
-```
-
 ### Callouts
 
 Use Docusaurus admonitions:
