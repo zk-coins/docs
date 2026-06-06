@@ -158,9 +158,12 @@ Receiver / node:
   2. RE-VERIFY THE FULL RECURSIVE PROOF: C.verify(proof) under the canonical verifier data.
      This transitively attests the entire provenance in constant time (§2.2). MUST pass.
   3. inclusion: verify inclusion_proof places coin.identifier in the committed output_coins_root.
-  4. anchoring: verify that output_coins_root is bound by a real on-chain SpendRecord — a BIP-340
-     signature over message = inr ‖ ocr present in Bitcoin (see Onchain), whose published nullifiers
-     hash to that inr. This proves the creating spend was actually settled on Bitcoin.
+  4. anchoring: verify that output_coins_root is bound by a SpendRecord that the receiver's own scanner
+     has admitted under §3.5+§3.6 (see Onchain) — i.e. a BIP-340 signature over message = inr ‖ ocr
+     inscribed on Bitcoin AND passing every admission check there (block_anchor bounds, signature,
+     nullifier-root binding, canonical order, first-spend-wins), whose published nullifiers hash to that
+     inr. A SpendRecord the scanner has rejected — for any reason — MUST be treated as not anchored.
+     This proves the creating spend was actually admitted on Bitcoin, not merely inscribed.
   5. nullifier non-membership: rebuild the global nullifier accumulator from the nullifiers published
      on Bitcoin and verify the coin's own nf is NOT among them — i.e. the coin is unspent — computed
      from the chain, not asserted by any node.
