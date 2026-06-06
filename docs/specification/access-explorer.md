@@ -7,7 +7,7 @@ title: 5 · Access & Explorer
 
 This page specifies how Private data ([Foundations §1.6](foundations)) is released by a node, the structure of viewing capabilities, and the explorer that renders them. All primitives, keys, identifiers, and tags are defined in [Foundations](foundations) and used here unchanged. Normative keywords follow RFC 2119.
 
-Recall the relevant key material from [Foundations §1.2](foundations): a subject's identity is its `address = H(Pk₀)` ([§1.4](foundations)); the **operational key** `op` is the node-held Nostr/identity key that signs grants and acknowledgements but cannot spend; `ivk`/`ovk` are the viewing keys; and `K_tx` ([§1.3](foundations)) is the per-coin note key that decrypts exactly one coin. The on-chain `Commitment` ([§1.4](foundations)) is the only object written to Bitcoin and the integrity anchor for everything below.
+Recall the relevant key material from [Foundations §1.2](foundations): a subject's identity is its `address = H(Pk₀)` ([§1.4](foundations)); the **operational key** `op` is the node-held Nostr/identity key that signs grants and acknowledgements but cannot spend; `ivk`/`ovk` are the viewing keys; and `K_tx` ([§1.3](foundations)) is the per-coin note key that decrypts exactly one coin. The on-chain `SpendRecord` ([§1.4](foundations)) is the only object written to Bitcoin and the integrity anchor for everything below.
 
 **Disclosure is holder-initiated and account-granular.** All disclosure is opt-in: absent one, [Requirement 2](/requirements) holds in full. Because accounts and addresses are one-to-one ([Foundations §1.2](foundations)), every account-level disclosure covers the **whole** account; there is no "one address out of many." To keep some activity outside a disclosure, it must live in a **separate account**. This page specifies the disclosure spectrum, narrowest first ([Requirement 9](/requirements)):
 
@@ -25,7 +25,7 @@ Every node exposes exactly one endpoint for Private data — the **pull endpoint
 
 The bearer view capabilities (`zkview`, [§5.3](#53-per-coin-view-capability); `zkavk`, [§5.8](#58-address-view-full-history)) and the balance attestation ([§5.7](#57-balance-attestation-history-private)) are **not** server authorisations: they are client-side decryption secrets, or a self-contained proof, that an explorer applies to bundles it obtains from the relay mesh ([Transport & Recovery](transport-recovery)) or by self-hosted scanning. They never cause a node to release a Private record it would not otherwise serve; they widen what the *holder of the secret* can read from already-public, encrypted material.
 
-The endpoint **MUST** be unauthenticated only for the Public projection of [§5.5](#55-two-explorer-modes) (on-chain commitments and roots), which carry no Private data by construction.
+The endpoint **MUST** be unauthenticated only for the Public projection of [§5.5](#55-two-explorer-modes) (on-chain `SpendRecord`s and the global nullifier set), which carry no Private data by construction.
 
 A request proceeds as a challenge–response so that captured transcripts cannot be replayed:
 
@@ -128,7 +128,7 @@ The two **account-wide** capabilities — ownership proof and account view key �
 
 The same node data ([Foundations §1.6](foundations): plaintext leaves Private, roots Public) is presented in two modes that differ **only** in the capability supplied.
 
-**Public mode.** No capability is presented. The explorer renders **only** Public on-chain data: the stream of `Commitment`s, the global roots and commitment history ([Foundations §1.6](foundations)), and aggregate counts, with signature- and anchoring-checks against Bitcoin. It **MUST NOT** display amounts, `asset_id`s or asset names, balances, addresses, senders, or recipients — none of which are derivable from Public data. (A commitment's byte length **MAY** hint at the transaction *type*; never its content.)
+**Public mode.** No capability is presented. The explorer renders **only** Public on-chain data: the stream of `SpendRecord`s, the global nullifier set rebuilt from the chain ([Foundations §1.6](foundations)), and aggregate counts, with signature- and anchoring-checks against Bitcoin. It **MUST NOT** display amounts, `asset_id`s or asset names, balances, addresses, senders, or recipients — none of which are derivable from Public data. (A record's byte length **MAY** hint at the transaction *type* — e.g. a mint publishes no nullifier; never its content.)
 
 **Authorised mode.** The viewer supplies the subject's signed **view grant** ([§5.2](#52-view-grant)) (or, for self-view, an ownership proof). The explorer then drives the pull endpoint of [§5.1](#51-capability-gated-pull) on the viewer's behalf and renders that subject's real transactions **within the grant's scope** — and nothing beyond it. Disclosure stays under the subject's control: the subject chooses the grantee, the asset set, and the time window. The explorer is a client of the capability model; it gains **no** privilege the presented capability does not already confer.
 
@@ -136,19 +136,19 @@ The same node data ([Foundations §1.6](foundations): plaintext leaves Private, 
 
 This is the case of [Requirement 9](/requirements): a sender (A) who paid a recipient (B) hands B — or a third party — a link that confirms exactly that one payment, *"here is verifiable proof I sent it."* The link is a bearer of a **per-coin view capability** ([§5.3](#53-per-coin-view-capability)) plus the locators needed to fetch and anchor the transaction.
 
-**Link grammar.** A confirmation link carries exactly three parts: a handle to the on-chain `Commitment`, a **holder locator**, and a `zkview` per-coin capability. The reference URL form (one self-hostable explorer instance shown; any instance is equivalent):
+**Link grammar.** A confirmation link carries exactly three parts: a handle to the on-chain `SpendRecord`, a **holder locator**, and a `zkview` per-coin capability. The reference URL form (one self-hostable explorer instance shown; any instance is equivalent):
 
 ```
-https://<explorer-host>/tx/<commitment>:<holder>:<view-cap>
+https://<explorer-host>/tx/<spendrecord>:<holder>:<view-cap>
 
   <explorer-host> = explorer.zkcoins.app         ; one instance among many; self-hostable
-  <commitment>    = <txid> ":" <j>                ; the inscription lives in the reveal tx witness
+  <spendrecord>   = <txid> ":" <j>                ; the inscription lives in the reveal tx witness
                                                  ; (NOT a vout); <txid> is the reveal transaction and
-                                                 ; <j> is the payload-position index of the commitment
+                                                 ; <j> is the payload-position index of the record
                                                  ; within that inscription (onchain.md §3.6 ordering).
-                                                 ; A reveal tx batches MANY commitments, so <j> is
+                                                 ; A reveal tx batches MANY records, so <j> is
                                                  ; required; the handle resolves to exactly one
-                                                 ; Commitment; e.g. <txid>:7 — anchors to Bitcoin ([Foundations §1.4])
+                                                 ; SpendRecord; e.g. <txid>:7 — anchors to Bitcoin ([Foundations §1.4])
   <holder>        = a node locator that holds the bundle:
                       "op:" <op-pubkey-bech32>     ; a specific holder (e.g. A's node), or
                       "@"  <relay-url>             ; an explicit relay, or
@@ -156,16 +156,16 @@ https://<explorer-host>/tx/<commitment>:<holder>:<view-cap>
   <view-cap>      = <zkview>                       ; Bech32m per-coin capability ([§5.3])
 ```
 
-The `<txid>:<j>` handle — `<txid>` the reveal transaction whose witness carries the inscription, `<j>` the payload-position index of the commitment within that inscription (onchain §3.6 ordering) — resolves to **exactly one** `Commitment` within the batched reveal transaction; the per-coin `K_tx` (`<view-cap>`) then selects the one coin inside that commitment's transaction.
+The `<txid>:<j>` handle — `<txid>` the reveal transaction whose witness carries the inscription, `<j>` the payload-position index of the record within that inscription (onchain §3.6 ordering) — resolves to **exactly one** `SpendRecord` within the batched reveal transaction; the per-coin `K_tx` (`<view-cap>`) then selects the one coin inside that record's transaction.
 
-A canonical, host-independent form `zkcoins:tx/<commitment>:<holder>:<view-cap>` **MAY** be used so the link is portable across explorer instances; an explorer **MUST** treat the `<commitment>`/`<holder>`/`<view-cap>` triple, not the host, as authoritative.
+A canonical, host-independent form `zkcoins:tx/<spendrecord>:<holder>:<view-cap>` **MAY** be used so the link is portable across explorer instances; an explorer **MUST** treat the `<spendrecord>`/`<holder>`/`<view-cap>` triple, not the host, as authoritative.
 
 **Flow.**
 
 1. Any holder of the link opens it on an explorer — e.g. `explorer.zkcoins.app`, a **neutral node that is neither A nor B**, or one the viewer self-hosts.
-2. The explorer resolves `<holder>` (or, when `*`, queries the relay mesh, [Transport & Recovery](transport-recovery)) and **pulls the bundle** for `<commitment>` — the `CoinProof` ([Foundations §1.5](foundations): coin + proof + inclusion proof + encryption envelope).
+2. The explorer resolves `<holder>` (or, when `*`, queries the relay mesh, [Transport & Recovery](transport-recovery)) and **pulls the bundle** for `<spendrecord>` — the `CoinProof` ([Foundations §1.5](foundations): coin + proof + inclusion proof + encryption envelope).
 3. The explorer decrypts the coin with `<view-cap>` (`K_tx`) and renders the full single transaction: **amount, asset, time, status**.
-4. The explorer surfaces **verifiable evidence**: it checks the coin's inclusion in `output_coins_root`, that root's `Commitment` anchored on Bitcoin, and the recursive validity proof ([Foundations §1.4, §1.5](foundations)). The viewer therefore trusts **Bitcoin and the proof — never the explorer's assertion**.
+4. The explorer surfaces **verifiable evidence**: it checks the coin's inclusion in `output_coins_root`, that root's `SpendRecord` anchored on Bitcoin, and the recursive validity proof ([Foundations §1.4, §1.5](foundations)). The viewer therefore trusts **Bitcoin and the proof — never the explorer's assertion**.
 
 **Properties.**
 
@@ -180,7 +180,7 @@ The explorer is a **self-hostable presentation layer** and **MUST NOT** be a tru
 
 The narrowest *account-level* disclosure proves a balance **without exposing a single transaction**. The subject produces a zero-knowledge proof that its on-chain-committed account state holds a given balance of one asset, and hands over only that proof. It reveals the address, the asset, and the number — never any coin, counterparty, amount-flow, or history.
 
-It leverages the existing state commitment ([Foundations §1.5–§1.6](foundations)): an account's balance lives in its `AccountState`, whose `ash` is committed on-chain in the Commitment-SMT. The proof therefore attests to the **real, committed** balance; it cannot assert a false one.
+It re-uses the account's own recursive validity proof ([Proofs §2.2](proofs)) as the anchor — there is no global account-keyed tree to point at ([Foundations §1.6](foundations)). That proof's public input `new_account_state_hash` is the hash of the very `AccountState` being attested, and the on-chain `SpendRecord` that settled the state binds that proof through its sign-to-contract nonce ([On-chain §3.2](onchain)). The attestation therefore stands on the **real, Bitcoin-anchored** state; it cannot assert a false one.
 
 ```
 BalanceAttestation:
@@ -188,18 +188,22 @@ BalanceAttestation:
     { subject : address,
       asset_id,
       balance : B,
-      anchor  : { smt_root, block_hash, height } }   // a Commitment-SMT root pinned to a Bitcoin block
+      anchor  : { txid, j, block_hash, height } }    // the on-chain SpendRecord that settled the state
 
   witness (hidden):
-    { AccountState S, smt_path }                       // S and its membership path in the Commitment-SMT
+    { AccountState S,
+      pi,                                             // the account's recursive validity proof for S
+      R_prime }                                       // sign-to-contract opening of the anchor's signature
 
   statement (domain tag "zkCoins/v1/BalanceProof"):
     1. S.owner == subject
     2. S.balances[asset_id] == B
-    3. ash(S) is the Commitment-SMT leaf keyed by `subject` under `anchor.smt_root`
+    3. pi verifies under the canonical verifier data, and pi.ProofData.new_account_state_hash == ash(S)
+    4. the SpendRecord at `anchor` commits to pi: its signature nonce opens, with R_prime, to
+       t = H(R_prime ‖ H(pi.ProofData))    (sign-to-contract, On-chain §3.2)
 ```
 
-The verifier checks the proof and that `anchor.smt_root` is the root committed at `{block_hash, height}` on Bitcoin ([On-chain layer](onchain)). No node, relay, or explorer is trusted.
+The verifier checks the proof and that the `SpendRecord` at `anchor` (`txid:j`) is present at `{block_hash, height}` on Bitcoin ([On-chain layer](onchain)). No node, relay, or explorer is trusted.
 
 **Reference link** (any self-hostable instance is equivalent):
 
@@ -234,7 +238,7 @@ https://<explorer-host>/address/<address>:<holder>:<zkavk>
   <holder> = node locator ("op:"<op-pubkey> | "@"<relay-url> | "*"), as in §5.6
 ```
 
-**Flow.** The explorer derives the detection key from `ivk` ([Foundations §1.3](foundations)), finds the account's coins on the relay mesh ([Transport & Recovery](transport-recovery)) or via `<holder>`, decrypts incoming coins with `ivk` and recovers outgoing-coin plaintext with `ovk`, and renders the full history — checking every transaction against Bitcoin (coin inclusion → `Commitment` → recursive proof, as in [§5.6](#56-shareable-confirmation-links)). The explorer is never trusted.
+**Flow.** The explorer derives the detection key from `ivk` ([Foundations §1.3](foundations)), finds the account's coins on the relay mesh ([Transport & Recovery](transport-recovery)) or via `<holder>`, decrypts incoming coins with `ivk` and recovers outgoing-coin plaintext with `ovk`, and renders the full history — checking every transaction against Bitcoin (coin inclusion → `SpendRecord` → recursive proof, as in [§5.6](#56-shareable-confirmation-links)). The explorer is never trusted.
 
 **Properties.**
 

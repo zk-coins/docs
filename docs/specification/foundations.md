@@ -34,7 +34,7 @@ Notation:
 - `a ‖ b` — byte concatenation.
 - **Secret vs. public.** A lowercase key name (`skᵢ`, `ivk`, `ovk`, `op`, `nk`) denotes the **secret scalar**; its public point is written `<name>·G` or a named pubkey (e.g. `Pkᵢ = skᵢ·G`, `IVPK = ivk·G`, `op_pubkey = op·G`). BIP-340 public keys are **x-only** (32 bytes).
 
-**Domain separation.** Every `Hc` / `HKDF` call **MUST** be tagged with a context string of the form `"zkCoins/v1/<context>"`. The contexts used in this spec are: `Address`, `AssetId`, `Coin`, `AccountState`, `CoinsRoot`, `Nullifier`, `NoteKey`, `DetectTag`, `Grant`, `IssuanceTerms`, `HalfAgg`, `BalanceProof`. Reusing a tag for two purposes is forbidden.
+**Domain separation.** Every `Hc` / `HKDF` call **MUST** be tagged with a context string of the form `"zkCoins/v1/<context>"`. The contexts used in this spec are: `Address`, `AssetId`, `Coin`, `AccountState`, `CoinsRoot`, `Nullifier`, `NullifiersRoot`, `NoteKey`, `DetectTag`, `Grant`, `IssuanceTerms`, `HalfAgg`, `BalanceProof`. Reusing a tag for two purposes is forbidden.
 
 ## 1.2 Key hierarchy
 
@@ -68,7 +68,7 @@ seed  (256-bit; BIP-39 mnemonic, or Passkey PRF → HKDF)
 
 The **operational bundle** `{ivk, ovk, op}` is what a wallet entrusts to a node so the node can receive and serve on its behalf 24/7. None of it can spend. A *foreign* node never receives these directly; the wallet instead issues that node a scoped, `op`-signed **view grant** (§ Access model).
 
-**Spend-key model (account-level).** The keys `skᵢ` are rotating **per-transition** signing keys — there is **no** per-coin signing key. Transition `i` (where `i = send_counter` at entry) is authorised by `skᵢ`, whose public key `Pkᵢ` is the account's `current_pubkey` and is published in that transition's `Commitment`; the transition rotates `current_pubkey` to `Pk_{i+1}`. `Pk₀` fixes the address and appears on-chain only in the **first** transition. `nk` is account-level. Coin ownership is by the account (a coin's `recipient = address`); a receiver therefore never needs a per-coin key.
+**Spend-key model (account-level).** The keys `skᵢ` are rotating **per-transition** signing keys — there is **no** per-coin signing key. Transition `i` (where `i = send_counter` at entry) is authorised by `skᵢ`, whose public key `Pkᵢ` is the account's `current_pubkey` and is published in that transition's `SpendRecord` (§1.4); the transition rotates `current_pubkey` to `Pk_{i+1}`. `Pk₀` fixes the address and appears on-chain only in the **first** transition. `nk` is account-level. Coin ownership is by the account (a coin's `recipient = address`); a receiver therefore never needs a per-coin key.
 
 **Accounts and addresses are one-to-one.** An account `A` has **exactly one** address, `address = H(Pk₀)` (§1.4). The protocol defines **no** diversified addresses, sub-addresses, or change addresses: there is no way to derive a second, separately-disclosable or separately-unlinkable receiving address under the same account. The **account is therefore the sole unit** of every isolation boundary in the system — privacy domain, selective disclosure ([Access & Explorer](access-explorer)), recovery ([Transport & Recovery](transport-recovery)), and node portability ([Requirement 10](/requirements)). A wallet derives further accounts at `m/1798'/account'`; it **MUST NOT** present multiple receiving addresses within one account. Consequences a wallet **MUST** surface to the user:
 
@@ -102,16 +102,17 @@ Exact derivations. Every value here is reproducible from its inputs.
 | Identifier | Definition | Size / type |
 |---|---|---|
 | **Address** | `address = H(Pk₀)` — SHA-256 of the **initial** spend public key; fixed at account creation; the protocol's only identity | 32 bytes (Bech32m, HRP `zk`) |
-| **AssetId** | `asset_id = Hc("AssetId", genesis_tag ‖ creator_pubkey ‖ name_hash ‖ decimals)` at asset creation, where `creator_pubkey ≜ Pk₀` of the issuing account (its initial spend public key — the same key that fixes the account `address`), `name_hash = H(name)`, and `genesis_tag` is the fixed constant ASCII string `zkCoins/v1/genesis`; the human-readable `name` is **never** on-chain. Every input is thus derived from stated values, so `asset_id` is fully reproducible | field element / 32-byte canonical |
-| **Coin identifier** | `coin.identifier = Hc("Coin", account_state_hash ‖ asset_id ‖ coin_index)`. The `account_state_hash` in this formula is the `ash` of the state that **created** the coin (the transition that produced it as an output); a coin's identifier is fixed at creation and recomputed with that same `ash` when later spent. | field element |
+| **AssetId** | `asset_id = Hc("AssetId", genesis_tag ‖ creator_pubkey ‖ name_hash ‖ decimals)` at asset creation, where `creator_pubkey ≜ Pk₀` of the issuing account (its initial spend public key — the same key that fixes the account `address`), `name_hash = H(name)`, and `genesis_tag` is the fixed constant ASCII string `zkCoins/v1/genesis`; the human-readable `name` is **never** on-chain. Every input is thus derived from stated values, so `asset_id` is fully reproducible | 256-bit digest (32-byte canonical) |
+| **Coin identifier** | `coin.identifier = Hc("Coin", account_state_hash ‖ asset_id ‖ coin_index)`. The `account_state_hash` in this formula is the `ash` of the state that **created** the coin (the transition that produced it as an output); a coin's identifier is fixed at creation and recomputed with that same `ash` when later spent. | 256-bit digest (32-byte canonical) |
 | **account_state_hash** (`ash`) | `ash = Hc("AccountState", serialize(AccountState))` | 32-byte canonical |
 | **output_coins_root** (`ocr`) | Poseidon Merkle root over the transaction's output `coin.identifier`s, tag `CoinsRoot` | 32-byte canonical |
-| **Commitment message** | `message = ash ‖ ocr` | 64 bytes |
-| **Commitment** | `{ public_key: Pkᵢ (32B x-only), signature: BIP-340(skᵢ, message) (64B), message (64B) }` — the **only** object written to Bitcoin | ~177 bytes inscribed |
-| **Nullifier** | `nf = Hc("Nullifier", nk ‖ coin.identifier)` — revealed when a coin is spent; unlinkable to the coin without `nk` | field element |
-| **ProofData** (public inputs) | `{ prev_commitment_history_root, new_account_state_hash, output_coins_root, input_nullifiers_root, prev_nullifier_acc_root, nullifier_acc_root, coin_history_root }` | hashes/roots only |
+| **input_nullifiers_root** (`inr`) | Poseidon Merkle root over the transition's spent `nf`s, tag `NullifiersRoot` | 32-byte canonical |
+| **SpendRecord message** | `message = inr ‖ ocr` — binds the spent nullifier set and the produced output coins | 64 bytes |
+| **SpendRecord** | `{ public_key: Pkᵢ (32B x-only), nullifiers: [nf]ⱼ (32B each — the coins spent in this transition, **published in the clear**), signature: BIP-340(skᵢ, message) (64B), message (64B) }` — the **only** object written to Bitcoin. The published `nf`s are exactly what every node folds into the global nullifier accumulator (§1.6); a mint, which spends no coin, publishes an empty `nullifiers` list | `~160 + 32·\|nf\|` bytes inscribed |
+| **Nullifier** | `nf = Hc("Nullifier", nk ‖ coin.identifier)` — revealed (in the `SpendRecord`) when a coin is spent; unlinkable to the coin without `nk` | 256-bit digest (32-byte canonical) |
+| **ProofData** (public inputs) | `{ new_account_state_hash, output_coins_root, input_nullifiers_root, coin_history_root }` — note there is **no** accumulator root here: global double-spend is enforced by the published `nf`s on-chain (§1.6), not by an in-circuit membership proof against a global root | hashes/roots only |
 
-The BIP-340 signature over `message` additionally uses **sign-to-contract**: the transaction commitment is embedded in the nonce, so no extra bytes are needed on-chain (see On-chain layer).
+The BIP-340 signature over `message` additionally uses **sign-to-contract**: it embeds the digest of the transition's off-chain validity proof (`H(ProofData)`) in the nonce, anchoring that proof to this exact on-chain `SpendRecord` without spending any extra bytes on-chain (see [On-chain layer §3.2](onchain)). This is a real binding to data that is **not** otherwise on-chain — the message itself carries only `inr ‖ ocr`.
 
 ## 1.5 Core data structures
 
@@ -136,20 +137,20 @@ CoinProof    = {                            // the value-bearing off-chain bundl
 Invoice      = { amount, recipient: address, asset_id, memo? }     // shareable, off-chain
 ```
 
-## 1.6 Global and per-account trees
+## 1.6 Trees: one global structure, one per-account structure
 
-| Structure | Scope | Contents | Root goes |
+| Structure | Scope | Contents | Built from |
 |---|---|---|---|
-| **Coin-history SMT** | per account | coins the account has received/spent (for in-circuit non-inclusion) | into `ash` lineage |
-| **Commitment SMT** | global | latest committed state per account, keyed by `address` | on-chain (root) |
-| **Commitment MMR** | global | one Commitment-SMT root per Bitcoin block (append-only history) | on-chain (root) |
-| **Nullifier accumulator** | global | every published `nf` (sorted Merkle / SMT, supports membership + non-membership) | on-chain (root) |
+| **Coin-history SMT** | per account | coins the account has received/spent (for in-circuit non-inclusion) | the account's own coins; root folded into `ash` lineage (Private) |
+| **Nullifier accumulator** | global | every published `nf` (sorted Merkle / SMT, supports membership + non-membership) | the `nf`s **published in the clear** in every on-chain `SpendRecord` (§1.4) |
 
-Tree leaves that contain plaintext (coins, balances) are **Private**; only **roots** are **Public**. The global structures are rebuilt by any node from the public chain plus the bundles it holds, and are verifiable against Bitcoin — they require no trust in the node that serves them.
+There is **exactly one** global structure — the nullifier accumulator — and it is the only thing the protocol relies on Bitcoin to order. zkCoins defines **no** global, account-keyed commitment tree: an account's latest state is carried by its own constant-size recursive proof ([Proofs §2.2](proofs)), never by a global per-account on-chain index. This is deliberate. A global structure keyed by a stable account identifier would have to be **either** rebuildable by every node from the chain (which requires the identifier on-chain) **or** privacy-preserving (which requires it hidden) — never both. The protocol keeps privacy ([Requirement 2](/requirements)) and rebuildability ([Requirement 10](/requirements)) at once by removing that structure entirely and anchoring double-spend protection in the **nullifier accumulator** alone.
+
+Because the spent `nf`s are published verbatim on Bitcoin, **any node rebuilds the nullifier accumulator directly from the chain** — a pure function of confirmed Bitcoin data, identical for every honest node, requiring **no** trust in any peer and **no** foreign off-chain data ([On-chain §3.6](onchain)). The per-account coin-history SMT is Private (its leaves are the account's own coins) and never leaves the account's own proving context; only its root appears, hashed, inside `ash`.
 
 ## 1.7 Encoding rules
 
-- Field elements are canonically encoded as 32-byte big-endian (Goldilocks elements zero-padded); SHA-256 outputs are 32 bytes as-is.
+- Every `Hc` value used as an **identifier, nullifier, or Merkle root** is a full **256-bit Poseidon digest** — four Goldilocks field elements — canonically encoded as 32 bytes (each limb 8 bytes big-endian, limbs in order). A single 64-bit Goldilocks element **MUST NOT** be used as a nullifier, identifier, or root: 64-bit collision resistance is insufficient. SHA-256 outputs are 32 bytes as-is.
 - Bitcoin txids are stored internal-order and **displayed** byte-reversed (canonical Bitcoin convention).
 - Addresses, view grants, and explorer view capabilities are Bech32m with distinct HRPs so they are never confused: `zk` (address), `zkgrant` (view grant), `zkview` (per-coin view capability), `zkavk` (bearer account view key, `ivk ‖ ovk`; see [Access & Explorer §5.8](access-explorer)). A node/explorer **MUST** reject a value presented under the wrong HRP.
 - All multi-input hashes fix input order exactly as written in §1.4; reordering changes the digest and is invalid.
