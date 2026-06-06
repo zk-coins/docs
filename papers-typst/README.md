@@ -1,28 +1,28 @@
 # Papers as Typst
 
-Typst rebuilds of the three documents that anchor zkCoins. Sources and
-prebuilt PDFs sit side by side; rebuild with `typst compile`.
+Typst rebuild of the zkCoins protocol specification, dressed in the
+Shielded-CSV paper's design language. Source markdown and rendered
+PDF sit side by side; rebuild with `typst compile`.
 
 ## Files
 
 | Typst source | Rendered PDF | Origin |
 |---|---|---|
 | `spec.typ` | `spec.pdf` (~74 pp) | This repo: `docs/specification.md` |
-| `shielded-csv.typ` | `shielded-csv.pdf` (~42 pp) | [ePrint 2025/068](https://eprint.iacr.org/2025/068) — Nick / Eagen / Linus, Sept 2024 |
-| `zkcoins.typ` | `zkcoins.pdf` (~3 pp) | [Robin Linus gist](https://gist.github.com/RobinLinus/d036511015caea5a28514259a1bab119) (2023) |
 
-`spec.typ` is a single-source build of the protocol spec dressed in the
-Shielded-CSV paper's design language (New Computer Modern, bordered
-figure boxes, plain bordered admonition boxes, exact section
-numbering). It is regenerated from `docs/specification.md` via the
-pipeline below.
+The Typst output uses New Computer Modern, US-Letter at 1 in margins,
+numbered sections + TOC, bordered figure/code/admonition boxes, and a
+custom Abstract block — all matched to the
+[Shielded CSV paper](https://eprint.iacr.org/2025/068) for visual
+continuity across the project's reference documents. Typst rebuilds of
+the Shielded CSV paper itself and Robin Linus's zkCoins gist live in
+[`zk-coins/research`](https://github.com/zk-coins/research) under
+`papers-typst/`.
 
 ## Build
 
 ```bash
 typst compile spec.typ
-typst compile shielded-csv.typ
-typst compile zkcoins.typ
 ```
 
 Live preview while editing:
@@ -46,13 +46,13 @@ of the initial import) and can be re-run when the markdown changes.
 ## Scope
 
 Faithful text reproduction. Math rendered as native Typst math (not
-images), tables as `#table`, ASCII figures as bordered code blocks,
-numbered references where the source has them. Layout is not pixel-exact
-to the originals — content + structure + math fidelity are the bar.
+images), tables as `#table`, ASCII figures as bordered code blocks.
+Layout is not pixel-exact to the markdown's web rendering — content +
+structure + math fidelity are the bar.
 
 ## Tooling
 
 - `typst` ≥ 0.14
 - `pandoc` (for the `spec.typ` regeneration pipeline)
-- Default `New Computer Modern` font (system-installed via Typst's
-  bundled fonts on most platforms)
+- Default `New Computer Modern` font (bundled with Typst on most
+  platforms)
