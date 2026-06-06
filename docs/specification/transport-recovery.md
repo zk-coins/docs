@@ -50,6 +50,13 @@ A bundle is delivered as a small Nostr control event that **references** the enc
 - Until a valid ACK arrives, the sender **MUST** re-publish the delivery event on an exponential-backoff schedule (RECOMMENDED: initial 30 s, doubling, capped at 1 h) to every relay in the recipient's set.
 - After a valid ACK the sender **MAY** drop its retained copy. The sender **MUST NOT** drop the copy before both a valid ACK and the replication target `k` (§4.6) are confirmed.
 
+**Self-delivery of change and account state (normative).** A transition almost always produces a **change coin** that returns value to the spender's *own* account, and it advances the account to a new state whose recursive proof is the credential the **next** spend must extend. The spender's node **MUST** deliver this self-addressed bundle to the spender's **own** advertised relay set under the identical rules above — encrypted to the spender's own `IVPK`, carrying its own `detect_tag` (§4.2), ACK-tracked where applicable, and replicated to `k` independent holders (§4.6). Self-delivery is not optional bookkeeping; it is what makes two situations work, and **without it neither does**:
+
+- **Multiple devices / nodes on one seed.** The Bitcoin chain reveals only that the account's head moved — the new `ash` ([Foundations §1.4](foundations)) — never the new **balance** (which lives in `AccountState.balances`, on-chain only as a hash) nor the **recursive proof** to build on. A second device therefore learns of a spend made elsewhere **only** by discovering this self-addressed bundle on a shared relay (§4.4) and pulling its blob. Consequently, devices that must stay in sync **MUST** share at least one advertised relay, or one node **MUST** be reachable through the other's pull endpoint ([Access & Explorer §5.1](access-explorer)); otherwise a second device can detect that the head advanced but **cannot reconstruct the spendable state**, and must fall back to emergency reconstruction (§4.5).
+- **Emergency recovery.** Step 5 of §4.5 rebuilds `balances`, `current_pubkey`, and `send_counter` from exactly these self-addressed change/outgoing bundles; they are retrievable only because they were self-delivered and replicated here.
+
+The chain guarantees the **integrity** of the head; self-delivery is what guarantees the **availability** of the content behind it. As with all transport, a relay can withhold this bundle but can never forge or alter it (§4.1) — so self-delivery is a liveness precondition, never a trust assumption.
+
 ## 4.3 Addressing for delivery
 
 A sender starts from the recipient's `address` ([Foundations §1.4](foundations)) — the protocol's only public identity — and must obtain two things: the recipient's `IVPK` and a relay set to post to.
