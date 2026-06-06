@@ -218,13 +218,14 @@ The access model yields two distinct explorers over the **same data** — the on
 
 A practical case of the authorised view: **A pays B and wants to hand B (or a third party) a link that confirms the payment** — _"here's proof I sent it."_ The payment A → B already entitles B to pull the transaction (ownership); the link additionally packages a **per-transaction view capability** that any holder of the link can use.
 
-**Link contents.** Illustratively `explorer.zkcoins.com/tx/<commitment>:<holder>:<view-cap>`, carrying three parts:
+**Link contents.** The canonical, host-independent form is `zkcoins:tx/<bundle>/<view>`, carrying two values:
 
-- `<commitment>` — a handle to the transaction's on-chain commitment, so the result can be anchored to and verified against Bitcoin.
-- `<holder>` — a locator for a node that holds the off-chain bundle (e.g. A's node), or omitted when the explorer can resolve a holder through the relay mesh.
-- `<view-cap>` — a viewing capability **scoped to exactly this one transaction**, not the account-wide viewing key. It authorises and decrypts this transaction and nothing else.
+- `<bundle>` — `Bech32m(HRP "zkbid", blob_id)` where `blob_id = H(ciphertext)`. A **content-addressed locator**: because it names the bundle by hash rather than by host, any replica that holds it can serve the link.
+- `<view>` — `Bech32m(HRP "zkview", K_tx)`, a viewing capability **scoped to exactly this one transaction**, not the account-wide viewing key. It authorises and decrypts this transaction and nothing else.
 
-**Flow.** Anyone holding the link opens it on an explorer — e.g. `explorer.zkcoins.com`, a **neutral node that is neither A nor B**. The explorer presents `<view-cap>` to a holder node, pulls the bundle (coin + proof + inclusion proof), and renders the full transaction: amount, asset, time, status. Crucially it surfaces the **verifiable evidence** — the result is checkable against the on-chain commitment, so the viewer trusts **Bitcoin and the proof, not the explorer's word**. The explorer is a presentation layer and is **self-hostable**; `explorer.zkcoins.com` is one instance among many.
+The full grammar and resolution flow are specified in the [Access & Explorer §5.6](../specification/access-explorer) spec page.
+
+**Flow.** Anyone holding the link opens it on an explorer — e.g. `explorer.zkcoins.app`, a **neutral node that is neither A nor B**. The explorer resolves `<bundle>` to a holder node, presents `<view>`, pulls the bundle (coin + proof + inclusion proof), and renders the full transaction: amount, asset, time, status. Crucially it surfaces the **verifiable evidence** — the result is checkable against the on-chain commitment, so the viewer trusts **Bitcoin and the proof, not the explorer's word**. The explorer is a presentation layer and is **self-hostable**; `explorer.zkcoins.app` is one instance among many.
 
 **Properties.**
 
