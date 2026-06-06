@@ -112,9 +112,9 @@ The node exposes four interface families, specified here at an implementation-ne
 | **read.proof** | wallet → node (pull) | ownership proof | fetch a `CoinProof` and its `inclusion_proof` for re-verification | [Access & Explorer](access-explorer) · [Proofs](proofs) |
 | **submit.tx** | wallet → node (push) | none (proof is self-authenticating) | submit a transaction for proving/commitment and on-chain publication | [On-chain Layer](onchain) |
 | **relay.\*** | any ↔ node (Nostr) | NIP-44 / NIP-59 envelope; `detect_tag` for discovery | publish/fetch off-chain bundles, gift-wrapped delivery, note discovery | [Transport & Recovery](transport-recovery) |
-| **explorer.read** | explorer → node (pull) | per-coin view capability `K_tx` | resolve one transaction for a shareable confirmation link | [Access & Explorer](access-explorer) |
+| **explorer.read** | explorer → mesh / node | a bearer view secret (`zkview` per coin, `zkavk` for full history) or a balance attestation, applied **client-side** | render a disclosed view: one transaction, full account history, or a balance | [Access & Explorer](access-explorer) |
 
-All read paths are **capability-gated**: a node **MUST** reject a `read.account` or `explorer.read` request that does not present a valid ownership proof, view grant, or per-coin `K_tx`. The `submit.tx` path needs no capability because the submitted transaction carries its own validity proof and self-authenticating commitment; a node **MUST** verify that proof before publishing.
+The `read.account` path is **capability-gated**: a node **MUST** reject a request that does not present a valid ownership proof or `op`-signed view grant. Bearer view secrets (`zkview`/`zkavk`) and balance attestations are **not** node authorisations — the explorer applies them client-side to bundles obtained from the relay mesh or a holder, so `explorer.read` widens only what the secret-holder can decrypt from already-public material ([Access & Explorer §5.1](access-explorer)). The `submit.tx` path needs no capability because the submitted transaction carries its own validity proof and self-authenticating commitment; a node **MUST** verify that proof before publishing.
 
 ## 6.5 Issuance — trustless, permissionless emission
 

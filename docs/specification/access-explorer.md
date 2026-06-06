@@ -9,9 +9,21 @@ This page specifies how Private data ([Foundations §1.6](foundations)) is relea
 
 Recall the relevant key material from [Foundations §1.2](foundations): a subject's identity is its `address = H(Pk₀)` ([§1.4](foundations)); the **operational key** `op` is the node-held Nostr/identity key that signs grants and acknowledgements but cannot spend; `ivk`/`ovk` are the viewing keys; and `K_tx` ([§1.3](foundations)) is the per-coin note key that decrypts exactly one coin. The on-chain `Commitment` ([§1.4](foundations)) is the only object written to Bitcoin and the integrity anchor for everything below.
 
+**Disclosure is holder-initiated and account-granular.** All disclosure is opt-in: absent one, [Requirement 2](/requirements) holds in full. Because accounts and addresses are one-to-one ([Foundations §1.2](foundations)), every account-level disclosure covers the **whole** account; there is no "one address out of many." To keep some activity outside a disclosure, it must live in a **separate account**. This page specifies the disclosure spectrum, narrowest first ([Requirement 9](/requirements)):
+
+| Tier | Reveals | Mechanism | Section |
+|---|---|---|---|
+| One transaction | exactly 1 payment | bearer per-coin capability `zkview` | [§5.3](#53-per-coin-view-capability), [§5.6](#56-shareable-confirmation-links) |
+| Balance (history-private) | one asset's balance, no history | ZK balance attestation (a proof, no key) | [§5.7](#57-balance-attestation-history-private) |
+| Full account history | every transaction of the account | view grant `zkgrant` (revocable) **or** bearer account view key `zkavk` | [§5.8](#58-address-view-full-history) |
+
+Every disclosure is **read-only** (never the spend branch) and every disclosed fact is **verifiable against Bitcoin**, never asserted by a node or explorer.
+
 ## 5.1 Capability-gated pull
 
-Every node exposes exactly one endpoint for Private data — the **pull endpoint** — and it serves a record only after the requester demonstrates a cryptographic capability. The endpoint **MUST NOT** release any Private payload (coin plaintext, amounts, parties, balances, proofs, ciphertext) on an unauthenticated request, and **MUST** restrict the response to the data covered by the presented capability. There are exactly two capabilities, and **no others**.
+Every node exposes exactly one endpoint for Private data — the **pull endpoint** — and it serves a record only after the requester demonstrates a cryptographic capability. The endpoint **MUST NOT** release any Private payload (coin plaintext, amounts, parties, balances, proofs, ciphertext) on an unauthenticated request, and **MUST** restrict the response to the data covered by the presented capability. The pull endpoint recognises exactly two **authorisation** capabilities — the **ownership proof** and the **view grant** — and **no others**.
+
+The bearer view capabilities (`zkview`, [§5.3](#53-per-coin-view-capability); `zkavk`, [§5.8](#58-address-view-full-history)) and the balance attestation ([§5.7](#57-balance-attestation-history-private)) are **not** server authorisations: they are client-side decryption secrets, or a self-contained proof, that an explorer applies to bundles it obtains from the relay mesh ([Transport & Recovery](transport-recovery)) or by self-hosted scanning. They never cause a node to release a Private record it would not otherwise serve; they widen what the *holder of the secret* can read from already-public, encrypted material.
 
 The endpoint **MUST** be unauthenticated only for the Public projection of [§5.5](#55-two-explorer-modes) (on-chain commitments and roots), which carry no Private data by construction.
 
@@ -107,6 +119,10 @@ Unlike a `ViewGrant`, a `zkview` carries no signature: it is a **bearer** secret
 | Ownership proof | — (signed challenge) | full Private view of the subject | whole account | no — needs `sk₀` | n/a |
 | View grant | Bech32m `zkgrant` | delegated viewing | `asset_ids` × time window | no — needs grantee key `D` | forward-only |
 | Per-coin capability | Bech32m `zkview` | decrypt one coin | exactly one coin | **yes** — `K_tx` is the secret | no (forward-only by nature) |
+| Account view key | Bech32m `zkavk` | read full history | whole account | **yes** — `ivk‖ovk` is the secret | no (forward-only by nature) |
+| Balance attestation | — (self-contained proof) | confirm one balance | one asset, point-in-time | n/a — a proof, not a key | n/a |
+
+The two **account-wide** capabilities — ownership proof and account view key — cover the whole account by construction ([Foundations §1.2](foundations)); there is no narrower address-level form. For an account-wide disclosure that is **retractable**, use a scoped `zkgrant` ([§5.2](#52-view-grant)) rather than the irrevocable bearer `zkavk`.
 
 ## 5.5 Two explorer modes
 
@@ -125,7 +141,7 @@ This is the case of [Requirement 9](/requirements): a sender (A) who paid a reci
 ```
 https://<explorer-host>/tx/<commitment>:<holder>:<view-cap>
 
-  <explorer-host> = explorer.zkcoins.com         ; one instance among many; self-hostable
+  <explorer-host> = explorer.zkcoins.app         ; one instance among many; self-hostable
   <commitment>    = <txid> ":" <j>                ; the inscription lives in the reveal tx witness
                                                  ; (NOT a vout); <txid> is the reveal transaction and
                                                  ; <j> is the payload-position index of the commitment
@@ -146,7 +162,7 @@ A canonical, host-independent form `zkcoins:tx/<commitment>:<holder>:<view-cap>`
 
 **Flow.**
 
-1. Any holder of the link opens it on an explorer — e.g. `explorer.zkcoins.com`, a **neutral node that is neither A nor B**, or one the viewer self-hosts.
+1. Any holder of the link opens it on an explorer — e.g. `explorer.zkcoins.app`, a **neutral node that is neither A nor B**, or one the viewer self-hosts.
 2. The explorer resolves `<holder>` (or, when `*`, queries the relay mesh, [Transport & Recovery](transport-recovery)) and **pulls the bundle** for `<commitment>` — the `CoinProof` ([Foundations §1.5](foundations): coin + proof + inclusion proof + encryption envelope).
 3. The explorer decrypts the coin with `<view-cap>` (`K_tx`) and renders the full single transaction: **amount, asset, time, status**.
 4. The explorer surfaces **verifiable evidence**: it checks the coin's inclusion in `output_coins_root`, that root's `Commitment` anchored on Bitcoin, and the recursive validity proof ([Foundations §1.4, §1.5](foundations)). The viewer therefore trusts **Bitcoin and the proof — never the explorer's assertion**.
@@ -159,3 +175,70 @@ A canonical, host-independent form `zkcoins:tx/<commitment>:<holder>:<view-cap>`
 - **Availability.** Any node holding the replicated bundle (A, B, or another, [Transport & Recovery](transport-recovery)) can serve it; confirmation does not hinge on A being online.
 
 The explorer is a **self-hostable presentation layer** and **MUST NOT** be a trusted authority: every figure it shows is independently verifiable against Bitcoin and the proof by the viewer.
+
+## 5.7 Balance attestation (history-private)
+
+The narrowest *account-level* disclosure proves a balance **without exposing a single transaction**. The subject produces a zero-knowledge proof that its on-chain-committed account state holds a given balance of one asset, and hands over only that proof. It reveals the address, the asset, and the number — never any coin, counterparty, amount-flow, or history.
+
+It leverages the existing state commitment ([Foundations §1.5–§1.6](foundations)): an account's balance lives in its `AccountState`, whose `ash` is committed on-chain in the Commitment-SMT. The proof therefore attests to the **real, committed** balance; it cannot assert a false one.
+
+```
+BalanceAttestation:
+  public inputs (revealed):
+    { subject : address,
+      asset_id,
+      balance : B,
+      anchor  : { smt_root, block_hash, height } }   // a Commitment-SMT root pinned to a Bitcoin block
+
+  witness (hidden):
+    { AccountState S, smt_path }                       // S and its membership path in the Commitment-SMT
+
+  statement (domain tag "zkCoins/v1/BalanceProof"):
+    1. S.owner == subject
+    2. S.balances[asset_id] == B
+    3. ash(S) is the Commitment-SMT leaf keyed by `subject` under `anchor.smt_root`
+```
+
+The verifier checks the proof and that `anchor.smt_root` is the root committed at `{block_hash, height}` on Bitcoin ([On-chain layer](onchain)). No node, relay, or explorer is trusted.
+
+**Reference link** (any self-hostable instance is equivalent):
+
+```
+https://<explorer-host>/balance/<address>:<asset_id>?proof=<attestation>
+  — the <attestation> MAY instead be referenced by a content handle when too large for a URL
+```
+
+**Properties.**
+
+- **Reveals only the number.** No transaction, coin, counterparty, or history — by construction, the witness never leaves the proof.
+- **Point-in-time.** It attests to the balance *as of `anchor`*. A later spend does not make the proof false (it remains true about that anchor) but no longer reflects the current balance; a fresh proof re-attests.
+- **Unforgeable for a third party.** Producing it requires the account's Private `AccountState` (hence its view data); no one can attest a balance for an address whose state they cannot see, and the statement can only ever prove the true committed value.
+- **Read-only.** It carries no key and no spend authority.
+
+## 5.8 Address view (full history)
+
+The broadest disclosure renders an account's **entire** transaction history. Because accounts and addresses are one-to-one ([Foundations §1.2](foundations)), this *is* an account-wide view — there is no "one address out of many." To keep some activity out of such a view, it must live in a separate account.
+
+There are two forms, with the **same result** but different control. A subject **SHOULD** prefer (a) when the disclosure should be retractable or time-boxed, and use (b) only when a simple paste-able link outweighs irrevocability.
+
+**(a) Revocable — view grant.** The subject issues a `ViewGrant` ([§5.2](#52-view-grant)) with `scope.asset_ids = "*"` and the desired time window to a grantee key `D`, and the viewer drives the Authorised explorer mode ([§5.5](#55-two-explorer-modes)). It is **non-bearer** (the viewer must hold `D`'s secret), scoped, and **forward-only revocable**.
+
+**(b) Bearer — account view key.** The subject hands over a bearer link carrying the account viewing keys themselves:
+
+```
+zkavk = Bech32m( HRP = "zkavk", data = ivk ‖ ovk )    // 64B; ivk = incoming, ovk = outgoing
+                                                       ; ivk alone (32B) = incoming-only variant
+
+https://<explorer-host>/address/<address>:<holder>:<zkavk>
+  — equivalently  https://<explorer-host>/address=<address>&viewKey=<zkavk>
+  <holder> = node locator ("op:"<op-pubkey> | "@"<relay-url> | "*"), as in §5.6
+```
+
+**Flow.** The explorer derives the detection key from `ivk` ([Foundations §1.3](foundations)), finds the account's coins on the relay mesh ([Transport & Recovery](transport-recovery)) or via `<holder>`, decrypts incoming coins with `ivk` and recovers outgoing-coin plaintext with `ovk`, and renders the full history — checking every transaction against Bitcoin (coin inclusion → `Commitment` → recursive proof, as in [§5.6](#56-shareable-confirmation-links)). The explorer is never trusted.
+
+**Properties.**
+
+- **Bearer & irrevocable.** Whoever holds the link sees everything `ivk`/`ovk` unlock — past **and future** — until the account is abandoned. The viewing keys cannot be rotated without moving to a new account; there is no revocation. Use form (a) when retractability matters.
+- **Account-granular.** It reveals the whole account, never a subset ([Foundations §1.2](foundations)). Compartmentalisation = separate accounts.
+- **Read-only.** It carries no spend authority: the SPEND branch is a hardened sibling of the VIEW branch ([Foundations §1.2](foundations)) and cannot be derived from `ivk`/`ovk`.
+- **Verifiable.** Every figure is independently checked against Bitcoin and the proof.

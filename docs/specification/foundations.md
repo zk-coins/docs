@@ -34,7 +34,7 @@ Notation:
 - `a ‖ b` — byte concatenation.
 - **Secret vs. public.** A lowercase key name (`skᵢ`, `ivk`, `ovk`, `op`, `nk`) denotes the **secret scalar**; its public point is written `<name>·G` or a named pubkey (e.g. `Pkᵢ = skᵢ·G`, `IVPK = ivk·G`, `op_pubkey = op·G`). BIP-340 public keys are **x-only** (32 bytes).
 
-**Domain separation.** Every `Hc` / `HKDF` call **MUST** be tagged with a context string of the form `"zkCoins/v1/<context>"`. The contexts used in this spec are: `Address`, `AssetId`, `Coin`, `AccountState`, `CoinsRoot`, `Nullifier`, `NoteKey`, `DetectTag`, `Grant`, `IssuanceTerms`, `HalfAgg`. Reusing a tag for two purposes is forbidden.
+**Domain separation.** Every `Hc` / `HKDF` call **MUST** be tagged with a context string of the form `"zkCoins/v1/<context>"`. The contexts used in this spec are: `Address`, `AssetId`, `Coin`, `AccountState`, `CoinsRoot`, `Nullifier`, `NoteKey`, `DetectTag`, `Grant`, `IssuanceTerms`, `HalfAgg`, `BalanceProof`. Reusing a tag for two purposes is forbidden.
 
 ## 1.2 Key hierarchy
 
@@ -69,6 +69,12 @@ seed  (256-bit; BIP-39 mnemonic, or Passkey PRF → HKDF)
 The **operational bundle** `{ivk, ovk, op}` is what a wallet entrusts to a node so the node can receive and serve on its behalf 24/7. None of it can spend. A *foreign* node never receives these directly; the wallet instead issues that node a scoped, `op`-signed **view grant** (§ Access model).
 
 **Spend-key model (account-level).** The keys `skᵢ` are rotating **per-transition** signing keys — there is **no** per-coin signing key. Transition `i` (where `i = send_counter` at entry) is authorised by `skᵢ`, whose public key `Pkᵢ` is the account's `current_pubkey` and is published in that transition's `Commitment`; the transition rotates `current_pubkey` to `Pk_{i+1}`. `Pk₀` fixes the address and appears on-chain only in the **first** transition. `nk` is account-level. Coin ownership is by the account (a coin's `recipient = address`); a receiver therefore never needs a per-coin key.
+
+**Accounts and addresses are one-to-one.** An account `A` has **exactly one** address, `address = H(Pk₀)` (§1.4). The protocol defines **no** diversified addresses, sub-addresses, or change addresses: there is no way to derive a second, separately-disclosable or separately-unlinkable receiving address under the same account. The **account is therefore the sole unit** of every isolation boundary in the system — privacy domain, selective disclosure ([Access & Explorer](access-explorer)), recovery ([Transport & Recovery](transport-recovery)), and node portability ([Requirement 10](/requirements)). A wallet derives further accounts at `m/1798'/account'`; it **MUST NOT** present multiple receiving addresses within one account. Consequences a wallet **MUST** surface to the user:
+
+- To keep two activities unlinkable toward the counterparties they are shared with, or to disclose one independently of the other ([Access & Explorer §5.8](access-explorer)), each **MUST** live in its **own account**, chosen deliberately — never as an implicit sub-address of a shared account.
+- Each additional account is an independent scan and recovery scope (its own `ivk` / `detect_tag` lineage) and adds backup and scanning cost. This cost is the deliberate, accepted price of compartmentalisation; it is the reason the default is **one account reused**, not many accounts.
+- Reusing one address toward many counterparties reveals nothing on-chain — [Requirement 2](/requirements) is unaffected — but lets those counterparties correlate one another **off-chain** through the shared address string. Per-relationship unlinkability therefore requires per-relationship accounts, never extra addresses on one account.
 
 ## 1.3 Per-coin keys (note encryption & detection)
 
@@ -145,5 +151,5 @@ Tree leaves that contain plaintext (coins, balances) are **Private**; only **roo
 
 - Field elements are canonically encoded as 32-byte big-endian (Goldilocks elements zero-padded); SHA-256 outputs are 32 bytes as-is.
 - Bitcoin txids are stored internal-order and **displayed** byte-reversed (canonical Bitcoin convention).
-- Addresses, view grants, and explorer view capabilities are Bech32m with distinct HRPs (`zk`, `zkgrant`, `zkview`) so they are never confused.
+- Addresses, view grants, and explorer view capabilities are Bech32m with distinct HRPs so they are never confused: `zk` (address), `zkgrant` (view grant), `zkview` (per-coin view capability), `zkavk` (bearer account view key, `ivk ‖ ovk`; see [Access & Explorer §5.8](access-explorer)). A node/explorer **MUST** reject a value presented under the wrong HRP.
 - All multi-input hashes fix input order exactly as written in §1.4; reordering changes the digest and is invalid.

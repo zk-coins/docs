@@ -58,6 +58,20 @@ Address = SHA-256(PublicKey[0])
 
 This ensures the same seed always produces the same address, enabling wallet recovery. The address is an internal identifier — on-chain privacy is provided by the ZK proofs, not by address blinding.
 
+## One address per account
+
+An account has **exactly one** address (`SHA-256(PublicKey[0])`). zkCoins deliberately defines **no** diversified or sub-addresses: the rotating keys (`PublicKey[1]`, `[2]`, …) are per-transaction *spend* keys, not additional receiving addresses, and change returns to the same account as a new shielded coin — never to a separate change address.
+
+The reason is that the **account is the unit of every isolation boundary** — privacy domain, selective disclosure, recovery, and node portability. A single viewing key reveals an account's *whole* history; you cannot reveal or compartmentalise one address out of many under one account, because there is only ever one.
+
+The principle that follows:
+
+- **Default: reuse one address.** Simple, and on-chain it leaks nothing.
+- **Want compartments?** Create a **new account** (`m/1798'/account'`) — deliberately, for each activity you want unlinkable toward its counterparties or disclosable on its own. Each new account is its own backup and scan scope; that cost is the price of compartmentalisation.
+- **Generating multiple addresses under one account is never the answer** — it would add cost without giving either independent disclosure or off-chain unlinkability.
+
+Reusing one address still keeps full on-chain privacy; it only lets the counterparties you handed it to correlate one another *off-chain* through the shared address. Per-relationship privacy means per-relationship accounts.
+
 ## Backup and recovery
 
 :::danger Seed phrase recovery is NOT sufficient

@@ -39,9 +39,9 @@ Anyone can run their own node; using zkCoins must never require trusting or depe
 
 The protocol supports multiple distinct asset types, each identified by a globally unique asset id. Every other requirement applies equally to every asset.
 
-### 9. Explorer (shareable confirmation)
+### 9. Selective disclosure
 
-A sender can generate a shareable link that grants its holder a full view of exactly one transaction — amount, asset, time, and status — and nothing beyond it. The link carries a scoped view capability, never a public identifier and never the spend key. The confirmation must be cryptographically verifiable against Bitcoin rather than asserted by the explorer, and the explorer must be self-hostable.
+The holder of an account can voluntarily disclose, to a recipient of its choosing, a precisely bounded view of its own activity — and nothing beyond that bound. The protocol supports at least three granularities: (a) a single transaction; (b) the current balance of one asset, revealing no transaction or history; and (c) the account's full transaction history. Every disclosure is read-only — it never confers spend authority — and every disclosed fact must be cryptographically verifiable against Bitcoin rather than asserted by any node or explorer. Disclosure is opt-in: absent one, the privacy of Requirement 2 holds in full. Any explorer that presents such disclosures must be self-hostable.
 
 ### 10. Node portability
 

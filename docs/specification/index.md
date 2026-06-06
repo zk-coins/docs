@@ -46,7 +46,7 @@ The specification covers every component that will exist: the **node** (validato
 
 The whole specification exists to satisfy these (in full on the [Requirements](/requirements) page):
 
-1. Bitcoin L1 as the only base · 2. Private · 3. Trustless · 4. Client-side validation · 5. Custody only in the wallet · 6. Recovery · 7. Self-hostable · 8. Multi-asset · 9. Explorer (shareable confirmation) · 10. Node portability.
+1. Bitcoin L1 as the only base · 2. Private · 3. Trustless · 4. Client-side validation · 5. Custody only in the wallet · 6. Recovery · 7. Self-hostable · 8. Multi-asset · 9. Selective disclosure · 10. Node portability.
 
 ## Reading guide
 
@@ -56,7 +56,7 @@ The whole specification exists to satisfy these (in full on the [Requirements](/
 | 2 | [Proofs & State Transitions](proofs) | The compliance predicate, recursion, and the mint / send / receive algorithms |
 | 3 | [On-chain Layer](onchain) | Commitment, signing, half-aggregation, the publisher, and the nullifier accumulator |
 | 4 | [Transport & Recovery](transport-recovery) | Off-chain delivery, note discovery, seed recovery, data availability |
-| 5 | [Access & Explorer](access-explorer) | Capability-gated pull, view grants, and shareable confirmation links |
+| 5 | [Access & Explorer](access-explorer) | Capability-gated pull, view grants, and the disclosure spectrum: per-transaction links, balance attestations, full-account views |
 | 6 | [System Architecture](architecture) | Node, wallet, explorer; portability, multi-node, issuance, threat model |
 
 New here? Read **Foundations** first — everything else builds on it.
