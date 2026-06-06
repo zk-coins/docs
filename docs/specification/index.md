@@ -46,44 +46,60 @@ Each is rare on its own elsewhere; here they hold **together** — see [Comparis
 
 **What lives where.** Bitcoin holds only opaque markers; everything that says *which coin, how much, between whom* lives off-chain and is encrypted to the recipient:
 
-```mermaid
-flowchart LR
-  subgraph chain ["Bitcoin L1 — Public"]
-    sr["SpendRecord<br/>= rotating pubkey Pkᵢ<br/>+ nullifiers (plain)<br/>+ signature<br/>+ inr ‖ ocr"]
-  end
-  subgraph offchain ["Off-chain — Private to wallet/node"]
-    coin["Coin plaintext<br/>= amount, asset, recipient"]
-    proof["Recursive validity proof<br/>(constant size, hides everything)"]
-    state["AccountState<br/>= balances, keys, counters"]
-    bundle["CoinProof bundle<br/>(coin + proof + inclusion + envelope)"]
-  end
-  state -- transition produces --> sr
-  state -- transition produces --> proof
-  proof -- attests --> coin
-  proof -- packed into --> bundle
-  coin -- packed into --> bundle
-  sr -. anchors via sign-to-contract .-> proof
+```
+    BITCOIN L1 (Public)                  OFF-CHAIN (Private — wallet + node)
+    ────────────────────                 ───────────────────────────────────
+
+    ┌──────────────────┐                 ┌───────────────────────────────┐
+    │   SpendRecord    │   sign-to-      │  AccountState                 │
+    │   ────────────   │   contract      │   balances · keys · counters  │
+    │   Pkᵢ            │   binds         │   coin_history_root           │
+    │   nullifiers     │ ◀ H(ProofData)─ ├───────────────────────────────┤
+    │   signature      │                 │  Recursive validity proof     │
+    │   inr ‖ ocr      │ ◀── attests ─── │   (constant-size · ZK)        │
+    └──────────────────┘                 ├───────────────────────────────┤
+            ▲                            │  Coin plaintext               │
+            │ inscribed in a             │   amount · asset · recipient  │
+            │ Taproot reveal-tx          ├───────────────────────────────┤
+            │ envelope                   │  CoinProof bundle  ──▶ to B   │
+            │                            │   (coin + proof + envelope)   │
+            └────────────────────────────┴───────────────────────────────┘
 ```
 
 **A payment, end to end.** A pays B; both run their own wallet+node; only Bitcoin is shared:
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant A as Alice (wallet + node)
-    participant N as Nostr relay mesh
-    participant BTC as Bitcoin
-    participant B as Bob (wallet + node)
-    A->>A: build SpendRecord + recursive proof
-    A->>N: publish encrypted CoinProof bundle (NIP-44/59)
-    A->>BTC: inscribe SpendRecord (nullifiers in the clear)
-    Note over BTC: every node folds the new nfs<br/>into its nullifier accumulator
-    B->>N: scan candidates, match detect_tag (one Poseidon hash per event)
-    N-->>B: gift-wrapped bundle blob
-    B->>B: decrypt with K_tx, verify recursive proof
-    B->>BTC: check coin inclusion + non-membership of nf
-    B->>B: credit coin (trustless)
-    B-->>A: encrypted ACK; A may now drop its retained copy
+```
+    Alice                 Nostr relay         Bitcoin              Bob
+      │                       │                  │                  │
+      │ 1. build SpendRecord  │                  │                  │
+      │    + recursive proof  │                  │                  │
+      │                       │                  │                  │
+      │ 2. publish encrypted CoinProof bundle (NIP-44 / NIP-59)     │
+      ├──────────────────────▶│                  │                  │
+      │                       │                  │                  │
+      │ 3. inscribe SpendRecord (nullifiers in the clear)           │
+      ├──────────────────────────────────────────▶                  │
+      │                       │                  │                  │
+      │                       │  every node folds the new nfs into  │
+      │                       │  its nullifier accumulator          │
+      │                       │                  │                  │
+      │                       │ 4. scan candidates · match          │
+      │                       │    detect_tag (1 Poseidon hash/evt) │
+      │                       ◀───────────────────────────────────┤
+      │                       │                  │                  │
+      │                       │ 5. gift-wrapped bundle blob         │
+      │                       ├──────────────────────────────────▶│
+      │                       │                  │                  │
+      │                       │            6. decrypt with K_tx     │
+      │                       │               verify recursive proof│
+      │                       │               check nf non-member.  │
+      │                       │               of accumulator at tip │
+      │                       │                  │                  │
+      │                       │            7. credit coin (trustless)
+      │                       │                  │                  │
+      │ 8. encrypted ACK · A may now drop her retained copy         │
+      ◀──────────────────────────────────────────────────────────┤
+      │                       │                  │                  │
 ```
 
 ## Scope

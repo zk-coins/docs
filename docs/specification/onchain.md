@@ -31,7 +31,16 @@ SpendRecord = {
 
 The signature in a `SpendRecord` is a BIP-340 Schnorr signature over `message = inr ‖ ocr` produced by the per-send spend key `skᵢ`. It additionally carries, **in its nonce** via **sign-to-contract**, a commitment to the transition's off-chain validity proof, so the proof is anchored to this exact record with no extra bytes on-chain (as stated in [Foundations §1.4](foundations)).
 
-Let `H_tx = H(ProofData)` be the 32-byte digest of the transition's **off-chain** validity-proof public inputs (`H` = SHA-256, [Foundations §1.1, §1.4](foundations)). Because `ProofData` is **not** itself on-chain, this is a real, non-redundant binding — distinct from `message`, which carries only `inr ‖ ocr`. The signer MUST construct the nonce as:
+Let `H_tx = H(ProofData)` be the 32-byte digest of the transition's **off-chain** validity-proof public inputs (`H` = SHA-256, [Foundations §1.1, §1.4](foundations)). The canonical byte preimage is the concatenation of the four `ProofData` fields in the order listed in [Foundations §1.4](foundations), each encoded as its 32-byte canonical Poseidon digest (§1.7.1):
+
+```
+H_tx = SHA-256( new_account_state_hash  (32B)
+              ‖ output_coins_root        (32B)
+              ‖ input_nullifiers_root    (32B)
+              ‖ coin_history_root        (32B) )
+```
+
+A conforming signer and a conforming verifier **MUST** use exactly this concatenation; any other order produces a different `H_tx` and a different on-chain signature. Because `ProofData` is **not** itself on-chain, this is a real, non-redundant binding — distinct from `message`, which carries only `inr ‖ ocr`. The signer MUST construct the nonce as:
 
 ```
 1. R'  = k'·G                          // k' a fresh, uniformly random 256-bit nonce scalar

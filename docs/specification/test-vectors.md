@@ -50,7 +50,7 @@ Fixed fields  (pinned bytes):
    owner               (32B): fd201c457bddb7571cca1f8d63ad0a5630ceec4f77e238bbd61cc8bc26a03298
    current_pubkey      (32B): fba3ea150382de6f39a07348d327b1efa8c120da1ee599148ff6fed7803465fb
    send_counter        ( 8B): 0000000000000001
-   coin_history_root   (32B): 0000000000000000000000000000000000000000000000000000000000000000   ← initial (empty SMT)
+   coin_history_root   (32B): <REGEN — equals E'₂₅₆, the empty coin-history SMT root, see V.4>
    balances_count      ( 4B): 00000001
    [balances entry, sorted ascending by asset_id]:
        asset_id        (32B): <REGEN — see V.4>
@@ -63,7 +63,7 @@ Sizes:
 
 The conformance harness MUST construct the byte string in exactly this order and re-derive `ash = Hc("AccountState", <these bytes as a byte-string input>)` per [§1.7.2](foundations#172-field-encoding-e-of-hc-inputs) and [§1.7.4](foundations#174-serializeaccountstate).
 
-`coin_history_root` for an empty SMT equals the empty-tree root `E₂₅₆` of the per-account coin-history SMT, computed per [§1.7.6](foundations#176-nullifier-accumulator-sparse-merkle-tree) — Poseidon-dependent, marked `<REGEN — see V.4>` below. The line above shows all-zero bytes only for visual layout — replace with the real `E₂₅₆` when the reference implementation is available.
+`coin_history_root` for an empty account equals **`E'₂₅₆`**, the empty-tree root of the per-account coin-history SMT (distinct from the nullifier accumulator's `E₂₅₆` because the coin-history SMT uses different domain tags `CoinHist/Leaf`, `CoinHist/Node`; see [§1.7.6](foundations#176-nullifier-accumulator-sparse-merkle-tree)). Both values are Poseidon-dependent and listed in V.4 as `<REGEN>`.
 
 ## V.4 Poseidon-derived values — `<REGEN>` table
 
@@ -71,17 +71,18 @@ For each value below, the formula is fixed; the bytes MUST be produced by the re
 
 | Symbol | Formula | Bytes (`<REGEN>`) |
 |---|---|---|
-| `E₂₅₆` (empty-SMT root) | `Hc("NfAcc/Node", 255, E₂₅₅, E₂₅₅)` after 256 levels of recursion from `E₀ = Hc("NfAcc/Leaf", 0)` — [§1.7.6](foundations#176-nullifier-accumulator-sparse-merkle-tree) | `<REGEN>` |
-| `coin-history empty root` | same construction as `E₂₅₆`, with the per-account coin-history SMT's domain tags | `<REGEN>` |
+| `E₂₅₆` (nullifier-accumulator empty root) | recursion from `E₀ = Hc("NfAcc/Leaf", 0)` and `Eᵢ = Hc("NfAcc/Node", i, E_{i-1}, E_{i-1})`; the empty root is `E₂₅₆ = Hc("NfAcc/Node", 256, E₂₅₅, E₂₅₅)` — [§1.7.6](foundations#176-nullifier-accumulator-sparse-merkle-tree) | `<REGEN>` |
+| `E'₂₅₆` (coin-history-SMT empty root) | same structure with the per-account tags: `E'₀ = Hc("CoinHist/Leaf", 0)` and `E'ᵢ = Hc("CoinHist/Node", i, E'_{i-1}, E'_{i-1})`; empty root `E'₂₅₆ = Hc("CoinHist/Node", 256, E'₂₅₅, E'₂₅₅)` — [§1.7.6](foundations#176-nullifier-accumulator-sparse-merkle-tree) | `<REGEN>` |
 | `asset_id` | `Hc("AssetId", "zkCoins/v1/genesis" ‖ Pk₀_sample ‖ H("USD-Demo") ‖ decimals=0x02)` | `<REGEN>` |
-| `coin.identifier@0` | a coin minted to `address`, first output of the InitialProof: `Hc("Coin", ash@0 ‖ asset_id ‖ coin_index=0)` | `<REGEN>` |
-| `ash@0` | `Hc("AccountState", serialize(<V.3 byte string with the regenerated asset_id and coin_history_root substituted>))` | `<REGEN>` |
-| `ash_empty` | `Hc("AccountState", serialize(<canonical empty account for owner=address>))` — the InitialProof's `prev_account_state` digest | `<REGEN>` |
+| `ash_empty` | `Hc("AccountState", serialize(canonical_empty_account_for(address)))` per [§2.2](proofs#22-proof-types) — the InitialProof's `prev_account_state` digest; uses `coin_history_root = E'₂₅₆` | `<REGEN>` |
+| `coin.identifier@0` | a coin minted to `address`, first output of the InitialProof: `Hc("Coin", ash_empty ‖ asset_id ‖ coin_index=0)` | `<REGEN>` |
+| `coin_history_root@0` | the per-account coin-history SMT root after admitting `coin.identifier@0` as leaf state `1` (received-unspent), starting from `E'₂₅₆`; the result is a single populated path through 256 levels | `<REGEN>` |
+| `ash@0` | `Hc("AccountState", serialize(<V.3 byte string with the regenerated asset_id and coin_history_root@0 substituted>))` | `<REGEN>` |
 | `nf_sample` | `Hc("Nullifier", nk_sample ‖ coin.identifier@0)` | `<REGEN>` |
-| `ocr@0` | Poseidon Merkle root over `[coin.identifier@0]`, tag `CoinsRoot` (one leaf, padded to one) | `<REGEN>` |
+| `ocr@0` | Poseidon Merkle root over `[coin.identifier@0]`, tag `CoinsRoot` (one leaf, padded to one) per [§1.7.5](foundations#175-poseidon-merkle-tree-used-for-ocr-and-inr) | `<REGEN>` |
 | `inr@0` | Poseidon Merkle root over the empty list of nullifiers (a mint), tag `NullifiersRoot` — equals the `L_⊥` leaf-hash | `<REGEN>` |
 | `message@0` | `inr@0 ‖ ocr@0` (concatenation of the two 32-byte values above) | derived from the two above |
-| `H(ProofData@0)` | `H(new_account_state_hash ‖ output_coins_root ‖ input_nullifiers_root ‖ coin_history_root)` = `H(ash@0 ‖ ocr@0 ‖ inr@0 ‖ coin_history@0)` — SHA-256 over the concatenated **byte** encoding of the four 32-byte digests, in this order | derived from the four above |
+| `H(ProofData@0)` | per [On-chain §3.2](onchain#32-spendrecord-signing-bip-340--sign-to-contract): `SHA-256(ash@0 ‖ ocr@0 ‖ inr@0 ‖ coin_history_root@0)` | derived from the four above |
 
 ## V.5 `SpendRecord` byte layout (pinned for the SHA-256 / structural parts)
 
