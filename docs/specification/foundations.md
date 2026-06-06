@@ -142,6 +142,9 @@ CoinProof    = {                            // the value-bearing off-chain bundl
   coin,                                      // plaintext coin
   proof,                                     // recursive validity proof
   inclusion_proof,                           // membership of coin in output_coins_root
+  creating_prev_ash,                         // PRIOR account_state_hash of the transition that
+                                             // created this coin; needed by the spender to
+                                             // recompute coin.identifier in-circuit (§1.4, §2.1)
   epk, ciphertext, detect_tag                // encryption envelope (§1.3)
 }
 

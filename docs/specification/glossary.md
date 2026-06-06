@@ -32,7 +32,7 @@ A short, scannable reference for the jargon, notation, and identifier names used
 - **Capability-gated pull** — the node API serves Private records only after the requester presents a valid capability. ([§5.1](access-explorer#51-capability-gated-pull))
 - **`Coin`** — `{identifier, recipient, amount, asset_id}`; the off-chain value-carrying unit. ([§1.5](foundations#15-core-data-structures))
 - **Coin-history SMT** — per-account, Private; sparse Merkle tree keyed by `coin.identifier`, leaf state `{0=absent, 1=received-unspent, 2=spent}`; root folded into `ash`. ([§1.6](foundations#16-trees-one-global-structure-one-per-account-structure), [§1.7.6](foundations#176-nullifier-accumulator-sparse-merkle-tree))
-- **`coin.identifier`** — `Hc("Coin", account_state_hash ‖ asset_id ‖ coin_index)` of the creating state; fixed at creation. ([§1.4](foundations#14-identifiers-and-hashes))
+- **`coin.identifier`** — `Hc("Coin", prev_account_state_hash ‖ asset_id ‖ coin_index)`; the `prev_account_state_hash` is the **prior** `ash` of the transition that creates the coin (breaks the would-be recursion with `new_ash`, see [§1.4](foundations#14-identifiers-and-hashes)). Fixed at creation. ([§1.4](foundations#14-identifiers-and-hashes))
 - **CoinProof** — see *Bundle*.
 - **CoinTemplate** — `{recipient, amount, asset_id}`; the sender's per-payee instruction inside a `Send`. ([§1.5](foundations#15-core-data-structures))
 - **Cyclic recursion** — one fixed circuit verifies proofs of itself; verifier data is constant, so proof size and verification time are constant. ([§2.2](proofs#22-proof-types))
