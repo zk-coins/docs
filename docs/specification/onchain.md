@@ -5,29 +5,31 @@ title: 3 · On-chain Layer
 
 # 3 · On-chain Layer
 
-This page specifies the Bitcoin-facing layer of zkCoins: how a transaction's `Commitment` ([Foundations §1.4](foundations)) is signed and embedded, how many commitments are aggregated and published in a single Bitcoin transaction, how any node scans the chain to rebuild the global trees ([Foundations §1.6](foundations)), and how the global **nullifier accumulator** provides trustless double-spend protection. It introduces **no** change to Bitcoin consensus and **no** native token ([Requirement 1](/requirements)).
+This page specifies the Bitcoin-facing layer of zkCoins: how a transition's `SpendRecord` ([Foundations §1.4](foundations)) is signed and embedded, how many records are aggregated and published in a single Bitcoin transaction, how any node rebuilds the global **nullifier accumulator** from the chain ([Foundations §1.6](foundations)), and how that accumulator provides trustless double-spend protection. It introduces **no** change to Bitcoin consensus and **no** native token ([Requirement 1](/requirements)).
 
 Normative keywords (**MUST**, **MUST NOT**, **SHOULD**, **MAY**) are used per RFC 2119. All primitives, identifiers, and domain-separation tags are those defined in [Foundations](foundations) and are used unchanged.
 
 ## 3.1 The on-chain object
 
-The **only** object zkCoins writes to Bitcoin is the `Commitment` of [Foundations §1.4](foundations):
+The **only** object zkCoins writes to Bitcoin is the `SpendRecord` of [Foundations §1.4](foundations):
 
 ```
-Commitment = {
+SpendRecord = {
   public_key : Pkᵢ                    // 32 bytes, BIP-340 x-only
-  signature  : BIP-340(skᵢ, message)  // 64 bytes
-  message    : ash ‖ ocr              // 64 bytes  (account_state_hash ‖ output_coins_root)
-}                                      // ~177 bytes inscribed (before aggregation)
+  nullifiers : [nf]                   // 32 bytes each — the coins SPENT, published in the clear
+                                       //   (empty list for a mint, which spends nothing)
+  signature  : BIP-340(skᵢ, message)  // 64 bytes  (sign-to-contract binds H(ProofData), §3.2)
+  message    : inr ‖ ocr              // 64 bytes  (input_nullifiers_root ‖ output_coins_root)
+}                                      // ~160 + 32·|nf| bytes inscribed (before aggregation)
 ```
 
-`Pkᵢ` is the rotating per-send spend public key ([Foundations §1.2](foundations)); `message` binds the new account state hash `ash` and the transaction's output-coins root `ocr` ([Foundations §1.4](foundations)). A `Commitment` contains only hashes and a signature; it reveals no amount, asset, sender, or receiver ([Requirement 2](/requirements)). The proof that `message` corresponds to a valid state transition is **off-chain** ([Proofs & State Transitions](proofs)); Bitcoin verifies only that the commitments were published and ordered.
+`Pkᵢ` is the rotating per-send spend public key ([Foundations §1.2](foundations)); `message` binds the spent-nullifier root `inr` and the transaction's output-coins root `ocr` ([Foundations §1.4](foundations)); `nullifiers` lists those spent `nf`s **verbatim**. A `SpendRecord` contains only hashes, nullifiers, and a signature; it reveals no amount, asset, sender, or receiver, and its rotating `Pkᵢ` and unlinkable `nf`s tie it to no account ([Requirement 2](/requirements)). The proof that the record corresponds to a valid state transition is **off-chain** ([Proofs & State Transitions](proofs)); Bitcoin verifies only that the records were published and ordered. The published `nf`s are exactly what every node folds into the global nullifier accumulator (§3.6) — so the one global structure zkCoins relies on is rebuilt from the chain alone, with no off-chain data.
 
-## 3.2 Commitment signing (BIP-340 + sign-to-contract)
+## 3.2 SpendRecord signing (BIP-340 + sign-to-contract)
 
-The signature in a `Commitment` is a BIP-340 Schnorr signature over `message` produced by the per-send spend key `skᵢ`. It additionally carries the transaction commitment **in its nonce** via **sign-to-contract**, so no extra bytes appear on-chain (as stated in [Foundations §1.4](foundations)).
+The signature in a `SpendRecord` is a BIP-340 Schnorr signature over `message = inr ‖ ocr` produced by the per-send spend key `skᵢ`. It additionally carries, **in its nonce** via **sign-to-contract**, a commitment to the transition's off-chain validity proof, so the proof is anchored to this exact record with no extra bytes on-chain (as stated in [Foundations §1.4](foundations)).
 
-Let `H_tx = H(message)` be the 32-byte transaction commitment (`H` = SHA-256, [Foundations §1.1](foundations)). The signer MUST construct the nonce as:
+Let `H_tx = H(ProofData)` be the 32-byte digest of the transition's **off-chain** validity-proof public inputs (`H` = SHA-256, [Foundations §1.1, §1.4](foundations)). Because `ProofData` is **not** itself on-chain, this is a real, non-redundant binding — distinct from `message`, which carries only `inr ‖ ocr`. The signer MUST construct the nonce as:
 
 ```
 1. R'  = k'·G                          // k' a fresh, uniformly random 256-bit nonce scalar
@@ -38,13 +40,13 @@ Let `H_tx = H(message)` be the 32-byte transaction commitment (`H` = SHA-256, [F
 6. signature = bytes(R) ‖ bytes(s)     // 64 bytes
 ```
 
-The published `signature` is an ordinary, standalone BIP-340 signature: any verifier checks `s·G == R + e·Pkᵢ` with no knowledge of `t`. A party who **knows** `H_tx` and is shown `R'` can additionally recompute `t` and confirm `R = R' + t·G`, proving that this exact transaction commitment is embedded in the nonce. The signer MUST follow BIP-340 nonce hygiene (deterministic-plus-auxiliary-randomness derivation of `k'`) and MUST NOT reuse a nonce across two distinct messages. `Pkᵢ` MUST be the x-only key under which the spend is authorised; reusing `Pk₀` for a non-initial send is forbidden (keys rotate per send, [Foundations §1.2](foundations)).
+The published `signature` is an ordinary, standalone BIP-340 signature: any verifier checks `s·G == R + e·Pkᵢ` with no knowledge of `t`. A receiver who holds the `CoinProof` bundle — hence `ProofData` (so it can compute `H_tx`) and `R'` — can additionally recompute `t` and confirm `R = R' + t·G`, proving the on-chain record commits to **exactly that** off-chain proof. The signer MUST follow BIP-340 nonce hygiene (deterministic-plus-auxiliary-randomness derivation of `k'`) and MUST NOT reuse a nonce across two distinct messages. `Pkᵢ` MUST be the x-only key under which the spend is authorised; reusing `Pk₀` for a non-initial send is forbidden (keys rotate per send, [Foundations §1.2](foundations)).
 
 ## 3.3 Half-aggregation
 
-Many independent `Commitment` signatures are compressed into one **half-aggregate** before publishing. Half-aggregation is **non-interactive**: it requires no coordination among signers and no secret keys — a publisher (§3.4) performs it on signatures it has merely collected.
+Many independent `SpendRecord` signatures are compressed into one **half-aggregate** before publishing. Half-aggregation is **non-interactive**: it requires no coordination among signers and no secret keys — a publisher (§3.4) performs it on signatures it has merely collected. The published `nullifiers` of each record are carried alongside, unaggregated.
 
-Given commitments `C₁ … C_m` with signatures `(Rⱼ, sⱼ)`, keys `Pkⱼ`, and messages `mⱼ`:
+Given records `C₁ … C_m` with signatures `(Rⱼ, sⱼ)`, keys `Pkⱼ`, and messages `mⱼ`:
 
 ```
 1. For each j:  eⱼ = H_BIP340( bytes(Rⱼ) ‖ bytes(Pkⱼ) ‖ mⱼ )
@@ -61,20 +63,20 @@ The aggregate verifies with a single multi-scalar check:
 s_agg·G  ==  Σⱼ aⱼ·( Rⱼ + eⱼ·Pkⱼ )
 ```
 
-This replaces `m` independent `s` values (32 bytes each) with one, while each `Rⱼ` is retained — and each `Rⱼ` remains the sign-to-contract commitment for its transaction (§3.2). The coefficients `aⱼ` MUST be derived as above so the batch is non-malleable: a verifier MUST reject an `AggSig` whose multi-scalar check fails, and MUST treat every constituent `Commitment` of a failing batch as unconfirmed.
+This replaces `m` independent `s` values (32 bytes each) with one, while each `Rⱼ` is retained — and each `Rⱼ` remains the sign-to-contract commitment to its transition's off-chain proof (§3.2). The coefficients `aⱼ` MUST be derived as above so the batch is non-malleable: a verifier MUST reject an `AggSig` whose multi-scalar check fails, and MUST treat every constituent `SpendRecord` of a failing batch as unconfirmed.
 
 ## 3.4 The publisher
 
-A **publisher** is the permissionless agent that moves commitments from off-chain to Bitcoin. Its mapping is **many-to-one**: it collects commitments from many distinct zkCoins transactions — typically from many users — and inscribes them **together in a single Bitcoin transaction**.
+A **publisher** is the permissionless agent that moves `SpendRecord`s from off-chain to Bitcoin. Its mapping is **many-to-one**: it collects records from many distinct zkCoins transitions — typically from many users — and inscribes them **together in a single Bitcoin transaction**.
 
 - Running a publisher MUST be permissionless; any participant MAY run one, and a wallet/node MAY act as its own publisher.
-- A publisher MUST NOT be trusted for **correctness**: it cannot forge, alter, reorder-to-steal, or drop-without-detection any commitment, because (a) each signature is verified by every scanning node (§3.5), and (b) the value-bearing proof and coin plaintext travel off-chain ([Transport & Recovery](transport-recovery)), never through the publisher.
-- A publisher MUST NOT be trusted for **custody**: it never holds a spend key, a coin, or a proof; the worst a faulty or malicious publisher can do is **censor** (refuse to inscribe) or **delay** — both mitigated because anyone else can publish the same commitment.
-- A publisher SHOULD batch over a bounded interval (e.g. once per Bitcoin block) and SHOULD half-aggregate (§3.3) to minimise per-commitment cost. Identical commitments inscribed by two publishers are idempotent: a scanner records each unique `(Pkᵢ, message)` once.
+- A publisher MUST NOT be trusted for **correctness**: it cannot forge, alter, reorder-to-steal, or drop-without-detection any record, because (a) each signature and each published `nf` is verified by every scanning node (§3.5–§3.6), and (b) the value-bearing proof and coin plaintext travel off-chain ([Transport & Recovery](transport-recovery)), never through the publisher.
+- A publisher MUST NOT be trusted for **custody**: it never holds a spend key, a coin, or a proof; the worst a faulty or malicious publisher can do is **censor** (refuse to inscribe) or **delay** — both mitigated because anyone else can publish the same record.
+- A publisher SHOULD batch over a bounded interval (e.g. once per Bitcoin block) and SHOULD half-aggregate (§3.3) to minimise per-record cost. Records inscribed redundantly by two publishers are idempotent: a scanner inserts each unique `nf` into the accumulator once, and a second inscription of an already-seen `nf` is a no-op (§3.6).
 
 ## 3.5 Inscription format
 
-Commitments are carried in a Taproot **commit/reveal** inscription. The commit transaction pays to a Taproot output whose internal key is tweaked by a script-path leaf; the reveal transaction spends it, exposing the leaf script, whose witness contains the payload inside an `OP_FALSE OP_IF … OP_ENDIF` envelope (so the data is dropped by Bitcoin script and costs only witness weight).
+`SpendRecord`s are carried in a Taproot **commit/reveal** inscription. The commit transaction pays to a Taproot output whose internal key is tweaked by a script-path leaf; the reveal transaction spends it, exposing the leaf script, whose witness contains the payload inside an `OP_FALSE OP_IF … OP_ENDIF` envelope (so the data is dropped by Bitcoin script and costs only witness weight).
 
 Every zkCoins payload MUST begin with the fixed 2-byte **marker prefix** `0x42 0x42` (`"BB"`), which identifies the envelope as a zkCoins inscription and lets scanners skip all other inscriptions cheaply. The payload layout is:
 
@@ -83,84 +85,94 @@ offset  size  field
 ------  ----  -----------------------------------------------------------
   0       2   marker             = 0x42 0x42             (zkCoins prefix)
   2       1   version            = 0x01
-  3       1   format             0x00 = raw commitments
+  3       1   format             0x00 = raw records
                                  0x01 = half-aggregated (§3.3)
-  4       2   count m            big-endian u16, number of commitments
+  4       2   count m            big-endian u16, number of records
   6      32   block_anchor.block_hash   Bitcoin block hash of the tip this batch is anchored to (§3.7)
  38       4   block_anchor.height       big-endian u32, height of that block (§3.7); cross-checked on acceptance
- 42      32   commitment_smt_root  updated global Commitment-SMT root after this batch (§1.6)
- 74      32   commitment_mmr_root  updated global Commitment-MMR root after this batch (§1.6)
-106      32   nullifier_acc_root   updated global nullifier accumulator root after this batch (§3.7)
-138       …   body               depends on `format` (below)
+ 42       …   body               m records, depends on `format` (below)
 
-format 0x00 — raw, body length = m × 160 bytes:
-   per commitment j (160 bytes):
-      32   Pkⱼ        (x-only)
-      64   signatureⱼ (R ‖ s)
-      64   messageⱼ   (ash ‖ ocr)      // message carries NO nullifier
+format 0x00 — raw, records concatenated:
+   per record j:
+      32      Pkⱼ          (x-only)
+      64      signatureⱼ   (R ‖ s)
+      64      messageⱼ     (inr ‖ ocr)
+       1      kⱼ           u8, number of nullifiers spent in this record (0 for a mint)
+   32·kⱼ      nullifiersⱼ  (kⱼ × 32B, each a published nf, ascending byte order)
 
-format 0x01 — half-aggregated, body length = m × 128 + 32 bytes:
-      m × 128  per commitment j (128 bytes):  Pkⱼ(32) ‖ messageⱼ(64) ‖ Rⱼ(32)
-      32       s_agg      (single shared aggregate scalar, §3.3)
+format 0x01 — half-aggregated, records concatenated, then one shared scalar:
+   per record j:
+      32      Pkⱼ
+      64      messageⱼ     (inr ‖ ocr)
+      32      Rⱼ
+       1      kⱼ
+   32·kⱼ      nullifiersⱼ
+      32      s_agg        (single shared aggregate scalar, §3.3 — appended once, after all m records)
 ```
 
-The per-transaction `message` is exactly `ash ‖ ocr` and contains **no** nullifier. The spent `nf` set of a transition is bound off-chain via `input_nullifiers_root` in its proof's `ProofData` ([Foundations §1.4](foundations)); the inscription anchors only the **updated global roots** above. A publisher MUST set `commitment_smt_root`, `commitment_mmr_root`, and `nullifier_acc_root` to the values that result from applying this batch on top of `block_anchor` (§3.6, §3.7). A scanner derives the Commitment SMT and MMR roots from confirmed Bitcoin data and MUST reject a batch whose stated `commitment_smt_root` or `commitment_mmr_root` does not match; the correctness of the `nullifier_acc_root` update is attested by the batch's aggregate validity proof (§3.6 step 7), not recomputed by the scanner from foreign bundles.
+The inscription carries the spent `nf`s **in the clear**, in the body of each record; there are **no** global tree roots in the header. The double-spend state is therefore not *asserted* by a root the publisher chose — it is *rebuilt* by every node directly from the published `nf`s (§3.6), so no off-chain data and no trust in the publisher is involved. A scanner MUST recompute each record's `inr` as the Poseidon root over its listed `nullifiersⱼ` ([Foundations §1.4](foundations)) and reject the record if that root does not equal the `inr` carried in `messageⱼ`; this binds the published nullifier list to the signed message.
 
 The `block_anchor` is the pair `{ block_hash, height }` identifying the tip a proof is built against. An issuance validity-window height check ([System Architecture §6.5](architecture)) is evaluated **in-circuit against `block_anchor.height`** — prover-supplied and provable in-circuit, the tip the proof is built against, known at proving time — **not** against the actual (later) Bitcoin inclusion height, which is unknown when the proof is produced. A scanner cross-checks on acceptance that `block_anchor.block_hash` is at `block_anchor.height` in its own Bitcoin chain view.
 
-**`block_anchor` bound (normative).** Let `inclusion_height` be the height of the Bitcoin block that includes this batch's reveal transaction. A scanner MUST reject the batch unless **both**: (1) `block_anchor.height` is strictly less than `inclusion_height` and `block_anchor.block_hash` is a strict ancestor of the inclusion block (the anchor MUST NOT be the inclusion block itself, a forward block, or off the inclusion block's chain), and (2) the gap is bounded by `N = 100` blocks: `inclusion_height − block_anchor.height ≤ 100`. The first condition rejects forward anchoring; the second rejects stale anchoring. A batch whose `block_anchor` is not a strict ancestor of its inclusion block, or whose gap exceeds `N = 100`, MUST be treated as carrying **zero** valid commitments.
+**`block_anchor` bound (normative).** Let `inclusion_height` be the height of the Bitcoin block that includes this batch's reveal transaction. A scanner MUST reject the batch unless **both**: (1) `block_anchor.height` is strictly less than `inclusion_height` and `block_anchor.block_hash` is a strict ancestor of the inclusion block (the anchor MUST NOT be the inclusion block itself, a forward block, or off the inclusion block's chain), and (2) the gap is bounded by `N = 100` blocks: `inclusion_height − block_anchor.height ≤ 100`. The first condition rejects forward anchoring; the second rejects stale anchoring. A batch whose `block_anchor` is not a strict ancestor of its inclusion block, or whose gap exceeds `N = 100`, MUST be treated as carrying **zero** valid records.
 
-> Note on sizes: the fixed payload header is `2+1+1+2+32+4+32+32+32 = 138` bytes (marker, version, format, count, `block_anchor.block_hash`, `block_anchor.height`, and the three updated global roots), amortised across the whole batch. A raw single commitment adds `160` bytes of body — on the order of the ~177 bytes quoted in [Foundations §1.4](foundations) per commitment once the header is shared. Half-aggregation removes one 32-byte `s` per commitment and shares a single `s_agg`, so the marginal cost of an additional commitment falls to 128 bytes (`Pkⱼ ‖ messageⱼ ‖ Rⱼ`). A payload larger than the standardness limit MUST be split across multiple reveal inputs/transactions, each carrying its own marker and header.
+> Note on sizes: the fixed payload header is `2+1+1+2+32+4 = 42` bytes (marker, version, format, count, `block_anchor.block_hash`, `block_anchor.height`), amortised across the whole batch — the three global-root fields of earlier drafts are gone. A raw record adds `160 + 1 + 32·kⱼ` bytes of body (`Pkⱼ ‖ signatureⱼ ‖ messageⱼ ‖ kⱼ ‖ nullifiersⱼ`); a typical single-input spend (`kⱼ = 1`) is `193` bytes. Half-aggregation removes one 32-byte `s` per record and shares a single `s_agg`, so the marginal cost of an additional record falls to `128 + 1 + 32·kⱼ` bytes. A payload larger than the standardness limit MUST be split across multiple reveal inputs/transactions, each carrying its own marker and header.
 
-A scanner MUST validate the body length against the declared `format` and `count m`: for `format 0x00` (raw) the body length MUST equal `m × 160` bytes (each commitment `Pkⱼ(32) ‖ messageⱼ(64) ‖ signatureⱼ(64)`); for `format 0x01` (half-aggregated) the body length MUST equal `m × 128 + 32` bytes (each commitment `Pkⱼ(32) ‖ messageⱼ(64) ‖ Rⱼ(32)`, plus one shared 32-byte `s_agg`). The §3.6 structural check (step 2) verifies that `count == m` **and** that the body length equals the format's formula above; a scanner MUST reject a malformed or truncated payload — including one whose body length does not match its declared format and count — as carrying **zero** valid commitments.
+Because records are variable-length (each carries its own `kⱼ`), a scanner MUST parse the body **sequentially**: read exactly `m` records by consuming `Pkⱼ`, then `signatureⱼ` (format 0x00) or `Rⱼ` (format 0x01), then `messageⱼ`, then `kⱼ`, then `32·kⱼ` nullifier bytes; for `format 0x01` a single 32-byte `s_agg` follows the last record. The parse MUST consume the body **exactly**: a payload that ends mid-record, declares a `kⱼ` overrunning the body, or leaves trailing bytes (other than the `s_agg` of `format 0x01`) is malformed. The §3.6 structural check (step 2) verifies that exactly `count == m` records parse with no bytes left over; a scanner MUST reject a malformed or truncated payload as carrying **zero** valid records.
+
+**Metadata (normative note).** Publishing each record's nullifiers in the clear exposes one fact a fixed-size on-chain object would not: the **input count `kⱼ`** of each spend — and in particular `kⱼ = 0` marks a **mint** (or a transition that spends nothing). This is the deliberate price of a chain-rebuildable nullifier set (§3.6–§3.7). Amounts, assets, parties, and the transaction graph remain hidden, so [Requirement 2](/requirements) holds for them; the per-spend input count, however, is an **accepted, bounded leak** *outside* that guarantee, and a deployment MUST treat it as visible. A wallet that wants to blunt it MAY split a many-input spend across several transitions or pad to a fixed `k`, at additional on-chain cost; the protocol mandates no padding.
 
 ## 3.6 Chain scanning
 
-Any node rebuilds the global trees from Bitcoin alone, trusting no peer ([Foundations §1.6](foundations), [Requirement 3](/requirements)). For each new Bitcoin block, in canonical order, a node MUST:
+Any node rebuilds the global **nullifier accumulator** from Bitcoin alone, trusting no peer ([Foundations §1.6](foundations), [Requirement 3](/requirements)). For each new Bitcoin block, in canonical order, a node MUST:
 
 1. **Discover.** Identify reveal transactions whose witness contains an inscription envelope beginning with the marker `0x42 0x42` (§3.5). All non-marker inscriptions are ignored.
-2. **Parse.** Decode header and body. Reject any payload failing the structural checks of §3.5.
-3. **Verify signatures.** For `format 0x00`, verify each BIP-340 signature `signatureⱼ` against `(Pkⱼ, messageⱼ)`. For `format 0x01`, verify the single multi-scalar aggregate check of §3.3. A commitment whose signature does not verify MUST be discarded and MUST NOT enter any tree.
-4. **Order.** Establish a total order over verified commitments: primary key = Bitcoin block height; secondary = index of the reveal transaction within the block; tertiary = the commitment's position `j` within its payload. This order is a deterministic function of the public chain, so every node derives the same trees.
-5. **Update the Commitment SMT** ([Foundations §1.6](foundations)): for each verified commitment, set the leaf keyed by the spender's `address` to the new committed value derived from `message`. The address is bound to the proof's public inputs, not read from the inscription, so a commitment cannot be mis-attributed.
-6. **Append to the Commitment MMR**: after processing all of a block's commitments, append that block's Commitment-SMT root as one MMR leaf (one root per Bitcoin block, [Foundations §1.6](foundations)).
-7. **Record the anchored global roots.** A scanner records the three updated global roots inscribed in the payload — `commitment_smt_root`, `commitment_mmr_root`, and `nullifier_acc_root` (§3.5) — as the batch's on-chain-anchored roots. The `nullifier_acc_root` covers the spent `nf` set of every transition in the batch (each bound off-chain via `input_nullifiers_root` in its `ProofData`, [Foundations §1.4](foundations)); a scanner does **not** recompute `nullifier_acc_root` from foreign accounts' off-chain bundles, because it does not hold them. The **correctness of the root update** is attested by the batch's **aggregate validity proof** — an off-chain proof, fetchable and verifiable by anyone — that the inscribed roots are exactly the result of applying this batch on top of `block_anchor`. A **light verifier** MAY accept the most-work-chain-anchored root on the strength of confirmation depth (§3.9); a **full verifier** fetches and verifies the batch's aggregate validity proof before relying on the inscribed roots.
+2. **Parse.** Decode header and body sequentially (§3.5). Reject any payload failing the structural checks of §3.5.
+3. **Verify signatures.** For `format 0x00`, verify each BIP-340 signature `signatureⱼ` against `(Pkⱼ, messageⱼ)`. For `format 0x01`, verify the single multi-scalar aggregate check of §3.3. A record whose signature does not verify MUST be discarded.
+4. **Verify the nullifier binding.** For each surviving record, recompute the Poseidon root over its published `nullifiersⱼ` and check it equals the `inr` half of `messageⱼ` (§3.5). A record failing this check MUST be discarded — its published list does not match what was signed.
+5. **Order.** Establish a total order over surviving records: primary key = Bitcoin block height; secondary = index of the reveal transaction within the block; tertiary = the record's position `j` within its payload. This order is a deterministic function of the public chain, so every node processes nullifiers in the same sequence.
+6. **Insert nullifiers (first-spend-wins).** In that order, for each record, insert each published `nf` into the global nullifier accumulator ([Foundations §1.6](foundations)). If an `nf` is **already present**, that record is a double-spend attempt: the scanner MUST treat the whole record as **invalid** — its `nf`s are not re-inserted and its output coins are treated as never created. The first on-chain occurrence of an `nf`, in this canonical order, is the one and only spend of that coin.
 
-Because steps 1–6 are a pure function of confirmed Bitcoin data, two honest nodes scanning the same chain MUST arrive at identical SMT and MMR roots; the anchored `nullifier_acc_root` of step 7 is the same value for all, since it is read from the chain. A wallet or explorer therefore checks any served root against the on-chain-anchored value, and verifies the root update via the batch's aggregate validity proof, never by trusting the server ([Requirement 4](/requirements), [Requirement 10](/requirements)).
+Because steps 1–6 are a pure function of confirmed Bitcoin data, two honest nodes scanning the same chain MUST arrive at the **identical** nullifier accumulator — no node-supplied root, and no foreign off-chain data, is ever consulted. A wallet or explorer therefore computes the accumulator itself, or checks any served (non-)membership answer against its own copy, never by trusting the server ([Requirement 4](/requirements), [Requirement 10](/requirements)).
 
-The operative double-spend check is **per-coin** (§3.7): a verifier checks a specific coin's `nf` for (non-)membership against the on-chain-anchored `nullifier_acc_root` using a (non-)membership proof carried in that coin's `CoinProof` bundle — not by recomputing the global root from foreign bundles.
+The operative double-spend check is **per-coin** (§3.7): a verifier checks a specific coin's `nf` for (non-)membership against the accumulator it rebuilt from the chain. There is no global root to fetch and no per-coin membership path needs to travel inside a `CoinProof` bundle, because the verifier holds the whole published `nf` set itself.
 
 ## 3.7 The nullifier accumulator
 
-Double-spend protection is enforced **on-chain and trustlessly** by the global **nullifier accumulator** ([Foundations §1.6](foundations)): a sorted-key sparse Merkle tree (SMT) over all published nullifiers `nf = Hc("Nullifier", nk ‖ coin.identifier)` ([Foundations §1.4](foundations)), supporting both **membership** and **non-membership** proofs.
+Double-spend protection is enforced **on-chain and trustlessly** by the global **nullifier accumulator** ([Foundations §1.6](foundations)): a sorted-key sparse Merkle tree (SMT) over every nullifier `nf = Hc("Nullifier", nk ‖ coin.identifier)` ([Foundations §1.4](foundations)) ever **published in a `SpendRecord`**, supporting both **membership** and **non-membership** proofs.
 
-**Insertion.** When a coin is spent, its `nf` is bound into the spending transaction's proof public inputs (`input_nullifiers_root`, [Foundations §1.4](foundations)). The published `message` (`ash ‖ ocr`) carries **no** nullifier. The publisher anchors the resulting **updated `nullifier_acc_root`** in the inscription (§3.5), and the batch's aggregate validity proof attests that this root is the correct result of inserting the batch's spent `nf` set on top of `block_anchor` (§3.6 step 7). A scanner records this on-chain-anchored root; it does **not** itself recompute the accumulator from foreign accounts' off-chain bundles. The accumulator is idempotent and order-independent across a block; the anchored root depends only on the **set** of nullifiers confirmed up to a given tip.
+**Insertion.** When a coin is spent, its `nf` is published in the clear in the spending transition's `SpendRecord` (§3.1, §3.5). Every node folds the published `nf`s into the accumulator in the §3.6 canonical order (step 6, first-spend-wins). There is **no** inscribed accumulator root and **no** off-chain attestation of one: the accumulator is a deterministic function of the published `nf`s, so every honest node computes the same one directly from the chain. It is idempotent and order-independent across the *set* of confirmed nullifiers; the canonical order matters only to decide, between two records publishing the **same** `nf`, which is the valid spend (the earlier) and which the rejected double-spend (the later).
 
-**Per-transition chaining into the batch root.** Within a batch, the transitions are applied in the §3.6 total order. The batch's **starting** accumulator root is the previous tip's anchored `nullifier_acc_root`. A running accumulator root is then carried through the ordered transitions: each transition's `ProofData.prev_nullifier_acc_root` ([Foundations §1.4](foundations)) **MUST** equal the running root **immediately before** that transition, and its `ProofData.nullifier_acc_root` **MUST** equal the running root **immediately after** it (i.e. after inserting that transition's spent `nf` set). The **final** running root, after the last transition in the §3.6 order, **MUST** equal the `nullifier_acc_root` inscribed for the batch (§3.5). The batch's **aggregate validity proof** (§3.6 step 7) attests exactly this chaining — that the per-transition roots compose, in order, from the starting root to the inscribed batch root; a scanner therefore relies on the inscribed root only once that proof verifies.
+**Anchored value.** A non-membership answer is meaningful only **relative to a Bitcoin chain tip**: the canonical value is `NAV(tip) = (accumulator, tip_block_hash, tip_height)`. The `block_anchor = { block_hash, height }` field of every inscription (§3.5) records the tip the proof was built against. A verifier MUST evaluate any membership/non-membership claim **relative to a stated tip**; an answer quoted without its anchoring tip MUST be rejected as ambiguous.
 
-**Anchored root.** The accumulator root is **conditional on a specific Bitcoin chain tip**: the canonical value is `NAV(tip) = (root, tip_block_hash, tip_height)`. The `block_anchor = { block_hash, height }` field of every inscription (§3.5) records the tip the publisher built against, with `block_anchor.block_hash` and `block_anchor.height` identifying that tip. A verifier MUST evaluate any membership/non-membership claim **relative to a stated tip**; a root quoted without its anchoring tip MUST be rejected as ambiguous.
+**Double-spend check (per-coin).** To confirm a specific coin is unspent as of `tip`, a verifier checks that coin's `nf` against the accumulator it **rebuilt itself** from the chain at `NAV(tip)` (§3.6) — never against a root supplied by a node:
 
-**Double-spend check (per-coin).** The operative double-spend check is **per-coin**, evaluated against the **on-chain-anchored** `nullifier_acc_root` at `NAV(tip)` (§3.6 step 7), never by recomputing the global root from foreign bundles. To confirm a specific coin is unspent as of `tip`, a verifier takes that coin's `nf` together with the (non-)membership proof carried in the coin's `CoinProof` bundle ([Foundations §1.5](foundations)) and checks it against the anchored root:
+- `nf` **absent** ⇒ the coin is **unspent** at `tip`;
+- `nf` **present** ⇒ the coin is **already spent**; a fresh spend of it MUST be rejected.
 
-- a **non-membership** proof of `nf` ⇒ the coin is **unspent** at `tip`;
-- a **membership** proof of `nf` ⇒ the coin is **already spent**; the spend MUST be rejected.
+Because `nf` is unlinkable to the coin without `nk` ([Foundations §1.4](foundations)), the published nullifiers reveal that *some* coin was spent without revealing which coin or account ([Requirement 2](/requirements)).
 
-Because `nf` is unlinkable to the coin without `nk` ([Foundations §1.4](foundations)), the accumulator reveals spends without revealing which coin or account they belong to ([Requirement 2](/requirements)).
+**Light clients (cost of trustless non-membership).** Non-membership is checked against the accumulator, so a verifier that does not hold it has **no free shortcut** — this is the standing cost of nullifier-based double-spend protection, shared with the Shielded CSV paper and with Zcash, not specific to zkCoins. There is no compact on-chain root to verify against in 32 bytes; that earlier-draft shortcut was only ever as trustworthy as an off-chain attestation that this design removes. Two honest options remain:
 
-**Reorg handling.** If Bitcoin reorganises, every `nf` inscribed only in orphaned blocks MUST be removed and the accumulator recomputed for the new canonical tip, yielding a fresh `NAV(tip')`. Because `NAV` is explicitly tied to a tip, a stale `NAV(tip)` is self-identifying: a verifier MUST recompute or re-fetch `NAV` for the current canonical tip before acting on a non-membership result, and SHOULD wait for finality (§3.8) so that the anchoring tip is reorg-stable. A pruned accumulator MAY discard old subtrees provided it retains enough frontier to still produce non-membership proofs against the current tip.
+- **(i) Maintain the accumulator itself**, by scanning only the marker inscriptions (§3.5) — far cheaper than full Bitcoin validation (on the order of tens of bytes per spend), but its state grows with the total number of spends ever made.
+- **(ii) Delegate** the check to one or more nodes. Delegation has a sharp edge a membership check lacks: a dishonest node can falsely answer *unspent* for an already-spent coin and so trick a receiver into accepting a double-spend. A delegating wallet therefore **SHOULD** query several independent nodes — correctness holds as long as ≥1 is honest ([System Architecture §6.3](architecture)) — and **SHOULD** fall back to (i) for high-value receipts.
+
+A node **MAY** serve a **checkpoint accumulator root** to help an option-(i) client cross-check its own scan. Because that root is a **deterministic function of the on-chain nullifiers**, anyone who reconstructs the set recomputes and rejects a wrong one — unlike the publisher-asserted root of earlier drafts it carries **no** authority, and it does **not**, by itself, grant a zero-state client trustless non-membership. The protocol therefore inscribes no root and mandates none.
+
+**Reorg handling.** If Bitcoin reorganises, every `nf` published only in orphaned blocks MUST be removed and the accumulator recomputed for the new canonical tip, yielding a fresh `NAV(tip')`. Because `NAV` is explicitly tied to a tip, a stale one is self-identifying: a verifier MUST recompute or re-fetch `NAV` for the current canonical tip before acting on a non-membership result, and SHOULD wait for finality (§3.9) so that the anchoring tip is reorg-stable. Storage MAY exploit the tree's sparseness — the never-occupied regions of the 256-bit key space are implicit default subtrees and need not be stored — but the accumulator **cannot** prune by age: nullifiers are uniformly distributed keys, so "old" does not map to a discardable region, and every inserted `nf` must stay represented to answer both membership and arbitrary non-membership against the current tip. Only never-occupied key-space is free; the set of inserted nullifiers itself is not prunable.
 
 ## 3.8 Fees and economics (brief)
 
 Publishing a batch costs ordinary Bitcoin transaction fees, paid in BTC; zkCoins has no native token ([Requirement 1](/requirements)).
 
 - The **publisher** pays the Bitcoin fee for the inscription it broadcasts (§3.4).
-- A publisher **SHOULD** be reimbursable for that cost, and the spender **MAY** compensate the publisher **without revealing a funding UTXO** — a **broadcaster-paid** model in which the moved value covers the fee inside the off-chain settlement, so the spender's on-chain footprint stays limited to the opaque `Commitment`. Concretely, a wallet **MAY** include a publisher fee allowance in the off-chain bundle ([Transport & Recovery](transport-recovery)) that the publisher claims as a zkCoins-native transfer; it **MUST NOT** require the spender to sign or expose a Bitcoin UTXO.
+- A publisher **SHOULD** be reimbursable for that cost, and the spender **MAY** compensate the publisher **without revealing a funding UTXO** — a **broadcaster-paid** model in which the moved value covers the fee inside the off-chain settlement, so the spender's on-chain footprint stays limited to the opaque `SpendRecord`. Concretely, a wallet **MAY** include a publisher fee allowance in the off-chain bundle ([Transport & Recovery](transport-recovery)) that the publisher claims as a zkCoins-native transfer; it **MUST NOT** require the spender to sign or expose a Bitcoin UTXO.
 - Fee policy is **not** consensus: a publisher **MAY** set any fee, and a wallet that finds a publisher's fee unacceptable **MAY** use another publisher or self-publish (§3.4). No publisher can extract rent, because publishing is permissionless ([Requirement 7](/requirements)).
 
 ## 3.9 Finality
 
-A `Commitment` is **published** the instant its reveal transaction enters a Bitcoin block, and **final** under the same assumptions as any Bitcoin payment of comparable value.
+A `SpendRecord` is **published** the instant its reveal transaction enters a Bitcoin block, and **final** under the same assumptions as any Bitcoin payment of comparable value.
 
-- A receiver **MUST** treat a commitment as merely *seen* (zero-confirmation) until its reveal transaction has at least **one** confirmation, and **SHOULD** require **six** confirmations before treating the associated `NAV` (§3.7) and Commitment-MMR position as reorg-stable for high-value transfers.
+- A receiver **MUST** treat a `SpendRecord` as merely *seen* (zero-confirmation) until its reveal transaction has at least **one** confirmation, and **SHOULD** require **six** confirmations before treating the associated `NAV` (§3.7) as reorg-stable for high-value transfers.
 - A double-spend non-membership result (§3.7) is only as final as the tip it is anchored to; a verifier **MUST** re-evaluate it if a reorg displaces that tip below the required confirmation depth.
 - zkCoins adds no finality assumption beyond Bitcoin's: there is no separate consensus, validator set, or checkpoint ([Requirement 1](/requirements), [Requirement 3](/requirements)). Confirmation depth is the receiver's risk choice, exactly as for a native Bitcoin payment.

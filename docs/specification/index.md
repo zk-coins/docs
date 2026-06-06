@@ -52,9 +52,9 @@ The whole specification exists to satisfy these (in full on the [Requirements](/
 
 | # | Page | What it gives you |
 |---|---|---|
-| 1 | [Foundations](foundations) | The single source of truth: primitives, the full key hierarchy and exact derivations, every identifier, the data structures and trees |
+| 1 | [Foundations](foundations) | The single source of truth: primitives, the full key hierarchy and exact derivations, every identifier, the data structures and the global nullifier accumulator |
 | 2 | [Proofs & State Transitions](proofs) | The compliance predicate, recursion, and the mint / send / receive algorithms |
-| 3 | [On-chain Layer](onchain) | Commitment, signing, half-aggregation, the publisher, and the nullifier accumulator |
+| 3 | [On-chain Layer](onchain) | The `SpendRecord`, signing, half-aggregation, the publisher, and the nullifier accumulator |
 | 4 | [Transport & Recovery](transport-recovery) | Off-chain delivery, note discovery, seed recovery, data availability |
 | 5 | [Access & Explorer](access-explorer) | Capability-gated pull, view grants, and the disclosure spectrum: per-transaction links, balance attestations, full-account views |
 | 6 | [System Architecture](architecture) | Node, wallet, explorer; portability, multi-node, issuance, threat model |
@@ -67,8 +67,8 @@ Where each requirement is satisfied:
 
 | Requirement | Satisfied by |
 |---|---|
-| **1 · Bitcoin-only base** | §1 (no native token; secp256k1/BIP-340), §3 (a single commitment inscribed; no chain/consensus change) |
-| **2 · Private** | §1.3 (per-coin encryption), §1.4 (opaque commitment carries only hashes), §2 (ZK proof hides amounts/parties/graph) |
+| **1 · Bitcoin-only base** | §1 (no native token; secp256k1/BIP-340), §3 (a single `SpendRecord` inscribed; no chain/consensus change) |
+| **2 · Private** | §1.3 (per-coin encryption), §1.4 (opaque `SpendRecord` carries only hashes and unlinkable nullifiers), §2 (ZK proof hides amounts/parties/graph) |
 | **3 · Trustless** | §2 (proof soundness ⇒ no forgery), §3 (nullifier accumulator ⇒ no double-spend), §1.2 (no key a node holds can spend), §6 (threat model) |
 | **4 · Client-side validation** | §2 (receiver re-verifies the full recursive proof), §4 (receive flow) |
 | **5 · Custody only in wallet** | §1.2 (SPEND branch is wallet-only; hardened separation) |
