@@ -36,14 +36,21 @@ Both circuits are [Plonky2](https://github.com/0xPolygonZero/plonky2) circuits o
 
 ```rust
 // Conceptual: what the per-account compliance circuit C enforces per transition
+// (the normative clauses are spec §2.1)
 fn enforce() {
-    // 1. Verify the previous account proof (recursive, against C's own verifier data)
-    //    — absent for an InitialProof, whose prev state is the canonical empty account
-    // 2. Verify all incoming coins (BIP-340 Schnorr signatures, Merkle inclusion)
-    // 3. Check balance: sum(inputs) >= sum(outputs)
-    // 4. Prove no input coin was already spent (coin-history SMT non-inclusion)
-    // 5. Derive the spent-coin nullifiers and the new coin commitments
-    // 6. Enforce a monotonic send_counter and commit the new account state (ash)
+    // 1. Recursively verify the previous account proof against C's own verifier data
+    //    (absent for an InitialProof, whose prev state is the canonical empty account)
+    // 2. Verify the SINGLE per-transition BIP-340 signature by current_pubkey (Pkᵢ);
+    //    for each input coin: account ownership + coin-history-SMT inclusion at
+    //    "received-unspent" + identifier recomputation (there is no per-coin signature)
+    // 3. Per-asset balance: sum(inputs) + mint >= sum(outputs)
+    // 4. Derive each input nullifier nf = Hc("Nullifier", nk ‖ coin.identifier)
+    //    (global double-spend is caught later by the publisher's AggregateBatchProof
+    //    and the receiver's accumulator non-membership check, not inside C)
+    // 5. Construct the output coins and their identifiers; bind output_coins_root
+    // 6. Rotate the spend key (current_pubkey -> Pkᵢ₊₁), increment send_counter,
+    //    update the coin-history SMT (mark inputs spent, admit new coins),
+    //    and commit the new account-state hash (ash)
 }
 ```
 
