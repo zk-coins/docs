@@ -4,11 +4,13 @@
 
 This is the **documentation repository** and the single place that describes the whole system end to end. New here? Start with the **[Specification](https://docs.zkcoins.app/specification)** (the full A-to-Z technical design) or the **[Architecture overview](https://docs.zkcoins.app/architecture/overview)**.
 
-| | |
-|---|---|
-| **Docs (PRD)** | [docs.zkcoins.app](https://docs.zkcoins.app) |
-| **Docs (DEV)** | [dev-docs.zkcoins.app](https://dev-docs.zkcoins.app) |
-| **Wallet app** | [zkcoins.app](https://zkcoins.app) |
+| | Production | Dev |
+|---|---|---|
+| **Docs** | [docs.zkcoins.app](https://docs.zkcoins.app) | [dev-docs.zkcoins.app](https://dev-docs.zkcoins.app) |
+| **Wallet app** | [zkcoins.app](https://zkcoins.app) | [dev.zkcoins.app](https://dev.zkcoins.app) |
+| **Bitcoin network** | mainnet | Mutinynet (signet) |
+
+The Bitcoin network is a per-deployment **env variable** — production runs on **mainnet**, dev against **Mutinynet** — so every node operator chooses their own.
 
 ## What zkCoins is
 
