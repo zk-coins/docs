@@ -527,13 +527,9 @@ migration with no extra structural cost.
 
 ## Update Protocol
 
-Whenever a commit lands on this branch:
-
-1. If the commit completes a step → flip its row in *Status at a Glance* to ✅ and move its entry under *Done*.
-2. If the commit partially completes a step → flip to 🟡 and note progress under *In Progress*.
-3. If new tasks emerge → add a row in *Next* or *Current Focus: Decentralization* with effort estimate.
-4. If the commit invalidates an estimate → revise the *Effort* column.
-5. If the commit hits or escalates a risk → update the relevant *Risk Register* entry.
-
-Stale roadmap = broken roadmap. If a commit changes scope and this file
-isn't updated, the next reviewer should reject the PR until it is.
+The canonical, living version of this roadmap is maintained in the
+[node repo](https://github.com/zk-coins/node) and updated together with the
+work it tracks: completed steps flip to ✅ in *Status at a Glance*, partial
+progress is noted under *In Progress*, new tasks get a row with an effort
+estimate, and hit risks update the *Risk Register*. This page is a published
+snapshot and is refreshed when the source roadmap changes.
