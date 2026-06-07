@@ -4,6 +4,7 @@ const sidebars = {
     'intro',
     'requirements',
     'specification',
+    'implementation-mandate',
     {
       type: 'category',
       label: 'Architecture',
