@@ -1099,6 +1099,21 @@ When no `Invoice` is available, a recipient **MAY** publish the same `{pk0, ivpk
 
 Each published delivery event carries the per-coin `detect_tag` (§4.2, [Foundations §1.3](#13-per-coin-keys-note-encryption--detection)) in its plaintext payload so the recipient can locate it by scan rather than by trial-decrypting every event.
 
+#### End-user addressing — LNURL
+
+The protocol identity is `address = H(Pk₀)` (a Bech32m `zk1…` string), and the deliverable target is the signed `Invoice`/profile above. That raw form is correct but is **not** what an end user sees: the end-user app presents the receive address as an **LNURL** — a `lnurl1…` Bech32 string and/or its QR (LNURL-pay-style) — **never** a raw `zk1…`/`0x…` string and **never** an email-style `user@domain`.
+
+This resolution layers cleanly on top of §4.3 and adds **no** new trust:
+
+1. The recipient's app/SDK registers an **LNURL-pay-style endpoint** with its **API layer** (the optional LNURL/aliasing role, [§6.1](#61-components-and-responsibilities)). A sovereign node without that role simply hands out the raw `Invoice`/profile directly — LNURL is an opt-in convenience, not part of the trustless core.
+2. The receive screen shows the resulting `lnurl1…` (and QR). A human-readable username (the aliasing role) **MAY** front it, shown in a non-email form (e.g. `@alice`), but the canonical wire identifier is the LNURL.
+3. The sender's app decodes the LNURL, calls the endpoint, and receives the recipient's `addr_sig`-signed `Invoice` (or profile tuple). It then **MUST** run the same three-check verification of §4.3 — `H(pk0) == recipient`, `addr_sig` under `pk0`, `sig` under `op_pubkey` — before encrypting anything.
+4. The sender proceeds with delivery (§4.2) and real-time push (§4.9).
+
+**Trust is unchanged.** The LNURL is a resolution/UX layer only; the trust anchor remains the `addr_sig` binding (§4.3). A malicious or lying LNURL endpoint can at most refuse, or return an `Invoice` whose `addr_sig` the sender **rejects** — it can **never** redirect funds, because the sender encrypts only to an `addr_sig`-verified `ivpk`. Resolving an LNURL discloses the handle → `Invoice` mapping to the serving API, the same disclosure as publishing a profile.
+
+**Why LNURL — one address for Lightning and zkCoins (forward-looking).** LNURL is chosen precisely because it is Lightning-native: it lets a **future** app version serve **both rails from the same LNURL and the same QR code**. The resolver returns the appropriate payment parameters per rail — a standard LNURL-pay response for Lightning, the `addr_sig`-signed `Invoice` above for zkCoins — and the sender's wallet selects the rail. A user therefore shares **one** receive address/QR and can be paid in either Lightning or zkCoins, without ever exposing a raw `zk1…` string. This dual-rail capability is a **planned future version**; the zkCoins resolution defined here stands on its own today.
+
 ### 4.4 Note discovery
 
 A recipient (or its always-on node, holding `ivk`) finds its own incoming bundles as follows:
@@ -1157,6 +1172,56 @@ Custody safety **MUST NOT** depend on availability. Losing availability impairs 
 - **Detection scan vs. linkability.** Per-coin `detect_tag`s are all-distinct (fresh `epk` per coin, §4.4), so a relay cannot link or filter for the recipient. The genuine residual cost is **bandwidth**: detection runs recipient-side over the candidate set. The OPTIONAL fuzzy-message-detection upgrade reduces that bandwidth.
 - **Network presence.** Operating a relay exposes the operator's network address (IP) to peers. Operators that require location privacy **SHOULD** run the relay behind an anonymity network (e.g. a Tor hidden service).
 - **Recovery disclosure.** Pulling by `detect_tag` reveals the tag-set to the serving node; pulling by ownership proof reveals the requester's identity to that node. Both are consensual, scoped to the requester's own data, and never expose spend authority.
+
+### 4.8 Durability — the store-everything invariant
+
+zkCoins is client-side-validated: a coin's spendability lives **entirely** in off-chain artefacts — the `CoinProof` bundle and the recursive proof it carries. Bitcoin holds only the opaque `BatchInscription` ([§3.1](#31-the-on-chain-object)), which **cannot** reconstruct a lost proof. **Losing the off-chain data is losing the funds, permanently** (§4.6: a `CoinProof` bundle *is* custody). Durability is therefore a hard safety requirement of every node, not best-effort caching.
+
+- **Store everything (MUST).** A node **MUST** durably persist **every** value-bearing or accumulator-bearing artefact the moment it receives it — every `CoinProof` bundle, every `BatchBundle`, every delivery event, and every self-delivered change/state bundle (§4.2) — to its durable store (the kernel's value-bearing PostgreSQL plus blob store; [§6.1](#61-components-and-responsibilities)). It **MUST NOT** treat any such artefact as ephemeral, in-memory-only, or droppable under load. The standing rule is *store everything you can get*: when in doubt, persist.
+- **Persist before acting (MUST).** The durable write **MUST** precede every externally-visible effect — returning the §4.2 ACK, crediting a coin, or serving the artefact to a peer. A node **MUST** order its work so that a crash at any point can never leave it having acted on data it did not first persist.
+- **The ACK is a durability receipt.** A node **MUST NOT** return the §4.2 acknowledgement until the artefact is committed to stable storage (fsync / write-ahead log). A sender that receives a valid ACK may therefore drop its retained copy (§4.2) knowing the data survived a crash on the receiving side — the ACK means *durably stored*, not merely *received over the wire*.
+- **No expiry for value-bearing data.** Unlike a generic Nostr relay's retention policy, a zkCoins node **MUST** retain value-bearing and admitted-accumulator artefacts **indefinitely** (§4.6 already mandates this for admitted `BatchBundle`s; it extends to every value-bearing artefact). A node **MAY** prune an artefact only when it is provably **superseded** *and* still held by at least `k` independent replicas (§4.6) — e.g. an older account-state bundle once the newer state is durably stored and replicated — and even then conservatively.
+
+It **MUST NEVER** happen that a node received an artefact bearing on spendability and failed to store it. This local-durability invariant is the per-node half of data availability; the cross-node replication of §4.6 is the other half. Together they are what makes recovery (§4.5) possible.
+
+### 4.9 Real-time push delivery
+
+Delivery is **push end-to-end**, with **no polling anywhere** on the path: a payment surfaces in the recipient's app the moment it is verified. Every hop is a live subscription or a server push.
+
+The pipeline is normative:
+
+1. **Sender → mesh.** The sender publishes the gift-wrapped `CoinProof` delivery event to the recipient's advertised relay set (§4.2) and replicates to `k` (§4.6).
+2. **Relay → node (push).** The recipient's node holds a **live subscription** (a standing Nostr `REQ`, which streams matching events as they arrive — a subscription, not a poll loop) to its relay set; the relay **pushes** the matching delivery event the instant it lands, and the node still runs the recipient-side `detect_tag` match on each pushed candidate (§4.4). The node is the always-on component ([§6.1](#61-components-and-responsibilities)) and **MUST** keep this subscription open; it **MUST NOT** poll.
+3. **Node verifies (and persists).** The node `detect_tag`-matches (§4.4), fetches the blob, **persists it** (§4.8), decrypts with `K_tx` (re-derived from `ivk`, [§1.3](#13-per-coin-keys-note-encryption--detection)), and **verifies** the recursive proof and nullifier non-membership against the live accumulator (§2.3.3). Only a verified coin is credited.
+4. **Node → API (push).** On a verified receipt the kernel **pushes** a receipt up its RPC to the API layer over a **server-stream** (e.g. a gRPC stream; [§6.1](#61-components-and-responsibilities)) — never a polled endpoint.
+5. **API → wallet (push).** The API layer holds an open **SSE or WebSocket** channel to each subscribed wallet (the SDK keeps the stream open) and **pushes** the receipt. The SDK fires the app's callback and the app shows *payment received* **instantly**.
+6. **Backgrounded app (optional).** When the app is closed and cannot hold a live stream, the wallet **MAY** additionally register for an OS push (APNs / FCM). This delivery-of-last-resort sits **outside** the trustless core (it traverses Apple/Google) and **MUST** carry **no** plaintext — only an opaque wake signal; on wake the app re-pulls and re-verifies (steps 3–5) before showing anything.
+7. **ACK.** After step 3's verification and durable persist (§4.8), the node returns the §4.2 ACK to the sender, closing the loop.
+
+**Latency.** The only inherent waits are network propagation and the **constant-time** proof verification ([§2.2](#22-proof-types)); there is **no poll interval** on the path. End-to-end receipt is bounded by verification plus propagation, not by any polling cadence.
+
+```mermaid
+sequenceDiagram
+  participant S as Sender
+  participant R as Relay mesh
+  participant N as Recipient node
+  participant A as API layer
+  participant W as SDK and app
+  S->>R: publish gift-wrapped CoinProof
+  R-->>N: push event — live subscription, no poll
+  N->>N: detect_tag match · persist · decrypt · verify
+  N-->>S: ACK — durability receipt
+  N-->>A: receipt — gRPC server-stream push
+  A-->>W: receipt — SSE/WebSocket push
+  W->>W: show "payment received" instantly
+```
+
+**Substrate vs fast path (normative).** Nostr is the **durable, global, decentralised substrate**: every delivery **MUST** land on the recipient's advertised relay(s) and be `k`-replicated (§4.6) — it is the source of truth and the only recovery path. But global mesh propagation plus blob fetch can add latency, so Nostr is not necessarily the fastest *notification* channel. The two concerns are therefore separated:
+
+- **Canonical delivery (durable, MUST):** the gift-wrapped `CoinProof` over Nostr, `k`-replicated (§4.6). Source of truth; the only recovery path.
+- **Low-latency notification ping (optional overlay, MAY):** to surface a payment with minimal latency, the sender's node **MAY** additionally send a **direct, out-of-band hint** to the recipient's node/API — e.g. "a coin tagged `detect_tag` is waiting at `bundle_locator`" — or use a dedicated fast channel, triggering an immediate fetch-and-verify without waiting for mesh propagation.
+
+The fast ping is purely a **wake/accelerate** signal and carries **no trust**: the recipient still fetches the durable artefact, **verifies** it (§2.3.3), and persists it (§4.8) before crediting. A missing, delayed, or lying ping can **never** cause loss, double-credit, or a false receipt — **verification gates trust, Nostr + DA gate recovery, and the fast path gates only latency.** A deployment **MAY** therefore optimise the ping channel freely (a direct WebSocket hint, a fast relay, a push fan-out) without weakening any guarantee. When the recipient runs its own node and relay, local relay delivery already *is* the fast push; the overlay matters mainly across operators.
 
 Continue to [Access & Explorer](#5--access--explorer) for the capability-gated pull endpoint, view grants, and the shareable confirmation links that build on this transport layer.
 
@@ -1460,19 +1525,107 @@ Normative keywords (**MUST**, **MUST NOT**, **SHOULD**, **MAY**) are used per RF
 
 zkCoins is exactly three components. The split between them is **packaging, not a trust boundary**: it mirrors the Bitcoin full-node model (a validator plus a thin key-holder). The one line never crossed is the SPEND branch — it lives only in the wallet.
 
+#### The full system stack — hardware to app
+
+Those three trustless components do not run in a vacuum: they sit inside a larger operational stack. **This specification covers the whole of it — hardware to app — not only the trustless core.** Because the system is split across several repositories, the docs repository is the single place that describes the system end to end. The layers, top to bottom, and their owning repos:
+
+```mermaid
+flowchart TB
+  a["End-user app · Explorer web-app"] --> b["SDK"]
+  b --> c["zkCoins API + own PostgreSQL"]
+  c --> d["zkCoins node + PostgreSQL + Publisher"]
+  d --> e["bitcoind · Nostr relay"]
+  e --> f["Docker"]
+  f --> g["Operating system"]
+  g --> h["Hardware"]
+```
+
+| Layer | What runs there | Repo | Role / trust |
+|---|---|---|---|
+| **App · Explorer** | end-user wallet UI (LNURL receive §4.3, push receipts §4.9) · public explorer web-app | `zk-coins/app` · `zk-coins/explorer` | presentation; the app holds keys on-device, the explorer holds none |
+| **SDK** | thin client — on-device key derivation and signing, node/API calls | `zk-coins/sdk` | custody stays on the device; REST + stream client |
+| **zkCoins API** (+ own PostgreSQL) | public REST and LNURL; hosted-wallet service | the API-layer repo | **optional**, off by default; owns a **non-value-bearing** database |
+| **zkCoins node** (+ PostgreSQL + Publisher) | the trustless **kernel**: scan · accumulator · verify · prove · store · publisher/broadcaster | `zk-coins/node` | the trustless core; owns the **value-bearing** database (§4.8) |
+| **bitcoind · Nostr relay** | Bitcoin L1 settlement and ordering · off-chain transport and data availability | upstream (own or external) | inherits Bitcoin's trust; transport trusted only for availability (§4.1) |
+| **Docker · OS · Hardware** | container runtime, host operating system, physical machine | — | the operational substrate the operator provides |
+
+Every layer above the substrate is the operator's own in the sovereign deployment (*Running a node*, below); the SPEND branch never leaves the top layer — the app/wallet on the user's own device ([Foundations §1.2](#12-key-hierarchy)).
+
 #### The node — validator, prover, transport, store
 
 The node is the always-on workhorse. It **MUST** be runnable as a single self-contained container with no operator-specific dependencies ([Requirement 7](/requirements)). Its responsibilities:
 
 - **Bitcoin scanner.** Reads Bitcoin L1, extracts inscribed `BatchInscription`s (Foundations §1.4), fetches each batch's `BatchBundle` from the relay mesh, verifies the publisher's `AggregateBatchProof`, and applies the inscribed `prev_root → new_root` transitions to maintain the global nullifier accumulator (Foundations §1.6). Verification is recursively trustless — every artefact is publicly checkable — and `BatchBundle` data availability is the only liveness dependency, mitigated by `k = 3` replication. See [On-chain Layer](#3--on-chain-layer).
-- **Prover.** Builds the per-account recursive validity proofs for transactions it is asked to construct. A node that *also* acts as a publisher additionally builds `AggregateBatchProof`s over collected member `SpendRecord`s. See [Proofs & State Transitions](#2--proofs--state-transitions).
+- **Prover** (optional — see *Node roles* below). Builds the per-account recursive validity proofs for transactions it is asked to construct. A node that *also* acts as a publisher additionally builds `AggregateBatchProof`s over collected member `SpendRecord`s. See [Proofs & State Transitions](#2--proofs--state-transitions).
 - **Transport via a Nostr relay.** Serves and fetches the off-chain `CoinProof` bundles and `BatchBundle`s, performs `detect_tag` discovery for coin bundles, and carries gift-wrapped transport — through a paired Nostr relay that runs as its **own container** (the operator's own by default, or an external relay; [§6.6](#66-threat-model-and-trust-configurations)). See [Transport & Recovery](#4--transport--recovery).
-- **Data store.** Persists bundles and rebuilt tree state; provides the operator's own backup ([Requirement 6](/requirements)).
+- **Data store.** Durably persists **every** value-bearing and accumulator artefact it receives — the *store-everything* invariant ([§4.8](#48-durability--the-store-everything-invariant)) — plus rebuilt tree state; provides the operator's own backup ([Requirement 6](/requirements)).
 - **Capability-gated API.** Answers reads only against a valid ownership proof or view grant, and accepts transaction submissions. See [Access & Explorer](#5--access--explorer) and §6.4 below.
 
 **Keys it holds.** For accounts that delegate to it, the node holds the **operational bundle** `{ivk, ovk, op}` (Foundations §1.2): `ivk` to detect and decrypt incoming coins, `ovk` to recover outgoing-coin plaintext, and `op` to act as the account's Nostr identity and to sign view grants and acknowledgements. For a *foreign* account it holds only an `op`-signed **view grant**, never the bundle directly.
 
 **What it cannot do.** A node **MUST NOT** be able to spend, forge, or double-spend: it never holds any SPEND-branch key (`skᵢ`, `nk`), and value integrity is enforced by proof soundness and the nullifier accumulator, not by the node's honesty. A node **MAY** lie or withhold data, but it cannot make the wallet accept an unverifiable answer (§6.3).
+
+#### Node roles — core vs optional
+
+The node is **one program**, but not every operator runs all of it. A small **core** is mandatory for any node that is to be trustless at all; several **operator roles** are optional and **off by default**. These are roles *within* the single node component above — not separate components, and not separate programs: they share the whole [Foundations](#1--foundations-normative) layer (identifiers, proof system, accumulator), so they ship in **one codebase** and are selected per deployment by **configuration**, never by running a different binary. A node **MUST** advertise which optional roles it offers so a client can adapt and treat an unadvertised role as absent (fail-closed). The SPEND branch is never any of these roles (Foundations §1.2).
+
+| Role | Core or optional | Default |
+|---|---|---|
+| Bitcoin scanner · nullifier-accumulator · proof **verification** · state store | **Core** — every real node | always on |
+| `submit.tx` and the read interfaces for the operator's **own** wallet ([§6.4](#64-external-interfaces-abstract)) | **Core** | always on |
+| **Prover** for the operator's **own** transitions | **Core** *if* the operator proves locally | on / off |
+| **Public wallet API** — proving and submission on behalf of **hosted** accounts (the multi-tenant service a public provider runs) | optional operator role | **off** |
+| **Publisher** — aggregate `SpendRecord`s, build the `AggregateBatchProof`, inscribe the `BatchInscription` ([§3.4](#34-the-publisher)) | optional operator role | **off** |
+| Aliasing / username, LNURL and similar wallet-app conveniences | application features, not core | **off** |
+
+A few standard **deployment profiles** follow:
+
+- **Sovereign personal node** — core plus own-account proving; no public API, no publisher, no aliasing. This is the private default.
+- **Public service node** — adds the public wallet API and, optionally, the publisher. Proving for someone else means receiving that account's plaintext witness, so this is the role that carries the privacy trade-off for *its users* ([§6.6](#66-threat-model-and-trust-configurations)); being a public wallet API is **opt-in**, never forced on a node operator.
+- **Validating-only node** — core verification and accumulator, no local prover, no publisher: it follows and checks the chain without producing anything.
+- **Explorer** — not a node profile at all, but a separate stateless **frontend** (its own repository and its own container; see *Running a node* below) that only reads a node's public endpoints; it offers no publisher and no wallet API.
+
+#### Kernel and API — two boundaries (RPC inward, REST outward)
+
+The optional roles split from the core along **one clean seam**, which fixes where the broadcaster, the prover, and the databases live:
+
+- **Inward — the kernel RPC.** The trustless **kernel** (`zkcoins-node`) exposes a typed, server-to-server **RPC** (gRPC recommended: a `.proto` contract with codegen for Rust and clients). Its procedures are verb-shaped — `verifyBatch`, `accumulatorPath`, `prove(witness)`, `submitTransition`, and a `subscribe` server-stream of receipts (§4.9). This RPC is the **stable contract** everything else builds on; an alternative API layer, an indexer, or a power user can build against it — exactly as the Bitcoin ecosystem builds on `bitcoind`'s RPC.
+- **Outward — the public REST API.** The optional **API layer** (its own repository and container; the *public service node* of the role table) consumes the kernel RPC and exposes the **public, browser- and integrator-friendly REST** surface ([§6.4](#64-external-interfaces-abstract)) to wallets, the SDK, the app, and the explorer — REST outward, not gRPC, so any browser or mobile client can consume it without a special transport.
+
+This seam answers three placement questions normatively:
+
+- **The broadcaster (publisher) is a kernel role**, never an API role. It needs the accumulator state, the proving stack, and `bitcoind` — all kernel-side. The API layer **MUST NOT** touch Bitcoin; it only **forwards** submitted `SpendRecord`s down the kernel RPC, and the kernel's publisher/broadcaster role ([§3.4](#34-the-publisher)) aggregates them, builds the `AggregateBatchProof`, and inscribes via `bitcoind`. The **prover** is kernel-side for the same reason (it needs accumulator state); the API forwards witnesses, it never proves itself.
+- **Two databases, two owners.** The kernel is the **sole writer and reader** of the **value-bearing / accumulator** PostgreSQL — the store-everything database ([§4.8](#48-durability--the-store-everything-invariant)). The API layer **MUST NOT** read or write it directly; it obtains and submits all zkCoins state through the kernel RPC. Purely operational API state — LNURL mappings, `username`/aliasing claims, rate-limit counters, API keys, push-subscription registrations — is **not** value-bearing (losing it loses a convenience, never funds, since address and keys are seed-derivable) and lives in a **separate** database owned by the API layer (its own PostgreSQL in a public-service deployment). Neither owner touches the other's store. A **sovereign personal node** that runs no public API has **only** the kernel database.
+- **Packaging and deployment.** In the **sovereign personal** deployment the kernel serves the owner's own wallet directly — the five-container stack of *Running a node* below, with no separate API container; a **public-service** deployment adds the API-layer container and its own database on top of that stack. Kernel and API **MAY** ship as one repo/binary while the RPC is still maturing (an internal crate boundary) and split into separate repos once the contract stabilises; either way the boundary above holds.
+
+```mermaid
+flowchart TB
+  app["wallet app · SDK"]
+  expl["explorer"]
+
+  subgraph apilayer["API layer — own repo/container · OPTIONAL"]
+    api["public REST API<br/>wallet API · username · lnurl"]
+    apidb[("postgresql<br/>API app state")]
+  end
+
+  subgraph kernel["zkcoins-node — trustless kernel"]
+    core["scan · accumulator · verify · store"]
+    prover["prover"]
+    bcast["broadcaster / publisher"]
+  end
+
+  pg[("postgresql<br/>value-bearing + accumulator")]
+  btc["bitcoind"]
+
+  app -->|"REST · SSE/WS push"| api
+  expl -->|"REST"| api
+  api -->|"gRPC — kernel RPC"| core
+  api --- apidb
+  core --- prover
+  core --- bcast
+  core ==>|"sole writer/reader"| pg
+  bcast -->|"inscribe · broadcast"| btc
+```
 
 #### The wallet — thin key-holder
 
@@ -1487,7 +1640,7 @@ The wallet holds the **seed** and is the sole custodian of the SPEND branch (`A/
 
 #### The explorer — stateless presentation
 
-The explorer is a **stateless** read surface over one or more nodes. It holds **no keys** and no private state of its own. Given a per-coin view capability `K_tx` (Foundations §1.3) — carried in a shareable link — it decrypts and presents exactly one transaction and verifies that confirmation against Bitcoin ([Requirement 9](/requirements)). It **MUST** be self-hostable and **MUST NOT** assert any fact it cannot derive verifiably from a node's data and the chain. See [Access & Explorer](#5--access--explorer).
+The explorer is a **stateless** read surface over one or more nodes. It holds **no keys** and no private state of its own. Given a per-coin view capability `K_tx` (Foundations §1.3) — carried in a shareable link — it decrypts and presents exactly one transaction and verifies that confirmation against Bitcoin ([Requirement 9](/requirements)). It **MUST** be self-hostable and **MUST NOT** assert any fact it cannot derive verifiably from a node's data and the chain. It is a separate **frontend** — its own repository and its own container, a sibling of the wallet app, **not** part of the node program — and offers no publisher or wallet-hosting role; it reads a node's public endpoints. See [Access & Explorer](#5--access--explorer).
 
 #### Running a node — what an operator deploys
 
@@ -1594,6 +1747,8 @@ The node exposes four interface families, specified here at an implementation-ne
 | **explorer.read** | explorer → mesh / node | a bearer view secret (`zkview` per coin, `zkavk` for full history) or a balance attestation, applied **client-side** | render a disclosed view: one transaction, full account history, or a balance | [Access & Explorer](#5--access--explorer) |
 
 The `read.account` path is **capability-gated**: a node **MUST** reject a request that does not present a valid ownership proof or `op`-signed view grant. Bearer view secrets (`zkview`/`zkavk`) and balance attestations are **not** node authorisations — the explorer applies them client-side to bundles obtained from the relay mesh or a holder, so `explorer.read` widens only what the secret-holder can decrypt from already-public material ([Access & Explorer §5.1](#51-capability-gated-pull)). The `submit.tx` path needs no capability because the submitted transition carries its own validity proof and self-authenticating `SpendRecord`; a node **MUST** verify that proof before publishing.
+
+**Core surface vs optional roles.** The families above are the node **core** surface — every node serves them, for the accounts it is responsible for. The optional operator roles ([§6.1](#61-components-and-responsibilities)) layer **on top** of the same surface rather than adding new wire protocols: the **public wallet API** is `read.account` + `submit.tx` (with proving) offered for **hosted** accounts (those that have delegated their operational bundle to this provider) instead of only the operator's own; the **publisher** consumes already-submitted transitions to aggregate and inscribe batches ([§3.4](#34-the-publisher)); application conveniences (aliasing / username, LNURL) are additional, separately-gated endpoints **outside** this core set. A node advertises which optional surfaces it exposes so clients gate fail-closed ([§6.1](#61-components-and-responsibilities)).
 
 ### 6.5 Issuance — versioned schemas, v1 (minimal)
 
