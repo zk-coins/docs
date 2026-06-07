@@ -20,3 +20,14 @@
   --ifm-background-color: #0a0a0a;
   --ifm-background-surface-color: #141414;
 }
+
+/* Deep-link reliability on long pages: offset the fixed navbar when jumping to a
+   heading hash, and reserve vertical space for Mermaid diagrams so their late
+   client-side render does not reflow the page and displace the scroll target
+   (the cause of hash links landing at the top on the Specification page). */
+html {
+  scroll-padding-top: calc(var(--ifm-navbar-height) + 1rem);
+}
+.docusaurus-mermaid-container {
+  min-height: 240px;
+}

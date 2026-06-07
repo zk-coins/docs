@@ -45,6 +45,7 @@ const config = {
   plugins: [
     require.resolve('./plugins/llms-txt'),
     require.resolve('./plugins/noindex-preview'),
+    require.resolve('./plugins/strip-null-bytes'),
   ],
 
   themes: ['@docusaurus/theme-mermaid'],
