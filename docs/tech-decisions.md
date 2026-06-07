@@ -164,7 +164,7 @@ The proving system began as an SP1 + SHA256 prototype and was migrated to Plonky
 - **Used by Shade Protocol** — consistent pattern across our projects
 - **Built-in search, versioning, i18n** — features we'll need as the project grows
 - **Cloudflare Pages** — zero-infrastructure hosting, automatic deploys on push
-- **Separate repo** — docs deploy independently from app/server
+- **Separate repo** — docs deploy independently from app/node
 
 **Considered:**
 - **Nextra** — originally planned, but Docusaurus was chosen for consistency with Shade Protocol
