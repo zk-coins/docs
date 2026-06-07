@@ -26,7 +26,7 @@ Every decision below follows from one idea — **complete self-sovereignty, zero
 | Settles only on Bitcoin L1 — no own chain, token, or consensus | inherit the most decentralized base; build no new one |
 | Client-side validation; constant-size ZK proofs | each participant verifies for themselves, trusting no one |
 | Spend key lives only in the wallet | the participant alone holds custody |
-| Off-chain delivery over a node-as-relay mesh | no central delivery service |
+| Off-chain delivery over an operator-run relay mesh | no central delivery service |
 | Recovery from seed + Bitcoin + the network | no central backup custodian |
 | Capability-gated disclosure; self-hostable, verifiable explorer | the owner alone decides who sees what; no trusted authority |
 | Any node — switchable, several at once | no lock-in to any operator |
@@ -156,7 +156,7 @@ Where each requirement is satisfied:
 | **4 · Client-side validation** | §2 (receiver re-verifies the full recursive proof), §4 (receive flow) |
 | **5 · Custody only in wallet** | §1.2 (SPEND branch is wallet-only; hardened separation) |
 | **6 · Recovery** | §1.3 (seed-derived detection/scan keys), §4 (seed reconstruction, replication, data availability) |
-| **7 · Self-hostable** | §6 (node ships self-contained, no operator-specific dependencies), §4 (node-as-relay) |
+| **7 · Self-hostable** | §6 (one `docker compose` stack — node · bitcoind · nostr-relay · PostgreSQL · explorer — each a pluggable, own-or-external building block, no operator-specific dependencies), §4 (paired Nostr relay) |
 | **8 · Multi-asset** | §1.4 (`asset_id`), §1.5 (per-asset balances), §2 (per-asset conservation), §6 (issuance) |
 | **9 · Explorer** | §5 (capability-gated authorised view; per-coin view capability; verifiable confirmation links) |
 | **10 · Node portability** | §1.2 (everything derives from the seed ⇒ no node-specific state), §6 (switch / multi-node) |
@@ -686,7 +686,7 @@ Each predicate property delivers a specific [Requirement](/requirements):
 ### Reading guide
 
 - BatchInscription construction, publisher signing, batch aggregation via `AggregateBatchProof`, chain scanning, and the global nullifier accumulator: [On-chain Layer](#3--on-chain-layer).
-- `CoinProof` delivery, node-as-relay, note discovery, and recovery/data-availability: [Transport & Recovery](#4--transport--recovery).
+- `CoinProof` delivery, paired-relay transport, note discovery, and recovery/data-availability: [Transport & Recovery](#4--transport--recovery).
 - Viewing keys, view grants, and the public/authorised explorer: [Access & Explorer](#5--access--explorer).
 - Node/wallet/explorer components, portability, and the open-mint issuance terms: [System Architecture](#6--system-architecture).
 
@@ -904,9 +904,9 @@ Normative keywords (**MUST**, **MUST NOT**, **SHOULD**, **MAY**) are used per RF
 
 ### 4.1 Roles and transport
 
-Every zkCoins **node is itself a full Nostr relay**. One process performs Bitcoin validation, proof verification, state storage, the encrypted bundle relay/store, and the capability-gated pull endpoint ([Access & Explorer](#5--access--explorer)). There is no separate, mandatory courier.
+Every zkCoins **node is paired with a full Nostr relay** for transport. In the reference deployment that relay runs as its **own container** (`nostr-relay`), reached over the relay protocol; it **MAY** be the operator's own (the default) or an external relay ([§6.1](#61-components-and-responsibilities)). The node performs Bitcoin validation, proof verification, state storage, and the capability-gated pull endpoint ([Access & Explorer](#5--access--explorer)); the paired relay performs the encrypted bundle relay/store. There is no separate, mandatory third-party courier — by default transport is part of the operator's own stack.
 
-The transport key is `op`, the operational / Nostr identity key ([Foundations §1.2](#12-key-hierarchy)). It is a secp256k1 / BIP-340 key — the same family Nostr uses — so it doubles as the wallet's Nostr key with no separate keypair. The node holds `op` and runs the relay on the wallet's behalf; `op` **MUST NOT** be able to spend (it is a hardened sibling of the SPEND branch).
+The transport key is `op`, the operational / Nostr identity key ([Foundations §1.2](#12-key-hierarchy)). It is a secp256k1 / BIP-340 key — the same family Nostr uses — so it doubles as the wallet's Nostr key with no separate keypair. The node holds `op` and drives transport on the wallet's behalf, publishing to and reading from its relay; `op` **MUST NOT** be able to spend (it is a hardened sibling of the SPEND branch).
 
 The transport is trusted only for **availability** and for **metadata minimisation** — never for correctness. A relay can **withhold** a bundle but can neither **forge** nor **alter** one, because the recipient verifies every bundle cryptographically (§4.5). This is the same trust spectrum as the node model: a compromised relay is a privacy/availability problem, never theft.
 
@@ -1336,13 +1336,13 @@ Normative keywords (**MUST**, **MUST NOT**, **SHOULD**, **MAY**) are used per RF
 
 zkCoins is exactly three components. The split between them is **packaging, not a trust boundary**: it mirrors the Bitcoin full-node model (a validator plus a thin key-holder). The one line never crossed is the SPEND branch — it lives only in the wallet.
 
-#### The node — validator, prover, relay, store
+#### The node — validator, prover, transport, store
 
 The node is the always-on workhorse. It **MUST** be runnable as a single self-contained container with no operator-specific dependencies ([Requirement 7](/requirements)). Its responsibilities:
 
 - **Bitcoin scanner.** Reads Bitcoin L1, extracts inscribed `BatchInscription`s (Foundations §1.4), fetches each batch's `BatchBundle` from the relay mesh, verifies the publisher's `AggregateBatchProof`, and applies the inscribed `prev_root → new_root` transitions to maintain the global nullifier accumulator (Foundations §1.6). Verification is recursively trustless — every artefact is publicly checkable — and `BatchBundle` data availability is the only liveness dependency, mitigated by `k = 3` replication. See [On-chain Layer](#3--on-chain-layer).
 - **Prover.** Builds the per-account recursive validity proofs for transactions it is asked to construct. A node that *also* acts as a publisher additionally builds `AggregateBatchProof`s over collected member `SpendRecord`s. See [Proofs & State Transitions](#2--proofs--state-transitions).
-- **Nostr relay.** Stores and serves the off-chain `CoinProof` bundles and `BatchBundle`s, performs `detect_tag` discovery for coin bundles, and carries gift-wrapped transport. See [Transport & Recovery](#4--transport--recovery).
+- **Transport via a Nostr relay.** Serves and fetches the off-chain `CoinProof` bundles and `BatchBundle`s, performs `detect_tag` discovery for coin bundles, and carries gift-wrapped transport — through a paired Nostr relay that runs as its **own container** (the operator's own by default, or an external relay; [§6.6](#66-threat-model-and-trust-configurations)). See [Transport & Recovery](#4--transport--recovery).
 - **Data store.** Persists bundles and rebuilt tree state; provides the operator's own backup ([Requirement 6](/requirements)).
 - **Capability-gated API.** Answers reads only against a valid ownership proof or view grant, and accepts transaction submissions. See [Access & Explorer](#5--access--explorer) and §6.4 below.
 
@@ -1367,43 +1367,73 @@ The explorer is a **stateless** read surface over one or more nodes. It holds **
 
 #### Running a node — what an operator deploys
 
-The logical roles above map onto a small, fully **self-hosted** stack. Every part is the operator's own; using a third party for any of them would reintroduce a central element and is therefore out of scope for a sovereign node.
+The logical roles above map onto a small `docker compose` stack of **five distinct containers** — `bitcoind`, `nostr-relay`, `zkcoins-node`, `postgresql`, and `explorer` — each an independently deployable building block. The **sovereign default** is that every container is the operator's own: that is the trustless, private path the system is designed around, and the one a serious user should choose. But the blocks are **composable**, not welded together — the `zkcoins-node` reaches its `bitcoind` and its `nostr-relay` over defined interfaces ([§6.4](#64-external-interfaces-abstract)), so each **MAY** instead be pointed at an **external** instance, and a minimal deployment **MAY** run the node against an external `bitcoind` and external relay(s) without operating either itself. Relying on an external block is a deliberate **trust/privacy trade-off** — the same spectrum as pointing a Bitcoin wallet at someone else's Electrum server ([§6.6](#66-threat-model-and-trust-configurations)) — and **never** a custody risk: the wallet re-verifies every node answer against Bitcoin before acting ([Requirement 4](/requirements)).
 
 ```mermaid
 flowchart TB
-  wallet["Wallet — SPEND keys only<br/>(user device, not in Docker)"]
-  domain["Domain + TLS  ·  or Tor onion"]
+  wallet["Wallet — SPEND keys only<br/>(user device, never containerised)"]
 
-  subgraph docker["Docker host — self-hosted by the operator"]
+  subgraph stack["Sovereign node deployment — one docker compose stack (5 containers)"]
     direction TB
-    explorer["Explorer — stateless"]
-    znode["zkCoins node<br/>scanner · prover · store · capability-gated API"]
-    bitcoind["Bitcoin full node — bitcoind (own)"]
-    relay["Nostr relay (own)"]
-    pg[("PostgreSQL<br/>node state · bundles")]
+    explorer["explorer<br/>stateless presentation"]
+    znode["zkcoins-node<br/>scanner · prover · capability-gated API"]
+    relay["nostr-relay<br/>off-chain bundle transport"]
+    pg[("postgresql<br/>node state · bundles")]
+    bitcoind["bitcoind<br/>Bitcoin full node"]
   end
 
   chain(["Bitcoin network"])
   mesh(["Nostr network"])
 
-  wallet -->|"submit · verify vs Bitcoin"| domain
-  domain --> znode
-  domain --> explorer
+  wallet -->|"submit · verify vs Bitcoin — TLS or Tor"| znode
+  wallet -.->|"open one tx — TLS or Tor"| explorer
   explorer -->|"read"| znode
-  znode --- bitcoind
-  znode --- relay
+  znode -->|"chain RPC"| bitcoind
+  znode -->|"relay protocol"| relay
   znode --- pg
   bitcoind <-->|"read · broadcast"| chain
-  relay <-->|"deliver · replicate"| mesh
+  relay <-->|"deliver · k=3 replicate"| mesh
 ```
 
-- **Container runtime** (Docker or compatible) — the base; each part ships as a container.
-- **Bitcoin full node** (`bitcoind`, the operator's own) — the source of truth for **reading** the chain (the scanner) and for **broadcasting** the publisher's Taproot reveal transactions. A third-party chain source (Electrum/Esplora/etc.) would reintroduce a trusted dependency and eclipse risk, and is not used.
-- **Nostr relay** — stores and serves the off-chain `CoinProof` bundles and carries gift-wrapped transport. It **MAY** be embedded in the zkCoins-node image or run as a separate relay container; either way it is the operator's **own** relay.
-- **Reachable address** — an internet domain with TLS so wallets, explorers, and peer nodes can reach the node's API and relay. A Tor onion service **MAY** be used instead for IP privacy.
-- **zkCoins node** — the core software: Bitcoin scanner, prover, data store, and capability-gated API (and the relay role, if embedded).
-- **PostgreSQL** — the node's database; persists the rebuilt nullifier set and the off-chain `CoinProof` bundles (the concrete backing of the data-store role).
-- **Explorer** — the stateless presentation surface ([Access & Explorer](#5--access--explorer)), typically co-hosted as its own container reading the node; it holds no keys.
+The five containers, each shipped and run independently:
+
+- **`bitcoind` — Bitcoin full node.** The source of truth for **reading** the chain (the scanner) and for **broadcasting** the publisher's Taproot reveal transactions. The operator's own `bitcoind` is the default and the only fully trustless option; the node **MAY** instead be configured against an **external** `bitcoind` (one the operator trusts, or a shared instance), trading some privacy and eclipse-resistance for operational simplicity ([§6.6](#66-threat-model-and-trust-configurations)).
+- **`nostr-relay` — transport.** A full Nostr relay that stores and serves the off-chain `CoinProof` bundles and `BatchBundle`s and carries gift-wrapped delivery ([Transport & Recovery](#4--transport--recovery)). It runs as its **own container**; the node connects to it over the relay protocol. The operator's own relay is the default; the node **MAY** additionally, or instead, use **external** relay(s).
+- **`zkcoins-node` — the core software.** Bitcoin scanner, prover, data store, and capability-gated API ([§6.4](#64-external-interfaces-abstract)). It is one self-contained container that connects out to `bitcoind` and `nostr-relay` and persists to PostgreSQL; it never holds a SPEND key.
+- **`postgresql` — node database.** Persists the rebuilt nullifier set and the off-chain bundles (the concrete backing of the data-store role). Its own container.
+- **`explorer` — stateless presentation.** The read surface ([Access & Explorer](#5--access--explorer)), its own container reading the node; it holds no keys. It is **optional** — a headless deployment **MAY** omit it.
+- **Reachability** (not a container) — an internet domain with TLS, or a Tor onion service for IP privacy, so wallets, explorers, and peer nodes can reach the node's API and its relay.
+
+The two outward-facing blocks — the **chain source** and the **transport relay** — are the pluggable slots. Each is the operator's own by default (sovereign) or an external instance (a trust/privacy trade-off); everything else the operator always runs:
+
+```mermaid
+flowchart LR
+  subgraph run["What the operator always runs"]
+    direction TB
+    znode["zkcoins-node"]
+    pg[("postgresql")]
+    explorer["explorer<br/>(optional)"]
+  end
+
+  subgraph srcsel["Chain source — pick one"]
+    direction TB
+    b_own["bitcoind — own<br/>(default · sovereign)"]
+    b_ext["external bitcoind<br/>(trust/privacy trade-off)"]
+  end
+
+  subgraph trsel["Transport — pick one or more"]
+    direction TB
+    r_own["nostr-relay — own<br/>(default · sovereign)"]
+    r_ext["external relay(s)<br/>(trust/privacy trade-off)"]
+  end
+
+  explorer --> znode
+  znode --- pg
+  znode ==>|"chain RPC (default)"| b_own
+  znode -.->|"or"| b_ext
+  znode ==>|"relay protocol (default)"| r_own
+  znode -.->|"or / additionally"| r_ext
+```
 
 The only thing that is **never** part of a node deployment is the SPEND branch — those keys live solely in the wallet, on the user's device ([Foundations §1.2](#12-key-hierarchy)).
 
@@ -1494,6 +1524,8 @@ Custody is **cryptographically safe in every configuration**: no node holds a SP
 - **Own wallet + multiple foreign nodes.** Plaintext is disclosed to all of them; correctness is safe **as long as ≥1 is honest** (§6.3); custody safe.
 - **Own wallet + a single foreign node.** Plaintext disclosed to it; you trust it for correctness and liveness (it can lie or omit), but it **cannot** steal, forge, or double-spend; custody safe.
 
+**Node building blocks — own vs external.** Independently of the wallet↔node choice above, a node operator also chooses where its `bitcoind` and its `nostr-relay` come from ([§6.1](#61-components-and-responsibilities)). Running both yourself is the sovereign default. Pointing the node at an **external `bitcoind`** trades privacy (that node sees your chain queries) and raises eclipse exposure (the inherited assumption below), but **cannot** affect custody or correctness — the wallet still re-verifies every result against Bitcoin ([Requirement 4](/requirements)). Using **external relay(s)** for transport sits on the same spectrum as any foreign relay: trusted only for availability and metadata-minimisation, never for correctness or custody (§4.1). Both are deliberate trade-offs, not new trust roots.
+
 **Inherited assumption.** zkCoins anchors on Bitcoin and therefore inherits Bitcoin's network-liveness assumption: if **all** of a node's peers lie (an eclipse attack), even a self-hosted node can be fed a false view of the chain. zkCoins adds no new consensus and so neither weakens nor strengthens this "≥1 honest peer" assumption.
 
 **Bitcoin reorg bound.** zkCoins assumes Bitcoin produces no canonical reorganisations deeper than **5 blocks** ([On-chain §3.9](#39-finality), [§3.10](#310-transaction-states)). A reorg of 6 blocks or more is treated as a **protocol-failure event** — outside the spec's guaranteed state machine. Under this assumption, a `SpendRecord` once classified `completed` stays `completed`. This is consistent with the Bitcoin-industry default of treating 6 confirmations as practical finality; deployments handling extreme value **MAY** adopt additional out-of-band confirmation policies, but the on-chain `completed` state remains defined at 6 confirmations.
@@ -1510,7 +1542,7 @@ How this architecture maps to the [Requirements](/requirements) at a glance:
 | **4 · Client-side validation** | Wallet re-verifies every node answer against Bitcoin before accepting (§6.2–§6.3). |
 | **5 · Custody only in wallet** | SPEND branch never leaves the wallet; only the operational bundle / view grants are delegated (§6.2). |
 | **6 · Recovery** | Node store is the normal backup; seed + chain + replicated bundles are the emergency fallback (§6.1). |
-| **7 · Self-hostable** | Node ships as one self-contained container with no operator-specific dependencies (§6.1). |
+| **7 · Self-hostable** | The node is one self-contained container; a deployment is a single `docker compose` stack (node · bitcoind · nostr-relay · PostgreSQL · explorer), each block pluggable as own-or-external, with no operator-specific dependencies (§6.1). |
 | **8 · Multi-asset** | `asset_id` plus `issuance_version`-bound `IssuanceTerms_v1` lets anyone create their own asset; the creator is the sole minter of their asset (§6.5). |
 | **9 · Explorer** | Stateless explorer resolves one transaction from a per-coin `K_tx`, verified against Bitcoin (§6.1). |
 | **10 · Node portability** | No node-specific wallet state; switch and multi-node by configuration alone (§6.3). |
