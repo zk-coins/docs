@@ -38,12 +38,12 @@ npm start    # http://localhost:3092
 docs/
 ├── docs/                  # Markdown content
 │   ├── intro.md           # Landing page (slug: /)
-│   ├── architecture/      # Architecture section (6 pages)
-│   ├── infrastructure/    # Backend + deployment (2 pages)
+│   ├── architecture/      # Architecture section
 │   ├── protocol.md        # Shielded CSV protocol reference
 │   ├── wallet.md          # Wallet user guide
 │   ├── comparisons.md     # vs RGB, Lightning, Zcash, etc.
 │   ├── tech-decisions.md  # Technology choice rationale
+│   ├── roadmap.md         # Project roadmap
 │   └── risks.md           # Known risks and limitations
 ├── src/css/custom.css     # Theme overrides (Bitcoin orange)
 ├── static/img/            # Favicon, logos

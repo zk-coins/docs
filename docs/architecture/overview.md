@@ -54,7 +54,7 @@ zkCoins is a web wallet built on the Shielded CSV protocol. The architecture sep
 |---|---|---|
 | [Wallet](/wallet) | Next.js 14, Tailwind, Zustand | User interface for sending and receiving |
 | [WASM Crypto](/architecture/key-management) | Rust → WebAssembly | BIP32 key derivation, Schnorr signatures |
-| [Backend](/infrastructure/backend) | Rust, Axum | Account management, proof generation, chain scanning |
+| [Backend](https://github.com/zk-coins/node) | Rust, Axum | Account management, proof generation, chain scanning |
 | [Proof System](/architecture/proof-system) | Plonky2 + Poseidon-Goldilocks | Recursive Zero-Knowledge proof circuit (cyclic recursion) |
 | [Publisher](/architecture/transaction-flow) | Rust | Bitcoin Taproot Inscription broadcasting |
 
