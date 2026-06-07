@@ -157,4 +157,4 @@ No Docker, no server — pure static hosting on Cloudflare's edge CDN.
 ## Related Repos
 
 - [zk-coins/app](https://github.com/zk-coins/app) — Web application
-- [zk-coins/server](https://github.com/zk-coins/server) — Rust backend
+- [zk-coins/node](https://github.com/zk-coins/node) — Rust backend

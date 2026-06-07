@@ -50,7 +50,7 @@ Note: webpack pinned to 5.97.1 (`overrides` in package.json) for Node 22 compati
 | Repo | Purpose |
 |---|---|
 | [zk-coins/app](https://github.com/zk-coins/app) | Web application (frontend, PWA) |
-| [zk-coins/server](https://github.com/zk-coins/server) | Rust backend (API, ZK proofs, Bitcoin scanner) |
+| [zk-coins/node](https://github.com/zk-coins/node) | Rust backend (API, ZK proofs, Bitcoin scanner) |
 | [zk-coins/research](https://github.com/zk-coins/research) | Protocol research, upstream repos, paper PDF |
 
 ## License
