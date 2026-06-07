@@ -1077,6 +1077,21 @@ When no `Invoice` is available, a recipient **MAY** publish the same `{pk0, ivpk
 
 Each published delivery event carries the per-coin `detect_tag` (§4.2, [Foundations §1.3](#13-per-coin-keys-note-encryption--detection)) in its plaintext payload so the recipient can locate it by scan rather than by trial-decrypting every event.
 
+#### End-user addressing — LNURL
+
+The protocol identity is `address = H(Pk₀)` (a Bech32m `zk1…` string), and the deliverable target is the signed `Invoice`/profile above. That raw form is correct but is **not** what an end user sees: the end-user app presents the receive address as an **LNURL** — a `lnurl1…` Bech32 string and/or its QR (LNURL-pay-style) — **never** a raw `zk1…`/`0x…` string and **never** an email-style `user@domain`.
+
+This resolution layers cleanly on top of §4.3 and adds **no** new trust:
+
+1. The recipient's app/SDK registers an **LNURL-pay-style endpoint** with its **API layer** (the optional LNURL/aliasing role, [§6.1](#61-components-and-responsibilities)). A sovereign node without that role simply hands out the raw `Invoice`/profile directly — LNURL is an opt-in convenience, not part of the trustless core.
+2. The receive screen shows the resulting `lnurl1…` (and QR). A human-readable username (the aliasing role) **MAY** front it, shown in a non-email form (e.g. `@alice`), but the canonical wire identifier is the LNURL.
+3. The sender's app decodes the LNURL, calls the endpoint, and receives the recipient's `addr_sig`-signed `Invoice` (or profile tuple). It then **MUST** run the same three-check verification of §4.3 — `H(pk0) == recipient`, `addr_sig` under `pk0`, `sig` under `op_pubkey` — before encrypting anything.
+4. The sender proceeds with delivery (§4.2) and real-time push (§4.9).
+
+**Trust is unchanged.** The LNURL is a resolution/UX layer only; the trust anchor remains the `addr_sig` binding (§4.3). A malicious or lying LNURL endpoint can at most refuse, or return an `Invoice` whose `addr_sig` the sender **rejects** — it can **never** redirect funds, because the sender encrypts only to an `addr_sig`-verified `ivpk`. Resolving an LNURL discloses the handle → `Invoice` mapping to the serving API, the same disclosure as publishing a profile.
+
+**Why LNURL — one address for Lightning and zkCoins (forward-looking).** LNURL is chosen precisely because it is Lightning-native: it lets a **future** app version serve **both rails from the same LNURL and the same QR code**. The resolver returns the appropriate payment parameters per rail — a standard LNURL-pay response for Lightning, the `addr_sig`-signed `Invoice` above for zkCoins — and the sender's wallet selects the rail. A user therefore shares **one** receive address/QR and can be paid in either Lightning or zkCoins, without ever exposing a raw `zk1…` string. This dual-rail capability is a **planned future version**; the zkCoins resolution defined here stands on its own today.
+
 ### 4.4 Note discovery
 
 A recipient (or its always-on node, holding `ivk`) finds its own incoming bundles as follows:
@@ -1178,6 +1193,13 @@ sequenceDiagram
   A-->>W: receipt — SSE/WebSocket push
   W->>W: show "payment received" instantly
 ```
+
+**Substrate vs fast path (normative).** Nostr is the **durable, global, decentralised substrate**: every delivery **MUST** land on the recipient's advertised relay(s) and be `k`-replicated (§4.6) — it is the source of truth and the only recovery path. But global mesh propagation plus blob fetch can add latency, so Nostr is not necessarily the fastest *notification* channel. The two concerns are therefore separated:
+
+- **Canonical delivery (durable, MUST):** the gift-wrapped `CoinProof` over Nostr, `k`-replicated (§4.6). Source of truth; the only recovery path.
+- **Low-latency notification ping (optional overlay, MAY):** to surface a payment with minimal latency, the sender's node **MAY** additionally send a **direct, out-of-band hint** to the recipient's node/API — e.g. "a coin tagged `detect_tag` is waiting at `bundle_locator`" — or use a dedicated fast channel, triggering an immediate fetch-and-verify without waiting for mesh propagation.
+
+The fast ping is purely a **wake/accelerate** signal and carries **no trust**: the recipient still fetches the durable artefact, **verifies** it (§2.3.3), and persists it (§4.8) before crediting. A missing, delayed, or lying ping can **never** cause loss, double-credit, or a false receipt — **verification gates trust, Nostr + DA gate recovery, and the fast path gates only latency.** A deployment **MAY** therefore optimise the ping channel freely (a direct WebSocket hint, a fast relay, a push fan-out) without weakening any guarantee. When the recipient runs its own node and relay, local relay delivery already *is* the fast push; the overlay matters mainly across operators.
 
 Continue to [Access & Explorer](#5--access--explorer) for the capability-gated pull endpoint, view grants, and the shareable confirmation links that build on this transport layer.
 
@@ -1473,6 +1495,32 @@ Normative keywords (**MUST**, **MUST NOT**, **SHOULD**, **MAY**) are used per RF
 ### 6.1 Components and responsibilities
 
 zkCoins is exactly three components. The split between them is **packaging, not a trust boundary**: it mirrors the Bitcoin full-node model (a validator plus a thin key-holder). The one line never crossed is the SPEND branch — it lives only in the wallet.
+
+#### The full system stack — hardware to app
+
+Those three trustless components do not run in a vacuum: they sit inside a larger operational stack. **This specification covers the whole of it — hardware to app — not only the trustless core.** Because the system is split across several repositories, the docs repository is the single place that describes the system end to end. The layers, top to bottom, and their owning repos:
+
+```mermaid
+flowchart TB
+  a["End-user app · Explorer web-app"] --> b["SDK"]
+  b --> c["zkCoins API + own PostgreSQL"]
+  c --> d["zkCoins node + PostgreSQL + Publisher"]
+  d --> e["bitcoind · Nostr relay"]
+  e --> f["Docker"]
+  f --> g["Operating system"]
+  g --> h["Hardware"]
+```
+
+| Layer | What runs there | Repo | Role / trust |
+|---|---|---|---|
+| **App · Explorer** | end-user wallet UI (LNURL receive §4.3, push receipts §4.9) · public explorer web-app | `zk-coins/app` · `zk-coins/explorer` | presentation; the app holds keys on-device, the explorer holds none |
+| **SDK** | thin client — on-device key derivation and signing, node/API calls | `zk-coins/sdk` | custody stays on the device; REST + stream client |
+| **zkCoins API** (+ own PostgreSQL) | public REST and LNURL; hosted-wallet service | the API-layer repo | **optional**, off by default; owns a **non-value-bearing** database |
+| **zkCoins node** (+ PostgreSQL + Publisher) | the trustless **kernel**: scan · accumulator · verify · prove · store · publisher/broadcaster | `zk-coins/node` | the trustless core; owns the **value-bearing** database (§4.8) |
+| **bitcoind · Nostr relay** | Bitcoin L1 settlement and ordering · off-chain transport and data availability | upstream (own or external) | inherits Bitcoin's trust; transport trusted only for availability (§4.1) |
+| **Docker · OS · Hardware** | container runtime, host operating system, physical machine | — | the operational substrate the operator provides |
+
+Every layer above the substrate is the operator's own in the sovereign deployment (*Running a node*, below); the SPEND branch never leaves the top layer — the app/wallet on the user's own device ([Foundations §1.2](#12-key-hierarchy)).
 
 #### The node — validator, prover, transport, store
 
