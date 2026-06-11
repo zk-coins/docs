@@ -175,7 +175,7 @@ For POST endpoints, the same triple lives in the request body (`auth: { account_
 
 ## Layer 5 — On-chain
 
-Unchanged from the current protocol: the opaque commitment (today the full commitment ~177 bytes; the paper targets a 64-byte half-aggregated Schnorr nullifier — see [Nullifier Design](nullifier-design)), Taproot inscription, `4242` marker prefix. Only the *contents* committed inside the coin change (from plaintext address to `payment_tag` with `scan_hint`).
+Unchanged from the current protocol: the opaque on-chain anchor (current implementation status: a full per-transaction commitment, ~177 bytes; the normative spec design instead anchors one constant 231-byte `BatchInscription` per publisher batch — [spec §3.5](/specification#35-inscription-format)), Taproot inscription, `4242` marker prefix. Only the *contents* committed inside the coin change (from plaintext address to `payment_tag` with `scan_hint`).
 
 ## Wallet ↔ node protocol details
 
@@ -261,7 +261,7 @@ Resolution is cached per `(host, name)` pair for the wallet session lifetime, wi
 The **canonical off-chain transport** for coin bundles is the **Nostr-based CoinProof delivery** specified in [Information Flow](information-flow) → *The transport layer*. This page focuses on the **aliasing/addressing** concern (how `name@host` resolves to a public point and per-send commitment); the direct node-to-node `POST /api/inbox` mechanism described below is an **illustrative / earlier alternative**, kept for context, not a second canonical transport. For the settled delivery, encryption, store-and-forward, and recovery design, follow [Information Flow](information-flow).
 :::
 
-The chain carries only the compact commitment (today the full commitment ~177 bytes; the paper targets a 64-byte half-aggregated nullifier — see [Nullifier Design](nullifier-design)). The `(coin, coin_proof)` payload must reach the recipient's node off-chain. Illustratively, after publishing the commitment, the sender's node could POST the coin bundle directly to the recipient's node (the canonical path instead delivers it over Nostr — see the note above):
+The chain carries only the compact anchor (current implementation status: a ~177-byte per-transaction commitment; the normative spec design anchors one constant 231-byte `BatchInscription` per publisher batch — [spec §3.5](/specification#35-inscription-format)). The `(coin, coin_proof)` payload must reach the recipient's node off-chain. Illustratively, after publishing the commitment, the sender's node could POST the coin bundle directly to the recipient's node (the canonical path instead delivers it over Nostr — see the note above):
 
 ```
 POST https://bob.eu/api/inbox
@@ -274,7 +274,7 @@ Body: {
 
 The recipient's node:
 
-1. Verifies the proof against its own view of Bitcoin and the commitment at `nullifier_locator` (double-spend is enforced in-circuit today via a non-inclusion proof; a verifier-queryable on-chain nullifier set is a roadmap item — see [Nullifier Design](nullifier-design)).
+1. Verifies the proof against its own view of Bitcoin and the commitment at `nullifier_locator` (the normative v1 design checks double-spend against the global nullifier accumulator anchored on-chain — [spec §3.7](/specification#37-the-nullifier-accumulator); the current implementation still enforces it in-circuit via a non-inclusion proof — see [Nullifier Design](nullifier-design)).
 2. Decrypts the recipient hint with the local `account_priv` to confirm the coin is genuinely addressed to one of its accounts.
 3. Credits the recipient's account.
 4. Returns `202 Accepted` (idempotent — re-delivery of the same `nullifier_locator` is a no-op).

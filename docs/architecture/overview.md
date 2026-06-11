@@ -7,6 +7,10 @@ title: Overview
 
 zkCoins is a web wallet built on the Shielded CSV protocol. The architecture separates cryptographic operations (browser-side WASM), account management (Rust backend), and commitment anchoring (Bitcoin blockchain).
 
+:::info Current implementation vs. normative spec
+This page describes the **current implementation** ([zk-coins/node](https://github.com/zk-coins/node)): a Plonky2 prover that inscribes a simple per-transaction commitment (~177 bytes) and keeps SMT + MMR state. The **normative target** is the batched publisher design of the [Specification](/specification): off-chain `SpendRecord`s aggregated into `BatchBundle`s, anchored by one constant 231-byte `BatchInscription` per batch, with the MMR removed ([spec §1.6](/specification#16-trees-one-global-structure-one-per-account-structure)). See the [Implementation Mandate](/implementation-mandate).
+:::
+
 ## System diagram
 
 ```
@@ -45,7 +49,7 @@ zkCoins is a web wallet built on the Shielded CSV protocol. The architecture sep
 1. **Privacy first** — every architectural decision prioritizes hiding transaction details from observers
 2. **No consensus changes** — the protocol works on Bitcoin today, no soft fork needed
 3. **Client-side validation** — receivers validate transactions, not the network
-4. **Minimal on-chain footprint** — only a compact commitment per transaction, nothing more
+4. **Minimal on-chain footprint** — nothing on Bitcoin but the constant-size anchor (spec design: one 231-byte `BatchInscription` per publisher batch)
 5. **Self-custodial** — keys are generated and controlled by the user, never sent to a server
 
 ## Component overview
@@ -66,6 +70,6 @@ Shielded CSV improves on existing Client-Side Validation protocols (RGB, Taproot
 |---|---|---|
 | **Privacy** | Transaction history visible to sender & receiver | Full privacy via ZK proofs |
 | **Proof size** | Grows with transaction history | Constant (independent of history) |
-| **On-chain data** | Full Bitcoin transaction (~560 WU) | Compact commitment (~177 B today; paper targets ~64 B) |
+| **On-chain data** | Full Bitcoin transaction (~560 WU) | Constant 231-byte `BatchInscription` per batch, amortised per spend ([spec §3.8](/specification#38-fees-and-economics)); current implementation: ~177 B per transaction |
 | **Verification** | Receiver validates full history | Receiver verifies one ZK proof |
-| **Double-spend** | Full Bitcoin transaction | Single Schnorr signature |
+| **Double-spend** | Full Bitcoin transaction | Publisher signature + one `AggregateBatchProof` per batch against the nullifier accumulator ([spec §3.7](/specification#37-the-nullifier-accumulator)); current implementation: single Schnorr signature per commitment |

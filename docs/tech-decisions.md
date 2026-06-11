@@ -7,6 +7,10 @@ title: Tech Decisions
 
 Every technology choice has trade-offs. This page documents what we chose, why, and what alternatives were considered.
 
+:::info Scope: current implementation
+This page records the decisions behind the **current implementation**. Where it differs from the normative [Specification](/specification) — e.g. the per-transaction inscription model and the MMR commitment history, both superseded by the batched `BatchInscription` design and the global nullifier accumulator — the spec wins; see the [Implementation Mandate](/implementation-mandate).
+:::
+
 ---
 
 ## Frontend: Next.js 14
@@ -131,6 +135,8 @@ The proving system began as an SP1 + SHA256 prototype and was migrated to Plonky
 - **MMR** — append-only, efficient for accumulating block-by-block commitment history
 - **Both defined in the Shielded CSV paper** — following the protocol specification
 - **256-bit key space** — matches Bitcoin's hash output size
+
+**Spec status:** the normative v1 design keeps SMTs only — the per-account coin-history SMT and the global nullifier accumulator. The **MMR is removed in v1** ([spec §1.6](/specification#16-trees-one-global-structure-one-per-account-structure)); it belongs to the current implementation's superseded commitment-history model.
 
 **Considered:**
 - **Binary Merkle Tree** — simpler but doesn't support non-inclusion proofs efficiently
