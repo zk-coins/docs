@@ -26,7 +26,7 @@ Two things are visible on-chain:
 
 ### 1. Commitment existence
 
-A compact commitment is published as a Bitcoin Taproot Inscription. Today this is the full commitment (signing public key, Schnorr signature, and message, ~177 bytes); the paper targets a 64-byte half-aggregated nullifier (see [Nullifier Design](nullifier-design)). Either way, an observer can see that *some* Shielded CSV transaction occurred, but not its contents. Commitments look like opaque, random data — they are indistinguishable from each other.
+A compact anchor is published as a Bitcoin Taproot Inscription. Current implementation status: the full per-transaction commitment (signing public key, Schnorr signature, and message, ~177 bytes). The normative spec design inscribes one constant 231-byte `BatchInscription` per publisher batch instead ([spec §3.5](/specification#35-inscription-format); see also [Nullifier Design](nullifier-design)). Either way, an observer can see that *some* Shielded CSV activity occurred, but not its contents. Commitments look like opaque, random data — they are indistinguishable from each other.
 
 ### 2. Approximate coin creation time
 

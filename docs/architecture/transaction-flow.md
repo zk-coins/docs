@@ -7,6 +7,10 @@ title: Transaction Flow
 
 zkCoins supports three operations: **create account** (mint), **send**, and **receive**. All operations interact with the Rust backend, which manages account state and publishes commitments to Bitcoin.
 
+:::info Current implementation vs. normative spec
+The flows on this page document the **current implementation** (per-transaction commitment inscriptions, an in-process publisher, SMT + MMR state). The normative target is the batched publisher flow of the [Specification §3](/specification#3--on-chain-layer): off-chain `SpendRecord`s aggregated into `BatchBundle`s, attested by an `AggregateBatchProof`, and anchored by one constant 231-byte `BatchInscription` per batch. The *Publisher selection and fees* section below describes that target design.
+:::
+
 ## Create Account (Mint)
 
 Account creation generates a new HD wallet and mints initial testnet coins.
@@ -91,6 +95,15 @@ Each transaction rotates the account's public key:
 - Both are derived from the BIP32 master key at sequential indices
 - The Plonky2 circuit commits to the key rotation
 - This ensures forward secrecy — compromising a past key doesn't help an attacker
+
+## Publisher selection and fees (spec design)
+
+In the normative batched design ([spec §3.8](/specification#38-fees-and-economics)), anchoring is performed by a permissionless **publisher** the wallet chooses:
+
+1. **Selection.** The wallet picks a publisher from its signed Nostr **publisher profile** — `{ publisher_pubkey, fee_address, fee_asset_id, fee, relays }`, signed by the publisher's node identity, so the advertised key is bound to the operator.
+2. **Fee coin.** The wallet adds one ordinary output coin paying the publisher's `fee_address` to the very transition being anchored — **under the same `ocr`** (output-coins root) as the payment itself. On-chain it is indistinguishable from any other output.
+3. **Atomicity.** Because the fee coin and the payment are outputs of the transition's single `SpendRecord`/`ocr`, the publisher cannot collect the fee without anchoring the payment: the fee coin of an un-anchored transition never reaches `completed`.
+4. **Censorship handling.** If the chosen publisher fails to anchor within its retry window, the wallet re-builds the transition against a different publisher (with a fresh fee coin). Nullifier idempotence guarantees at most one of the competing transitions is ever admitted, so the spender pays exactly one fee — to whichever publisher actually anchors.
 
 ## Blockchain Scanner
 

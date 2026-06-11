@@ -54,7 +54,7 @@ The whole privacy story is the gap between **Private** (off-chain plaintext) and
 | **ProofData** (public inputs) `{account_state_hash, output_coins_root, commitment_history_root, coin_history_root, asset_id}` | 🟢 Public | The public outputs of the proof | public | bound on-chain | Yes — only hashes and roots |
 | **CoinProof** = `coin + proof + inclusion_proof` | 🟠 Private | The sender bundles it for delivery | Sender → recipient | the recipient | Recipient only (it contains the plaintext coin) |
 | **Commitment** `{public_key, signature, message}` | 🟢 Public | `message = account_state_hash ‖ output_coins_root`; the owner Schnorr/BIP-340-signs it (the signature hashes the message with SHA-256 internally) | first the owner, then Bitcoin | **Bitcoin** | Yes — this is the **only object that goes on-chain** |
-| **Inscription** | 🟢 Public | The **full commitment** (public key + signature + message, ~177 bytes) is inscribed in the Bitcoin Taproot _reveal_ transaction at broadcast | Bitcoin (permanently) | the whole world | Yes — the public, permanent anchor of the transaction |
+| **Inscription** | 🟢 Public | The **full commitment** (public key + signature + message, ~177 bytes) is inscribed in the Bitcoin Taproot _reveal_ transaction at broadcast (current implementation; the normative spec design inscribes one constant 231-byte `BatchInscription` per publisher batch instead — [spec §3.5](/specification#35-inscription-format)) | Bitcoin (permanently) | the whole world | Yes — the public, permanent anchor of the transaction |
 
 ## How information comes into existence
 

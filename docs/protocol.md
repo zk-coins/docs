@@ -25,9 +25,9 @@ Traditional blockchains require every node to validate every transaction. Shield
 
 1. The **sender** creates a transaction and generates a validity proof
 2. The proof is sent **directly to the receiver** (off-chain)
-3. Only a **compact commitment** is written to the blockchain (today the full commitment — signing public key, Schnorr signature, and message, ~177 bytes; the paper targets a 64-byte half-aggregated nullifier — see [Nullifier Design](architecture/nullifier-design))
+3. Only a **compact commitment** is written to the blockchain. In the paper's final design that is a 64-byte half-aggregated nullifier per transaction; in the **zkCoins v1 specification** a publisher batches many spends and inscribes one constant **231-byte `BatchInscription` per batch**, so the per-spend on-chain cost amortises toward zero ([spec §3.5](/specification#35-inscription-format), [§3.8](/specification#38-fees-and-economics))
 4. The receiver verifies the proof **client-side**
-5. The blockchain provides the **immutable ordering of commitments** that prevents double-spending (today enforced in-circuit via a non-inclusion proof; a verifier-queryable on-chain nullifier set is a roadmap item)
+5. The blockchain provides the **immutable ordering** that prevents double-spending: the global nullifier accumulator's `prev_root → new_root` transitions are inscribed per batch and attested by the publisher's `AggregateBatchProof` ([spec §3.7](/specification#37-the-nullifier-accumulator)) — the normative v1 design (the current implementation still enforces the check in-circuit while the accumulator is implemented)
 
 ## Key innovations
 
@@ -35,9 +35,9 @@ Traditional blockchains require every node to validate every transaction. Shield
 
 Each coin carries a proof of its entire history, compressed into a constant-size Zero-Knowledge proof. Unlike RGB or Taproot Assets, where proof size grows with transaction history, Shielded CSV proofs are always the same size.
 
-### 2. 64-byte nullifiers (paper design target)
+### 2. Compact nullifiers — 64 bytes in the paper, batched off-chain in zkCoins v1
 
-In the **paper's** final design, a combination of the account model, Sign-to-Contract, and Schnorr Half-Aggregation compresses the on-chain footprint from a full Bitcoin transaction to exactly 64 bytes per transaction. The **current zkCoins implementation** does not yet half-aggregate: it inscribes the full commitment (~177 bytes) in the Taproot reveal. See [Nullifier Design](architecture/nullifier-design) for the paper-vs-implementation breakdown.
+In the **paper's** final design, a combination of the account model, Sign-to-Contract, and Schnorr Half-Aggregation compresses the on-chain footprint from a full Bitcoin transaction to exactly 64 bytes per transaction. The **zkCoins v1 specification** goes further by aggregation: nullifiers never appear on Bitcoin at all — they travel in the off-chain `BatchBundle`, and the chain carries only the accumulator's root transition inside one constant 231-byte `BatchInscription` per batch, so per-spend bytes fall well below 64 at realistic batch sizes (~3.2 vBytes per record at 100 records, [spec §3.8](/specification#38-fees-and-economics)). As **current implementation status**, the running node neither half-aggregates nor batches yet: it inscribes a full per-transaction commitment (~177 bytes). See [Nullifier Design](architecture/nullifier-design) for the full breakdown.
 
 ### 3. Privacy by construction
 
@@ -45,15 +45,15 @@ The ZK proofs hide all transaction details — amounts, sender, receiver, transa
 
 ## Performance
 
-The table below states the **Shielded CSV paper's design targets** (after half-aggregation), contrasted with a regular Bitcoin transaction. The **current implementation** inscribes the full commitment (~177 bytes) rather than the 64-byte half-aggregated nullifier, so its on-chain footprint and throughput are correspondingly larger; treat the throughput figures as the paper's qualitative goal, not measured implementation numbers.
+The table below contrasts a regular Bitcoin transaction with the **Shielded CSV paper's** final design and the **zkCoins v1 specification's** batched design. The **current implementation** matches neither yet — it inscribes a full per-transaction commitment (~177 bytes); treat that as implementation status, not design.
 
-| Metric | Bitcoin (regular) | Shielded CSV (paper target) |
-|---|---|---|
-| On-chain data per TX | full transaction | compact commitment (~64 bytes half-aggregated) |
-| Throughput | baseline | substantially higher {/* TODO: verify against current implementation */} |
-| Privacy | None | Full |
-| Verification per TX | Full script execution | one Schnorr signature per nullifier |
-| Proof size | N/A | Constant |
+| Metric | Bitcoin (regular) | Shielded CSV (paper) | zkCoins v1 (spec) |
+|---|---|---|---|
+| On-chain data | full transaction (~140 vBytes typical) | 64-byte half-aggregated nullifier per TX | 231-byte `BatchInscription` per **batch** (~318 vBytes commit + reveal pair), constant in batch size |
+| Per-spend cost | ~140 vBytes | 64 bytes | amortised toward zero — ~3.2 vBytes per record at 100 records ([spec §3.8](/specification#38-fees-and-economics)) |
+| Privacy | None | Full | Full |
+| Verification | full script execution per TX | one Schnorr signature per nullifier | one `AggregateBatchProof` per batch |
+| Proof size | N/A | constant | constant |
 
 ## What Shielded CSV is NOT
 

@@ -17,7 +17,7 @@ This split is packaging, not a trust boundary. It is the same separation as `bit
 
 ## What a node cannot do
 
-A node — including a public one you do not control — **can never steal, forge, or double-spend your coins.** That is enforced cryptographically: every transfer carries a recursive zero-knowledge validity proof, and every spend is anchored to an immutable on-chain commitment. Double-spend protection is enforced **inside the proof circuit** today (a proof of non-inclusion in the per-account coin history); a verifier-queryable global on-chain nullifier set is a roadmap item (see [Nullifier Design](nullifier-design)). A dishonest operator cannot fabricate value or take yours.
+A node — including a public one you do not control — **can never steal, forge, or double-spend your coins.** That is enforced cryptographically: every transfer carries a recursive zero-knowledge validity proof, and every spend is anchored on Bitcoin. Double-spend protection is the job of the global **nullifier accumulator** — the normative v1 design ([spec §1.6](/specification#16-trees-one-global-structure-one-per-account-structure), [§3.7](/specification#37-the-nullifier-accumulator)): a 256-bit sparse Merkle tree over every admitted nullifier, advanced by inscribed `prev_root → new_root` transitions and attested per batch by the publisher's `AggregateBatchProof`, so any verifier can check membership or non-membership against roots it reads from Bitcoin itself. (Current implementation status: the running node has not yet shipped the accumulator and meanwhile enforces the double-spend check in-circuit — see [Nullifier Design](nullifier-design).) A dishonest operator cannot fabricate value or take yours.
 
 ## What changes when the node is not yours
 
