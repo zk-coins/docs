@@ -101,7 +101,7 @@ Each is rare on its own elsewhere; here they hold **together** — see [Comparis
       │                       │  prev_root → new_root to accumulator    │
       │                       │              │              │           │
       │                       │ 7. scan CoinProof candidates · match    │
-      │                       │    detect_tag (1 Poseidon hash/evt)     │
+      │                       │    detect_tag (1 ECDH+hash/evt)         │
       │                       ◀──────────────────────────────────────────
       │                       │              │              │           │
       │                       │ 8. gift-wrapped bundle blob             │
@@ -203,7 +203,7 @@ Notation:
 
 **Domain separation.** Every `Hc`, `HKDF`, and `H` call that takes a literal context string **MUST** use the prefix form `"zkCoins/v1/<context>"`. The contexts reserved by this spec are:
 
-- **Identifiers and per-coin derivations** — `AssetId`, `Coin`, `AccountState`, `Nullifier`, `NoteKey`, `DetectKey`, `DetectTag`.
+- **Identifiers and per-coin derivations** — `AssetId`, `Coin`, `AccountState`, `Nullifier`, `NoteKey`, `DetectTag`.
 - **Per-transition Merkle roots** — `CoinsRoot`, `CoinsRoot/Leaf`, `CoinsRoot/Node`, `NullifiersRoot`, `NullifiersRoot/Leaf`, `NullifiersRoot/Node`.
 - **Sparse Merkle accumulators** — `NfAcc/Leaf`, `NfAcc/Node` (global nullifier accumulator, §1.7.6); `CoinHist/Leaf`, `CoinHist/Node` (per-account coin-history SMT, §1.7.6).
 - **On-chain / off-chain protocol messages** — `Grant`, `Invoice`, `PullChallenge`, `PullHost` (channel binding, [Access & Explorer §5.1](#51-capability-gated-pull)), `IssuanceTerms`, `HalfAgg`, `BalanceProof`, `Ack` (delivery acknowledgement, §4.2).
@@ -262,12 +262,13 @@ Per output coin:
   IVPK          = ivk·G                                   (recipient incoming-view pubkey)
   ss            = ECDH(esk, IVPK)  = ECDH(ivk, epk)       (shared secret; both sides derive it)
   K_tx          = HKDF("zkCoins/v1/NoteKey",  ss ‖ epk)   (per-coin symmetric note key)
-  detect_tag    = Hc("zkCoins/v1/DetectTag",  dk ‖ epk)   (per-coin detection tag)
-      where dk  = HKDF("zkCoins/v1/DetectKey", ivk)       (detection key, from ivk)
+  detect_tag    = Hc("zkCoins/v1/DetectTag",  ss ‖ epk)   (per-coin detection tag; same ss as K_tx, distinct tag)
 ```
 
 - The coin plaintext is encrypted under `K_tx` (NIP-44 v2). Only a holder of `ivk` (the recipient, or its node) can re-derive `K_tx` and decrypt.
-- `detect_tag` lets a recipient/node find its own coins **without trial-decrypting every event**. Holding `ivk` (hence `dk`), the recipient recomputes `Hc("zkCoins/v1/DetectTag", dk ‖ event.epk)` per candidate event and matches against the published `detect_tag` — one cheap Poseidon hash per scanned event, in place of one AEAD attempt. Because every coin uses a fresh `epk`, each recipient's events carry **all-distinct** tags: a tag does **not** link two of one recipient's coins, and a relay that lacks `dk` can **neither** pre-filter for the recipient **nor** correlate the recipient's events. Detection is therefore cheap on the CPU but does not reduce the *count* of candidates the recipient pulls. `dk` itself is **seed-derivable**, so detection doubles as the recovery scan key ([Requirement 6](/requirements)).
+- `detect_tag` lets a recipient/node find its own coins **without trial-decrypting every event**. The **sender** computes it from the shared secret `ss = ECDH(esk, IVPK)`; the **recipient**, holding `ivk`, recomputes `ss = ECDH(ivk, epk)` for each candidate's published `epk`, then `Hc("zkCoins/v1/DetectTag", ss ‖ epk)`, and matches against the published `detect_tag` — one ECDH plus one Poseidon hash per scanned event, replacing the full AEAD trial-decryption **and** the (≈100 KB) blob fetch for every non-matching event. Because every coin uses a fresh `epk`, each recipient's events carry **all-distinct** tags: a tag does **not** link two of one recipient's coins, and a relay that holds neither `ivk` nor the sender's `esk` can **neither** pre-filter for the recipient **nor** correlate the recipient's events. Detection does not reduce the *count* of candidates the recipient pulls. `ivk` is **seed-derivable**, so detection doubles as the recovery scan key ([Requirement 6](/requirements)).
+- **Why the shared secret, not a recipient-only key (normative rationale).** The tag **MUST** derive from `ss` — not from a value bound to the recipient's secret `ivk` alone — because the **sender** sets the tag at send time and holds only the recipient's public `IVPK`. It can compute `ss = ECDH(esk, IVPK)`, but **cannot** compute any function of the recipient's secret key. A recipient-only detection key (e.g. `HKDF(ivk)`) would shrink the recipient's per-event check to a single hash, but is **unsatisfiable for an open, no-prior-interaction address**: a per-coin tag that is simultaneously (i) sender-computable from a static public key and (ii) unlinkable to outsiders must carry its per-coin entropy through a Diffie–Hellman with the fresh `epk`, so the recipient's check is inherently one ECDH per candidate, never a bare hash. The bandwidth lever is the optional Fuzzy message detection below, not a cheaper tag derivation.
+- **Key-reuse safety (normative).** The same shared secret `ss` feeds both the **secret** note key `K_tx = HKDF("zkCoins/v1/NoteKey", ss ‖ epk)` and the **public** `detect_tag = Hc("zkCoins/v1/DetectTag", ss ‖ epk)`. The two are domain-separated outputs of `ss ‖ epk` under distinct context strings **and** distinct primitives (HKDF-SHA-256 vs Poseidon); modelling each primitive as an independent random oracle, neither value reveals the other. In particular the on-the-wire `detect_tag` does **not** leak `ss` (Poseidon preimage resistance, [§1.7.1](#171-poseidon-instance-and-digest-encoding)), so publishing the tag does **not** weaken `K_tx` or the coin's confidentiality.
 - **Fuzzy message detection (OPTIONAL).** A relay-side probabilistic pre-filter (tunable false-positive rate) reduces the candidate count the recipient downloads, at no linkability cost. It changes only the tag computation, leaves every other interface unchanged, and is a **scan-efficiency upgrade** — not a fix for a linkability the deterministic scheme does not have.
 - The **per-coin view capability** placed in an explorer link (§ Explorer) is `K_tx` for that one coin. It decrypts that coin only.
 
@@ -649,7 +650,7 @@ Node / prover:
      amount = In(a) − Out(a), asset_id = a} so clause 3 holds with equality
   5. for each output coin (Foundations §1.3): draw esk, compute epk = esk·G,
      ss = ECDH(esk, IVPK_recipient), K_tx = HKDF("zkCoins/v1/NoteKey", ss ‖ epk),
-     detect_tag = Hc("zkCoins/v1/DetectTag", dk ‖ epk); encrypt the coin plaintext under K_tx
+     detect_tag = Hc("zkCoins/v1/DetectTag", ss ‖ epk); encrypt the coin plaintext under K_tx
   6. run C as an AccountUpdateProof: recursive verify of prev_proof (clause 1), input
      authenticity (2), per-asset conservation (3), nullifier non-membership→insertion (4),
      output construction (5–6), new state/ash (7), coin-history update (8), binding (9)
@@ -679,8 +680,8 @@ Inputs:
   the receiver's own view of Bitcoin and the global roots
 
 Receiver / node:
-  1. discovery & decrypt: match detect_tag against the receiver's dk; re-derive
-     ss = ECDH(ivk, epk), K_tx = HKDF("zkCoins/v1/NoteKey", ss ‖ epk); decrypt the coin
+  1. discovery & decrypt: re-derive ss = ECDH(ivk, epk), match detect_tag against
+     Hc("zkCoins/v1/DetectTag", ss ‖ epk); then K_tx = HKDF("zkCoins/v1/NoteKey", ss ‖ epk); decrypt the coin
      (only a holder of ivk can; Foundations §1.3)
   2. RE-VERIFY THE FULL RECURSIVE PROOF: C.verify(proof) under the canonical verifier data.
      This transitively attests the entire provenance in constant time (§2.2). MUST pass.
@@ -1118,12 +1119,12 @@ This resolution layers cleanly on top of §4.3 and adds **no** new trust:
 
 A recipient (or its always-on node, holding `ivk`) finds its own incoming bundles as follows:
 
-1. Derive the detection key `dk = HKDF("zkCoins/v1/DetectKey", ivk)` ([Foundations §1.3](#13-per-coin-keys-note-encryption--detection)).
-2. Pull candidate delivery events from its relay set. The relay **cannot** pre-filter for the recipient (it lacks `dk`), so the recipient — having `dk` — performs the match itself: for each candidate's published `epk` it recomputes `Hc("zkCoins/v1/DetectTag", dk ‖ epk)` and checks it against the event's `detect_tag`. A match selects the event as the recipient's; a non-match is discarded after one Poseidon hash, with no AEAD attempt.
+1. The recipient (or its always-on node) holds `ivk` ([Foundations §1.2](#12-key-hierarchy)); `ivk` itself is the detection capability — there is no separate detection key.
+2. Pull candidate delivery events from its relay set. The relay **cannot** pre-filter for the recipient (it holds neither `ivk` nor the sender's `esk`), so the recipient — holding `ivk` — performs the match itself: for each candidate's published `epk` it computes `ss = ECDH(ivk, epk)`, then `Hc("zkCoins/v1/DetectTag", ss ‖ epk)`, and checks it against the event's `detect_tag`. A match selects the event as the recipient's; a non-match is discarded after one ECDH and one Poseidon hash, with no AEAD attempt and no blob fetch.
 3. For each matched candidate, derive `K_tx = HKDF("zkCoins/v1/NoteKey", ss ‖ epk)` where `ss = ECDH(ivk, epk)` ([Foundations §1.3](#13-per-coin-keys-note-encryption--detection)), fetch the blob by `blob_id`, and **trial-decrypt** with `K_tx`. Successful NIP-44 authentication confirms the coin is the recipient's.
 4. Verify the decrypted bundle against Bitcoin (§4.5) before accepting it.
 
-**Privacy tradeoff (normative note).** Because every coin uses a fresh `epk`, each recipient's events carry **all-distinct** `detect_tag`s ([Foundations §1.3](#13-per-coin-keys-note-encryption--detection)): a tag does not link two of one recipient's coins, and a relay that lacks `dk` can **neither** filter for the recipient **nor** correlate the recipient's events. The residual cost is therefore not linkability but **bandwidth**: detection is not server-side filterable, so the recipient pulls the candidate set in full and pays one cheap Poseidon hash per scanned event. **Fuzzy message detection** (probabilistic per-coin tags with tunable false-positive rate) is an **OPTIONAL scan-efficiency upgrade** that lets a relay return a smaller candidate set without learning who the recipient is; it changes only the tag computation and the scan filter and **MUST** leave every other interface in this page unchanged. It does **not** repair a linkability the deterministic scheme does not introduce.
+**Privacy tradeoff (normative note).** Because every coin uses a fresh `epk`, each recipient's events carry **all-distinct** `detect_tag`s ([Foundations §1.3](#13-per-coin-keys-note-encryption--detection)): a tag does not link two of one recipient's coins, and a relay that holds neither `ivk` nor the sender's `esk` can **neither** filter for the recipient **nor** correlate the recipient's events. The residual cost is therefore not linkability but **bandwidth and per-event work**: detection is not server-side filterable, so the recipient pulls the candidate set in full and pays one ECDH plus one Poseidon hash per scanned event (the full AEAD decryption and the blob fetch are incurred only on a match). **Fuzzy message detection** (probabilistic per-coin tags with tunable false-positive rate) is an **OPTIONAL scan-efficiency upgrade** that lets a relay return a smaller candidate set without learning who the recipient is; it changes only the tag computation and the scan filter and **MUST** leave every other interface in this page unchanged. It does **not** repair a linkability the deterministic scheme does not introduce.
 
 ### 4.5 Recovery
 
@@ -1134,9 +1135,9 @@ The seed is the **only** required backup ([Requirement 6](/requirements)). Recov
 
 The fallback procedure is fully deterministic and trustless:
 
-1. **Re-derive keys.** From the seed, re-derive the account root `A` and thereby `ivk`, `dk`, `ovk`, `op`, the nullifier key `nk`, and the spend keys ([Foundations §1.2](#12-key-hierarchy)). This alone restores the address/identity, decryption ability, and the deterministic detection tags.
+1. **Re-derive keys.** From the seed, re-derive the account root `A` and thereby `ivk`, `ovk`, `op`, the nullifier key `nk`, and the spend keys ([Foundations §1.2](#12-key-hierarchy)). This alone restores the address/identity, decryption ability, and the deterministic detection tags.
 2. **Rebuild the public index from Bitcoin + bundles.** Scan Bitcoin for zkCoins `BatchInscription`s, fetch each batch's `BatchBundle` from the relay mesh ([§4.6](#46-data-availability--replication-factor-k)) by its `bundle_locator`, verify the publisher's `AggregateBatchProof`, and apply the inscribed `prev_root → new_root` transition. The resulting global **nullifier accumulator** ([Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)) is derived from confirmed Bitcoin data plus content-addressed, recursively verifier-checkable bundles, and requires no trust in any peer. Because each member `SpendRecord` inside a bundle carries the spender's rotating public key `Pkᵢ` and the operator's seed re-derives the spender side of all its own past transitions, the operator can privately recognise its **own** member SpendRecords (the publisher and any third party cannot link them — they see only the publisher's identity on-chain) and so reconstruct the skeleton of its own activity. Recovery is therefore conditional on bundle DA: if every replica of a past `BatchBundle` has been lost, the operator can still verify the on-chain root continuity but cannot reconstruct the member set of that batch on its own — in practice the `k = 3` replication and operator backups ([§4.6](#46-data-availability--replication-factor-k)) make this a rare degraded case.
-3. **Pull candidate bundles.** Query the network's capability-gated pull endpoints ([Access & Explorer](#5--access--explorer)) by proving ownership (sign a challenge with the identity key) or by presenting the deterministic `detect_tag` set from `dk`. Cooperating nodes return every bundle matching the proof/tags. The network here is an **untrusted blob cache**.
+3. **Pull candidate bundles.** Query the network's capability-gated pull endpoints ([Access & Explorer](#5--access--explorer)) by proving ownership (sign a challenge with the identity key). A `detect_tag` set **cannot** be presented instead: tags are not precomputable from the seed — each `detect_tag` depends on its delivery event's fresh `epk` ([Foundations §1.3](#13-per-coin-keys-note-encryption--detection)) — so tag-based discovery is always the [§4.4](#44-note-discovery) scan: pull the candidate delivery events from the relay mesh and match each one locally with `ivk`. Cooperating nodes return every bundle matching the ownership proof. The network here is an **untrusted blob cache**.
 4. **Verify each bundle against Bitcoin.** For every returned bundle, the node **MUST** independently verify the recursive per-account proof, the coin's inclusion in the committed `output_coins_root`, that the root is anchored in a `SpendRecord` whose containing `BatchInscription` is in state `completed` ([On-chain §3.10](#310-transaction-states)) (for a non-batched mint, that the mint's recursive proof verifies directly), and that the coin is unspent against the nullifier accumulator at `NAV(tip)` per [On-chain §3.7](#37-the-nullifier-accumulator) ([Foundations §1.4](#14-identifiers-and-hashes), [Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)). A bundle failing any check **MUST** be discarded. A node can only **withhold**, never forge — correctness is guaranteed by the chain, the per-spender recursive proofs, and the publisher's `AggregateBatchProof`s.
 5. **Rebuild `AccountState` and balances.** From the accepted incoming and outgoing coins, reconstruct the per-asset `balances`, the coin-history SMT, `current_pubkey`, and `send_counter` ([Foundations §1.5](#15-core-data-structures), [Foundations §1.6](#16-trees-one-global-structure-one-per-account-structure)).
 
@@ -1171,7 +1172,7 @@ Custody safety **MUST NOT** depend on availability. Losing availability impairs 
 - **What a relay learns.** Only that an opaque, gift-wrapped, NIP-44-encrypted event was stored at some time — not sender, recipient, amount, asset, or proof (§4.1–§4.2). Because each node is a full relay, coin-delivery events blend into ordinary Nostr traffic (cover traffic).
 - **Detection scan vs. linkability.** Per-coin `detect_tag`s are all-distinct (fresh `epk` per coin, §4.4), so a relay cannot link or filter for the recipient. The genuine residual cost is **bandwidth**: detection runs recipient-side over the candidate set. The OPTIONAL fuzzy-message-detection upgrade reduces that bandwidth.
 - **Network presence.** Operating a relay exposes the operator's network address (IP) to peers. Operators that require location privacy **SHOULD** run the relay behind an anonymity network (e.g. a Tor hidden service).
-- **Recovery disclosure.** Pulling by `detect_tag` reveals the tag-set to the serving node; pulling by ownership proof reveals the requester's identity to that node. Both are consensual, scoped to the requester's own data, and never expose spend authority.
+- **Recovery disclosure.** Pulling by ownership proof reveals the requester's identity to the serving node; scanning candidate delivery events for tag matches ([§4.4](#44-note-discovery)) reveals nothing beyond ordinary relay reads. Both are consensual, scoped to the requester's own data, and never expose spend authority.
 
 ### 4.8 Durability — the store-everything invariant
 
@@ -1299,7 +1300,7 @@ OwnershipProof = {
 }
 ```
 
-The node **MUST** verify both `H(Pk₀) == subject` and the BIP-340 signature over `chal`, and only then release every Private record whose recipient is `subject`. This is also the **recovery** path; the requester **MAY** instead present its seed-derived `detect_tag` set ([Foundations §1.3](#13-per-coin-keys-note-encryption--detection)) to enumerate its own coins without revealing `Pk₀` (see [Transport & Recovery](#4--transport--recovery)). Ownership grants the **subject's full** Private view; it is the one self-disclosure that requires the spend branch.
+The node **MUST** verify both `H(Pk₀) == subject` and the BIP-340 signature over `chal`, and only then release every Private record whose recipient is `subject`. This is also the **recovery** path. There is **no** tag-based alternative at this endpoint: `detect_tag`s are not enumerable in advance — each depends on its delivery event's fresh `epk` ([Foundations §1.3](#13-per-coin-keys-note-encryption--detection)) — so a requester unwilling to reveal `Pk₀` to a foreign node instead pulls candidate delivery events from the relay mesh and runs the [§4.4](#44-note-discovery) scan locally (see [Transport & Recovery](#4--transport--recovery)). Ownership grants the **subject's full** Private view; it is the one self-disclosure that requires the spend branch.
 
 #### (b) Delegated view grant
 
@@ -1510,7 +1511,7 @@ zkcoins:addr/<address>/<zkavk>
 
 The secret travels in the fragment per the link-transport rules in [§5.6](#56-shareable-confirmation-links).
 
-**Flow.** The explorer derives the detection key from `ivk` ([Foundations §1.3](#13-per-coin-keys-note-encryption--detection)), finds the account's coins by scanning the relay mesh ([Transport & Recovery](#4--transport--recovery)) for the derived `detect_tags` (a `;h=<locator>` fragment hint, if present, only speeds resolution), decrypts incoming coins with `ivk` and recovers outgoing-coin plaintext with `ovk`, and renders the full history — checking every transaction against Bitcoin (coin inclusion → containing `BatchBundle` → `completed` `BatchInscription` ([On-chain §3.10](#310-transaction-states)) → recursive proof, as in [§5.6](#56-shareable-confirmation-links)). For non-batched mint coins, the chain step is replaced by direct re-verification of the `InitialProof` and the entry is rendered with `mint-verified` status, as in §5.6. The explorer is never trusted.
+**Flow.** The explorer holds `ivk` ([Foundations §1.3](#13-per-coin-keys-note-encryption--detection)), finds the account's coins by scanning the relay mesh ([Transport & Recovery](#4--transport--recovery)) and recomputing each candidate's `detect_tag` from `ss = ECDH(ivk, epk)` (a `;h=<locator>` fragment hint, if present, only speeds resolution), decrypts incoming coins with `ivk` and recovers outgoing-coin plaintext with `ovk`, and renders the full history — checking every transaction against Bitcoin (coin inclusion → containing `BatchBundle` → `completed` `BatchInscription` ([On-chain §3.10](#310-transaction-states)) → recursive proof, as in [§5.6](#56-shareable-confirmation-links)). For non-batched mint coins, the chain step is replaced by direct re-verification of the `InitialProof` and the entry is rendered with `mint-verified` status, as in §5.6. The explorer is never trusted.
 
 **Properties.**
 
@@ -1874,7 +1875,7 @@ zkCoins uses Nostr only as an authenticated, metadata-minimising transport ([§4
 | `30420` | zkCoins recipient profile | addressable | the `{pk0, ivpk, op_pubkey, relays, addr_sig}` tuple of [§4.3](#43-addressing-for-delivery); `d` tag = Bech32m `address` |
 | `30421` | zkCoins publisher profile | addressable | the `{publisher_pubkey, fee_address, fee_asset_id, fee, relays}` of [§3.8](#38-fees-and-economics); `d` tag = hex `publisher_pubkey` |
 
-**Delivery rumor (kind 1420).** Built per NIP-59: the rumor (unsigned event) has `kind = 1420` and `content` = the JSON of the [§4.2](#42-bundle-delivery) `DeliveryEvent.payload` (`detect_tag`, `epk`, `blob_id` as hex; `blob_locators` as a string array; `ack_nonce` as hex). It is sealed (kind 13, NIP-44-encrypted to the recipient's `IVPK`) and gift-wrapped (kind 1059, fresh ephemeral key) so the relay learns neither party. The recipient finds candidates by the §4.4 scan: the relay cannot pre-filter, so the recipient pulls kind-1059 events addressed to recently-seen ephemeral keys and unwraps; the `detect_tag` inside the rumor confirms ownership with one Poseidon hash.
+**Delivery rumor (kind 1420).** Built per NIP-59: the rumor (unsigned event) has `kind = 1420` and `content` = the JSON of the [§4.2](#42-bundle-delivery) `DeliveryEvent.payload` (`detect_tag`, `epk`, `blob_id` as hex; `blob_locators` as a string array; `ack_nonce` as hex). It is sealed (kind 13, NIP-44-encrypted to the recipient's `IVPK`) and gift-wrapped (kind 1059, fresh ephemeral key) so the relay learns neither party. The recipient finds candidates by the §4.4 scan: the relay cannot pre-filter, so the recipient pulls kind-1059 events addressed to recently-seen ephemeral keys and unwraps; the `detect_tag` inside the rumor confirms ownership with one ECDH and one Poseidon hash.
 
 **ACK rumor (kind 1421).** `content` = JSON `{detect_tag, blob_id, ack_nonce}` (all hex) plus `op_sig` = the BIP-340 signature over `ack_message = H("zkCoins/v1/Ack" ‖ detect_tag ‖ blob_id ‖ ack_nonce)` ([§4.2](#42-bundle-delivery)). Sealed and gift-wrapped back to the sender.
 
@@ -2038,8 +2039,7 @@ A short, scannable reference for the jargon, notation, and identifier names used
 - **`completed` (transaction state)** — `BatchInscription` is admitted under §3.5+§3.6 (publisher signature + `prev_root` continuity + bundle binding + aggregate proof all verify) AND its inclusion block has ≥ 6 confirmations; member `SpendRecord`s inherit this state; the only state in which a receiver MAY credit; absolute under the "no reorgs deeper than 5 blocks" assumption. ([§3.10](#310-transaction-states))
 - **Cyclic recursion** — one fixed circuit verifies proofs of itself; verifier data is constant, so proof size and verification time are constant. ([§2.2](#22-proof-types))
 - **DeliveryEvent** — Nostr event carrying `{detect_tag, epk, blob_id, blob_locators, ack_nonce}` plaintext, NIP-44 encrypted to `IVPK`, NIP-59 gift-wrapped under an ephemeral key. The `ack_nonce` is a fresh sender-chosen 32-byte value the recipient echoes in the ACK signature, binding the ACK to this delivery attempt. ([§4.2](#42-bundle-delivery))
-- **`detect_tag`** — `Hc("DetectTag", dk ‖ epk)`; per-coin, all-distinct, recipient-side scan only — no relay filter and no cross-coin linkability. ([§1.3](#13-per-coin-keys-note-encryption--detection), [§4.4](#44-note-discovery))
-- **`dk` (detection key)** — `HKDF("DetectKey", ivk)`; lets a holder of `ivk` recognise its own incoming coins by recomputing `detect_tag` per candidate event. ([§1.3](#13-per-coin-keys-note-encryption--detection))
+- **`detect_tag`** — `Hc("DetectTag", ss ‖ epk)`, where `ss = ECDH(esk, IVPK) = ECDH(ivk, epk)`; per-coin, all-distinct, recipient-side scan only (one ECDH + one hash per candidate) — no relay filter and no cross-coin linkability. ([§1.3](#13-per-coin-keys-note-encryption--detection), [§4.4](#44-note-discovery))
 - **`epk` (ephemeral pubkey)** — `esk·G`, drawn fresh per output coin; the recipient's `K_tx` and `detect_tag` are derived from it. ([§1.3](#13-per-coin-keys-note-encryption--detection))
 - **`failed` (transaction state)** — `BatchInscription` rejected by the scan (parser, `block_anchor` bounds, publisher signature, `prev_root` mismatch, bundle binding, or aggregate proof violated); member `SpendRecord`s inherit this state; receiver MUST NOT credit; forward-sticky in time, can only flip via reorg. ([§3.10](#310-transaction-states))
 - **Fee coin** — an ordinary output coin a spender adds to its transition, addressed to a chosen publisher's `fee_address`, that reimburses the publisher in zkCoins (never a Bitcoin UTXO); occupies one `MAX_TX_OUTPUTS` slot. ([§3.8](#38-fees-and-economics))
@@ -2048,7 +2048,7 @@ A short, scannable reference for the jargon, notation, and identifier names used
 - **Goldilocks** — the proof field `𝔽` with prime `p = 2^64 − 2^32 + 1`; pinned for Poseidon. ([§1.1](#11-cryptographic-primitives))
 - **Half-aggregation** — non-interactive compression of many BIP-340 signatures into one shared aggregate scalar `s_agg`, retaining each `Rⱼ`; used **off-chain** inside the publisher's `AggregateBatchProof` witness as a proving-cost optimisation. ([§3.3](#33-off-chain-signature-handling))
 - **`Hc`** — see *Notation*.
-- **HKDF** — HKDF-SHA-256, used for symmetric/derived secrets (`K_tx`, `dk`). ([§1.1](#11-cryptographic-primitives))
+- **HKDF** — HKDF-SHA-256, used for symmetric/derived secrets (`K_tx`). ([§1.1](#11-cryptographic-primitives))
 - **InitialProof** — the first transition of an account; `prev_proof` is absent and `prev_account_state` is the canonical empty account. ([§2.2](#22-proof-types))
 - **`inr` (input_nullifiers_root)** — Poseidon Merkle root over a transition's spent `nf`s under tag `NullifiersRoot`. ([§1.4](#14-identifiers-and-hashes), [§1.7.5](#175-poseidon-merkle-tree-used-for-ocr-and-inr))
 - **Inscription** — Taproot commit/reveal envelope whose witness payload starts with the 2-byte marker `0x42 0x42` and carries one constant-size `BatchInscription`. ([§3.5](#35-inscription-format))
@@ -2091,7 +2091,7 @@ A short, scannable reference for the jargon, notation, and identifier names used
 - **`skᵢ`** — rotating per-transition signing key (SPEND branch); `sk₀` is the initial key that fixes the address. ([§1.2](#12-key-hierarchy))
 - **SMT (Sparse Merkle Tree)** — 256-bit-depth Merkle tree with default-hashed empty subtrees; used for the coin-history root and the global nullifier accumulator. ([§1.6](#16-trees-one-global-structure-one-per-account-structure), [§1.7.6](#176-nullifier-accumulator-sparse-merkle-tree))
 - **SpendRecord** — `{public_key, signature, message, k, nullifiers}` (the normative byte order of [§1.4](#14-identifiers-and-hashes)); an **off-chain** object: a spender produces one per transition and hands it to a publisher; the publisher aggregates many into a `BatchBundle` whose `AggregateBatchProof` is the actual artefact that anchors them to Bitcoin via a `BatchInscription`. ([§1.4](#14-identifiers-and-hashes), [§3.4](#34-the-publisher))
-- **`ss` (shared secret)** — `ECDH(esk, IVPK) = ECDH(ivk, epk)`; the input to `K_tx`. ([§1.3](#13-per-coin-keys-note-encryption--detection))
+- **`ss` (shared secret)** — `ECDH(esk, IVPK) = ECDH(ivk, epk)`; the input to both `K_tx` and `detect_tag`, under distinct domain tags. ([§1.3](#13-per-coin-keys-note-encryption--detection))
 - **Tag (domain-separation tag)** — the string `"zkCoins/v1/<context>"` prefixed to every `Hc`/`HKDF` call; reusing a tag for two purposes is forbidden. ([§1.1](#11-cryptographic-primitives))
 - **Transaction state** — see `completed`, `failed`, `pending`, and `mint-verified` ([§3.10](#310-transaction-states)).
 - **Transition** — one execution of the compliance predicate `C` (mint, send, or receive). ([§2.3](#23-state-transitions))
