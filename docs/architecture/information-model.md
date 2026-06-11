@@ -13,6 +13,10 @@ At its core, zkCoins is an **information system**: a small set of pieces of data
 
 It complements two neighbouring pages: the [Privacy Model](privacy-model) (what an _on-chain observer_ can see) and the [Trust Model](trust-model) (what your _node operator_ can see). Read this one first — it is the map.
 
+:::info Current implementation vs. normative spec
+This page catalogs the information model of the **current implementation** ([zk-coins/node](https://github.com/zk-coins/node)): a node that inscribes a ~177-byte per-transaction commitment and keeps global SMT + MMR state. The **normative target** is the batched publisher design of the [Specification](/specification): the per-account commitment never appears on-chain — a publisher aggregates `SpendRecord`s into an off-chain `BatchBundle` and inscribes one constant 231-byte `BatchInscription` per batch, and the only global structure is the **nullifier accumulator** (no global account-keyed trees, no MMR — [spec §1.6](/specification#16-trees-one-global-structure-one-per-account-structure)). The catalog rows and the worked example below reflect the current implementation unless marked otherwise.
+:::
+
 > Notation: `H(...)` denotes a domain-separated hash. In-circuit hashes use **Poseidon over Goldilocks**; the Schnorr signature over the on-chain commitment uses **SHA-256** per BIP-340. The exact functions live in [Proof System](proof-system) and [Key Management](key-management); this page focuses on _what is hashed and why_, not the primitive.
 
 :::info Protocol vs. the zkcoins.app service
@@ -53,7 +57,7 @@ The whole privacy story is the gap between **Private** (off-chain plaintext) and
 | **Validity proof** (Plonky2, recursive) | 🟢 Public | The node's prover produces one per state transition | The node | the recipient (inside the coin proof) | Yes — zero-knowledge, it reveals nothing beyond validity |
 | **ProofData** (public inputs) `{account_state_hash, output_coins_root, commitment_history_root, coin_history_root, asset_id}` | 🟢 Public | The public outputs of the proof | public | bound on-chain | Yes — only hashes and roots |
 | **CoinProof** = `coin + proof + inclusion_proof` | 🟠 Private | The sender bundles it for delivery | Sender → recipient | the recipient | Recipient only (it contains the plaintext coin) |
-| **Commitment** `{public_key, signature, message}` | 🟢 Public | `message = account_state_hash ‖ output_coins_root`; the owner Schnorr/BIP-340-signs it (the signature hashes the message with SHA-256 internally) | first the owner, then Bitcoin | **Bitcoin** | Yes — this is the **only object that goes on-chain** |
+| **Commitment** `{public_key, signature, message}` | 🟢 Public | `message = account_state_hash ‖ output_coins_root`; the owner Schnorr/BIP-340-signs it (the signature hashes the message with SHA-256 internally) | first the owner, then Bitcoin | **Bitcoin** | Yes — the only object inscribed on-chain in the **current implementation**; under the normative spec the per-account commitment never goes on-chain — the publisher's `BatchInscription` is the only on-chain object ([spec §3.5](/specification#35-inscription-format)) |
 | **Inscription** | 🟢 Public | The **full commitment** (public key + signature + message, ~177 bytes) is inscribed in the Bitcoin Taproot _reveal_ transaction at broadcast (current implementation; the normative spec design inscribes one constant 231-byte `BatchInscription` per publisher batch instead — [spec §3.5](/specification#35-inscription-format)) | Bitcoin (permanently) | the whole world | Yes — the public, permanent anchor of the transaction |
 
 ## How information comes into existence
@@ -143,7 +147,7 @@ SHA-256(0363c934…388ed8c7) = e660e4ea3ce6c92c1e27ecb6cad611236d96a412cbc51d28e
 
 So this account is **181,967 bytes** of private plaintext off-chain, but only **~177 bytes** of an opaque commitment on-chain. The `account_state_hash` (`a791849c…`) is the public fingerprint of that private blob: an observer sees the hash and learns nothing; the owner can open it to the full balance.
 
-**🟢 Public** (global tree roots) — every account folds into shared roots; the latest values:
+**🟢 Public** (global tree roots — **current implementation only**) — the running node folds every account into a global SMT and an MMR; the latest values below. The normative spec explicitly rejects global account-keyed trees and the MMR: its only global structure is the nullifier accumulator ([spec §1.6](/specification#16-trees-one-global-structure-one-per-account-structure)).
 
 ```
 smt_root      : aee03c2d44273005cc1fb5d999a564231784044a3a3e5a39d2f7a173448140b6

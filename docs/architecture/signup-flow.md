@@ -231,7 +231,7 @@ zkCoins Architecture:
 | **Passkey role** | Signs every transaction (P-256) | Unlocks wallet + derives seed (one-time) |
 | **Signing curve** | P-256 (secp256r1) | secp256k1 (Bitcoin/Schnorr) |
 | **On-chain verification** | Smart Contract validates P-256 sig | No on-chain verification (CSV) |
-| **Gas sponsorship** | Paymasters | N/A (64-byte nullifier, no gas) |
+| **Gas sponsorship** | Paymasters | N/A (no gas — anchoring cost is the publisher's batch inscription fee, [spec §3.8](/specification#38-fees-and-economics)) |
 
 ### What We Learn from Coinbase
 

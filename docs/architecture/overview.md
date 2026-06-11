@@ -72,4 +72,4 @@ Shielded CSV improves on existing Client-Side Validation protocols (RGB, Taproot
 | **Proof size** | Grows with transaction history | Constant (independent of history) |
 | **On-chain data** | Full Bitcoin transaction (~560 WU) | Constant 231-byte `BatchInscription` per batch, amortised per spend ([spec §3.8](/specification#38-fees-and-economics)); current implementation: ~177 B per transaction |
 | **Verification** | Receiver validates full history | Receiver verifies one ZK proof |
-| **Double-spend** | Full Bitcoin transaction | Single Schnorr signature |
+| **Double-spend** | Full Bitcoin transaction | Publisher signature + one `AggregateBatchProof` per batch against the nullifier accumulator ([spec §3.7](/specification#37-the-nullifier-accumulator)); current implementation: single Schnorr signature per commitment |
