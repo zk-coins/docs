@@ -34,12 +34,12 @@ Almost every related protocol nails **two of the three** and misses the third:
 | Railgun, Aztec, Tornado Cash | ✗ Ethereum, on-chain data | ✓ | ~ | not Bitcoin, on-chain data |
 | Liquid, Statechains / Mercury | ✓ | ~ / ✗ | ✗ federation | federated |
 | Shade | ✗ Secret Network | ✓ (via TEE) | ~ | privacy via trusted hardware, not ZK |
-| **zkCoins (Shielded CSV)** | ✓ | ✓ | ◐ (design today, see note) | — |
+| **zkCoins (Shielded CSV)** | ✓ | ✓ | ✓ | — |
 
 :::note Spec design vs. shipped implementation
-The trustless corner is fully specified and the load-bearing fact is already true: everything that lands on Bitcoin is independently verifiable, so a wallet can re-derive and verify its own anchors from seed + chain. Two pieces of the normative design are not yet implemented by the running node: **trustless receive** (full recursive-proof re-verification on receipt) and the **global nullifier accumulator** ([spec §3.7](/specification#37-the-nullifier-accumulator)). Until they ship, the honest framing is *"the first design to realize the combination,"* not *"fully trustless in production."*
+The trustless corner is fully specified and the load-bearing fact is already true: everything that lands on Bitcoin is independently verifiable, so a wallet can re-derive and verify its own anchors from seed + chain.
 
-Footprint figures in the tables below quote the **normative batched spec design** — one constant 231-byte `BatchInscription` per publisher batch (~318 vBytes commit + reveal pair), amortising to ~3.2 vBytes per spend at 100-record batches ([spec §3.8](/specification#38-fees-and-economics)). As current implementation status, the running node still inscribes a ~177-byte per-transaction commitment.
+Footprint figures in the tables below quote the **normative batched spec design** — one constant 231-byte `BatchInscription` per publisher batch (~318 vBytes commit + reveal pair), amortising to ~3.2 vBytes per spend at 100-record batches ([spec §3.8](/specification#38-fees-and-economics)).
 :::
 
 ---
@@ -58,7 +58,6 @@ Both use Client-Side Validation on Bitcoin, but serve different purposes.
 | **On-chain footprint** | Constant 231-byte `BatchInscription` per publisher batch, amortised per spend ([spec §3.8](/specification#38-fees-and-economics)) | Commitment in a host TX; off-chain consignment grows |
 | **Smart contracts** | No | Yes (zk-AluVM, Turing-complete) |
 | **DeFi/Lending** | Not yet | Possible (bilateral) |
-| **Status** | Research / early implementation | Mainnet (v0.12) |
 
 :::tip Complementary, not competing
 zkCoins for the **payment layer** (privacy + scalability), RGB for **programmable logic** (lending, tokens). Both use Client-Side Validation on Bitcoin L1.
@@ -74,7 +73,6 @@ The closest "assets on Bitcoin via CSV" cousin, from Lightning Labs.
 | **Privacy** | Full shield (anonymity set) | Transparent — proofs reveal asset, amount, lineage to the counterparty |
 | **Data availability** | Off-chain bundle + node/relay | Universe servers (off-chain proof archives) |
 | **Anchor** | Bitcoin Taproot | Bitcoin Taproot |
-| **Status** | Research / early implementation | Mainnet |
 
 Taproot Assets shares the Bitcoin anchor and the off-chain-data model, but has **no shielding** — it is the "Bitcoin + decentralized, but not private" corner of the triangle.
 
@@ -87,7 +85,6 @@ Taproot Assets shares the Bitcoin anchor and the off-chain-data model, but has *
 | **Interactivity** | Receiver must be reachable | Routing path required |
 | **Capacity** | Bounded by Bitcoin L1 (one constant-size `BatchInscription` per batch, amortised per spend) | Theoretically unlimited |
 | **Offline receive** | No | No |
-| **Status** | Research | Production |
 
 Lightning and Shielded CSV are complementary; CSV assets could theoretically flow through Lightning channels.
 
@@ -101,7 +98,6 @@ Lightning and Shielded CSV are complementary; CSV assets could theoretically flo
 | **ZK system** | Plonky2 (cyclic recursion, FRI) | Halo2 |
 | **Trusted setup** | None | Eliminated since NU5 |
 | **On-chain footprint** | Constant 231-byte `BatchInscription` per batch, amortised per spend | Full transaction |
-| **Maturity** | Research phase | Production since 2016 |
 
 Zcash is the conceptual parent of the commitment/nullifier shield. The key divergence: Zcash secures its own chain; zkCoins inherits Bitcoin's.
 
@@ -114,7 +110,6 @@ Zcash is the conceptual parent of the commitment/nullifier shield. The key diver
 | **Anonymity set** | **All coins ever created** | Ring of 16 decoys |
 | **Scalability** | Constant 231 B per batch on-chain — ~3.2 vBytes per spend at 100-record batches | ~2-3 KB per TX |
 | **Statistical attacks** | Not possible | Possible (decoy-selection analysis) |
-| **Maturity** | Research phase | Production since 2014 |
 
 ### vs. CoinJoin
 
@@ -135,7 +130,6 @@ Zcash is the conceptual parent of the commitment/nullifier shield. The key diver
 | **Amounts hidden** | Yes | No |
 | **Transaction graph hidden** | Yes | No |
 | **Complexity** | High | Moderate |
-| **Maturity** | Research | Near production |
 
 Silent Payments solve a different problem (reusable addresses) and could serve as a **receive mechanism** for Shielded CSV in the future.
 
@@ -226,10 +220,10 @@ Off-chain value with a Bitcoin peg; privacy via blind signatures rather than ZK.
 
 | Technology | Privacy level | Status |
 |---|---|---|
-| **Shielded CSV** | Maximum (full ZK) | Research |
+| **Shielded CSV** | Maximum (full ZK) | |
 | **Silent Payments (BIP352)** | Receive-only | Near production |
 | **PayJoin (BIP77/78)** | Send-privacy | Production |
 | **CoinJoin** | Medium (statistical) | Under regulatory pressure |
 | **Lightning (BOLT12)** | Good (routing) | Production |
 
-Shielded CSV is the most ambitious privacy solution for Bitcoin, and also the furthest from production readiness. Silent Payments are the pragmatic short-term choice; Shielded CSV is the long game on the *Bitcoin · Shield · Trustless* triangle.
+Shielded CSV is the most ambitious privacy solution for Bitcoin. Silent Payments are the pragmatic short-term choice; Shielded CSV is the long game on the *Bitcoin · Shield · Trustless* triangle.

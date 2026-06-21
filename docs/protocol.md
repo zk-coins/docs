@@ -27,7 +27,7 @@ Traditional blockchains require every node to validate every transaction. Shield
 2. The proof is sent **directly to the receiver** (off-chain)
 3. Only a **compact commitment** is written to the blockchain. In the paper's final design that is a 64-byte half-aggregated nullifier per transaction; in the **zkCoins v1 specification** a publisher batches many spends and inscribes one constant **231-byte `BatchInscription` per batch**, so the per-spend on-chain cost amortises toward zero ([spec §3.5](/specification#35-inscription-format), [§3.8](/specification#38-fees-and-economics))
 4. The receiver verifies the proof **client-side**
-5. The blockchain provides the **immutable ordering** that prevents double-spending: the global nullifier accumulator's `prev_root → new_root` transitions are inscribed per batch and attested by the publisher's `AggregateBatchProof` ([spec §3.7](/specification#37-the-nullifier-accumulator)) — the normative v1 design (the current implementation still enforces the check in-circuit while the accumulator implementation is pending)
+5. The blockchain provides the **immutable ordering** that prevents double-spending: the global nullifier accumulator's `prev_root → new_root` transitions are inscribed per batch and attested by the publisher's `AggregateBatchProof` ([spec §3.7](/specification#37-the-nullifier-accumulator)) — the normative v1 design
 
 ## Key innovations
 
@@ -37,7 +37,7 @@ Each coin carries a proof of its entire history, compressed into a constant-size
 
 ### 2. Compact nullifiers — 64 bytes in the paper, batched off-chain in zkCoins v1
 
-In the **paper's** final design, a combination of the account model, Sign-to-Contract, and Schnorr Half-Aggregation compresses the on-chain footprint from a full Bitcoin transaction to exactly 64 bytes per transaction. The **zkCoins v1 specification** goes further by aggregation: nullifiers never appear on Bitcoin at all — they travel in the off-chain `BatchBundle`, and the chain carries only the accumulator's root transition inside one constant 231-byte `BatchInscription` per batch, so the per-spend cost falls well below the paper's 64-byte witness figure (64 B of witness data ≈ 16 vB): ~3.2 vBytes per record at 100 records ([spec §3.8](/specification#38-fees-and-economics)). As **current implementation status**, the running node neither half-aggregates nor batches yet: it inscribes a full per-transaction commitment (~177 bytes). See [Nullifier Design](architecture/nullifier-design) for the full breakdown.
+In the **paper's** final design, a combination of the account model, Sign-to-Contract, and Schnorr Half-Aggregation compresses the on-chain footprint from a full Bitcoin transaction to exactly 64 bytes per transaction. The **zkCoins v1 specification** goes further by aggregation: nullifiers never appear on Bitcoin at all — they travel in the off-chain `BatchBundle`, and the chain carries only the accumulator's root transition inside one constant 231-byte `BatchInscription` per batch, so the per-spend cost falls well below the paper's 64-byte witness figure (64 B of witness data ≈ 16 vB): ~3.2 vBytes per record at 100 records ([spec §3.8](/specification#38-fees-and-economics)). See [Nullifier Design](architecture/nullifier-design) for the full breakdown.
 
 ### 3. Privacy by construction
 
@@ -45,7 +45,7 @@ The ZK proofs hide all transaction details — amounts, sender, receiver, transa
 
 ## Performance
 
-The table below contrasts a regular Bitcoin transaction with the **Shielded CSV paper's** final design and the **zkCoins v1 specification's** batched design. The **current implementation** matches neither yet — it inscribes a full per-transaction commitment (~177 bytes); treat that as implementation status, not design.
+The table below contrasts a regular Bitcoin transaction with the **Shielded CSV paper's** final design and the **zkCoins v1 specification's** batched design.
 
 | Metric | Bitcoin (regular) | Shielded CSV (paper) | zkCoins v1 (spec) |
 |---|---|---|---|
@@ -73,14 +73,3 @@ The table below contrasts a regular Bitcoin transaction with the **Shielded CSV 
 | Proof-Carrying Data | Recursive ZK proofs of transaction validity |
 | Recursive zkSNARKs / STARKs | PCD instantiation |
 | Sorted Merkle Trees | Nullifier accumulator, non-inclusion proofs |
-
-## Open research areas
-
-The paper identifies several areas for future work:
-
-- **Light clients** — how to receive transactions without full blockchain access
-- **Payment channels** — Shielded CSV coins in Lightning-like channels
-- **Atomic swaps** — trustless exchange between Shielded CSV and regular Bitcoin
-- **Shared accounts** — t-of-n threshold schemes
-- **Post-quantum security** — migration path to quantum-resistant cryptography
-- **Data availability** — addressed in [ePrint 2025/569](https://eprint.iacr.org/2025/569)

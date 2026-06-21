@@ -17,8 +17,6 @@ This freedom is also a responsibility: where the current code disagrees with the
 
 The single normative source is **`docs/specification.md`** in the `zk-coins/docs` repository (this site). It is complete: every key, hash, identifier, byte layout, circuit bound, proof-system parameter, wire format, Nostr event kind, Blossom endpoint, REST route, and economic rule needed to build the system is fixed there. If you believe something is still ambiguous, that is a spec bug — open a PR against `docs` to resolve it, then implement; do not resolve it silently in code.
 
-The older `node/SPEC.md` describes a **superseded** model (one proof per send, a single Schnorr `Commitment` inscription, HTTP delivery, SMT+MMR commitment history). It is **not** authoritative. The authoritative model is the batched design in `docs/specification.md`: per-account recursive proofs, off-chain `SpendRecord`s aggregated by permissionless **publishers** into `BatchBundle`s attested by an `AggregateBatchProof` and anchored by a constant-size `BatchInscription`, with Nostr + Blossom transport. Treat `node/SPEC.md` as historical and rewrite it (or delete it and link here).
-
 ## 2. Scope and order
 
 The work is **not finished** when the node compiles. It is finished only when all three layers conform to the spec and interoperate end to end:
@@ -36,37 +34,11 @@ Done = node ✓ **and** sdk ✓ **and** app ✓, each conformant and the three p
 A layer is done only when **all** of the following hold:
 
 - **Spec-conformant.** Every normative MUST/MUST NOT in `docs/specification.md` that applies to the layer is implemented. The conformance test vectors ([spec test-vector section](./specification.md#test-vectors-conformance-harness)) are generated and pinned (§5 below), and both node and SDK reproduce them bit-for-bit.
-- **100 % test coverage.** Lines **and** functions at **100 %** for the layer's own code. This already matches the `node` and `sdk` CI gates (`cargo llvm-cov … --fail-under-lines 100 --fail-under-functions 100`; vitest `lines/functions/statements 100`). Branch coverage MUST be at the highest value the toolchain can sustain (the existing SDK/app configs lower branches only for synthetic `exactOptionalPropertyTypes` branches — that is the only acceptable reason to sit below 100 % on any metric, and it MUST be documented inline). The `app` keeps its existing two-tier policy (100 % on `lib`/`stores`/`hooks`; justified excludes for gated/non-MVP UI), but every MVP path is at 100 %.
 - **A-to-Z tested end to end.** Beyond unit coverage there is a full-journey test that exercises a real flow across all three layers running locally: create two accounts, mint, pay (with a real publisher batching the `SpendRecord` and inscribing a `BatchInscription` against a local/regtest Bitcoin), the recipient discovers + verifies + credits the coin, and a confirmation link renders. No mocks on the protocol path — real proofs, real inscriptions, real Nostr/Blossom transport.
-- **Lint/format/build green** locally before every push, per the repo's CI (fmt, clippy `-D warnings`, prettier, typecheck, build). Never push with a known-red local check.
-
-## 4. Local execution topology (testing)
-
-Testing is done with **node, SDK, and app all running locally** — no reliance on hosted DEV/PRD. The integration contract:
-
-- **Bitcoin**: a local backend (regtest/signet or Mutinynet) the node's scanner and the publisher's inscriber both talk to. Mine blocks on demand so the 6-confirmation finality ([spec §3.9](./specification.md)) can be driven deterministically in tests.
-- **node**: serves the `/v1/` REST API, the Nostr relay, and the Blossom store. Default local port **4242** (the established integration port).
-- **sdk**: a library; tests point its client at `http://127.0.0.1:4242`.
-- **app**: dev server on port **3090**; configured (`NEXT_PUBLIC_API_URL`) at the local node. The existing e2e harness (`scripts/e2e-local.sh`, info-proxy on **4243**, Playwright) is the starting point — extend it to stand up the **local node** (not the hosted one) so the journey runs fully offline.
-- **Orchestration**: there is no repo-root compose today — **create one** (a `docker-compose` or equivalent script) that brings up Bitcoin + node + app together for the A-to-Z test, and document it. This is part of "done" for the app layer.
 
 ## 5. Conformance vectors come first
 
 The spec's Poseidon-dependent values are marked `<REGEN>` because they must be **produced**, not invented (the spec explicitly forbids guessing Poseidon digests). The **first** node task is to implement [spec §1.7.1/§1.7.2](./specification.md) (Poseidon-Goldilocks + the `E(·)` field encoding) and the §1.7.9 circuit build, then compute every `<REGEN>` value (the empty roots, `asset_id`, `ash`, `coin.identifier`, `nf`, the Merkle roots, and the two `circuit_digest`s per network) and **submit them back to `docs/specification.md` as a PR**. Once two independent implementations agree on the same hex, those values are locked and become the cross-implementation conformance baseline (the SDK cross-Rust parity suite, `sdk/test/cross-rust/`, builds on them). Do not treat any `<REGEN>` row as authoritative until it is generated and pinned.
-
-## 6. Known deltas from the current code
-
-The current `node`/`sdk`/`app` implement the superseded model. These are the **major** changes the spec requires (non-exhaustive — the spec is the full list):
-
-- **Batched on-chain layer.** Replace the one-`Commitment`-per-send inscription with the publisher / `SpendRecord` / `BatchBundle` / `AggregateBatchProof` / constant-size `BatchInscription` design ([§3](./specification.md), §2.5). Add the second circuit `C_batch` (binary recursive aggregator).
-- **Zero-knowledge proofs.** Build all production circuits with `standard_recursion_zk_config()` (**zero-knowledge enabled**), not `standard_recursion_config()`. The current node uses the non-ZK config; that leaks witness data (amounts, recipients, `nk`) to anyone holding a proof and violates [Requirement 2](./requirements.md). See [spec §1.7.9](./specification.md#179-proof-system-parameters-normative).
-- **Domain-separation tags.** Use the spec's `"zkCoins/v1/<context>"` tag form everywhere ([§1.1](./specification.md)). The current code uses ad-hoc `"zkcoins:...:v1"` strings; align to the spec.
-- **Hashing construction & encoding.** Implement `Hc` as the §1.7.1 sponge over the §1.7.2 `E(·)` field encoding (length-prefixed **7-byte big-endian** chunks; digests as **8-byte big-endian** limbs). The current code mixes `two_to_one`/`hash_no_pad` with little-endian byte packing — replace it with the spec construction so all identifiers match the vectors.
-- **Transport.** Implement the Nostr relay (NIP-01), NIP-44 v2, NIP-59 gift-wrap, the zkCoins event kinds ([§7.3](./specification.md)), the Blossom store ([§7.4](./specification.md)), ZBE blob encryption ([§4.2.1](./specification.md)), and `detect_tag` discovery ([§4.4](./specification.md)). None of this exists today.
-- **Capability model.** Implement the challenge–response pull endpoint with `chan_bind` host binding, view grants, balance attestation, and the bearer link forms ([§5](./specification.md), §7.5).
-- **Multi-asset.** Activate multi-asset end to end ([§1.4](./specification.md), §6.5) — it is plumbed but disabled in the current node.
-- **Canonical proof bytes.** Use Plonky2 `ProofWithPublicInputs::to_bytes()` for any hashed/content-addressed proof ([§1.7.9](./specification.md)); `bincode` is fine for private at-rest storage only.
-- **Fresh API surface.** Design the `/v1/` API as specified ([§7.5](./specification.md)); the old `/api/...` surface need not be preserved.
 
 ## 7. Working method: autonomous, logged, professional, consistent
 

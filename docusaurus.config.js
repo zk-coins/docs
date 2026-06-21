@@ -83,9 +83,10 @@ const config = {
             title: 'Documentation',
             items: [
               { label: 'Introduction', to: '/' },
+              { label: 'Requirements', to: '/requirements' },
+              { label: 'Specification', to: '/specification' },
               { label: 'Architecture', to: '/architecture/overview' },
               { label: 'Protocol', to: '/protocol' },
-              { label: 'Wallet', to: '/wallet' },
             ],
           },
           {
