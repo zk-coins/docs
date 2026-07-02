@@ -26,7 +26,7 @@ Two things are visible on-chain:
 
 ### 1. Commitment existence
 
-A compact anchor is published as a Bitcoin Taproot Inscription. Current implementation status: the full per-transaction commitment (signing public key, Schnorr signature, and message, ~177 bytes). The normative spec design inscribes one constant 231-byte `BatchInscription` per publisher batch instead ([spec §3.5](/specification#35-inscription-format); see also [Nullifier Design](nullifier-design)). Either way, an observer can see that *some* Shielded CSV activity occurred, but not its contents. Commitments look like opaque, random data — they are indistinguishable from each other.
+A compact anchor is published as a Bitcoin Taproot Inscription. The normative spec design inscribes one constant 231-byte `BatchInscription` per publisher batch instead ([spec §3.5](/specification#35-inscription-format); see also [Nullifier Design](nullifier-design)). Either way, an observer can see that *some* Shielded CSV activity occurred, but not its contents. Commitments look like opaque, random data — they are indistinguishable from each other.
 
 ### 2. Approximate coin creation time
 
@@ -55,16 +55,3 @@ Unlike CoinJoin (Wasabi, Samourai) or mixer contracts (Tornado Cash), Shielded C
 - **Peer-to-peer** — the protocol is as decentralized as Bitcoin itself
 - **Opaque commitments** — the inscribed bytes are indistinguishable random-looking data, technically difficult to filter without breaking legitimate Bitcoin usage
 
-## Backend visibility
-
-The current implementation uses a server-side prover — a real, in-process Plonky2 prover that produces genuine Zero-Knowledge proofs. The trust boundary is therefore the node operator: the backend processes transactions and therefore sees:
-
-- Which accounts are sending and receiving
-- Transaction amounts
-- Account balances
-
-:::info Self-hosting eliminates this
-The backend is fully open-source. Users can run their own instance, eliminating any trust requirement. With a self-hosted backend, no third party sees any transaction data.
-:::
-
-This is comparable to the trust model of any web wallet: you trust the server you connect to. The difference is that the zkCoins backend is open-source, stateless, and designed to be self-hosted.

@@ -28,10 +28,6 @@ zkCoins batch:        one 231-byte inscription — constant, covering every spen
 
 The standard commit + reveal transaction pair that publishes a batch is **~318 vBytes**, independent of how many spends the batch carries — so the per-spend on-chain cost amortises toward zero as batches grow. The spec's worked example: **~3.2 vBytes per record for a 100-record batch** ([spec §3.8](/specification#38-fees-and-economics)).
 
-:::note Current implementation status
-The running node ([zk-coins/node](https://github.com/zk-coins/node)) still implements an earlier model that inscribes a simple per-transaction commitment (~177 bytes). The batched publisher design above is the normative target it is being rebuilt to — see the [Specification](/specification) and the [Implementation Mandate](/implementation-mandate).
-:::
-
 The blockchain serves one purpose: anchoring the nullifier-accumulator state transitions that prove each coin is spent only once. Everything else — validation, balances, history — happens off-chain between sender, receiver, and their nodes.
 
 ## Key properties
@@ -45,13 +41,12 @@ The blockchain serves one purpose: anchoring the nullifier-accumulator state tra
 
 ## Protocol
 
-zkCoins implements the [Shielded CSV protocol](https://eprint.iacr.org/2025/068) by Jonas Nick (Blockstream), Liam Eagen (Alpen Labs), and Robin Linus (ZeroSync). This wallet builds on the [ZeroSync prototype](https://github.com/ZeroSync/ZKCoins).
+zkCoins implements the [Shielded CSV protocol](https://eprint.iacr.org/2025/068) by Jonas Nick (Blockstream), Liam Eagen (Alpen Labs), and Robin Linus (ZeroSync).
 
 ## Quick links
 
 - [Architecture Overview](/architecture/overview)
 - [Privacy Model](/architecture/privacy-model)
 - [Protocol Details](/protocol)
-- [Wallet Guide](/wallet)
 - [Known Risks](/risks)
 - [GitHub](https://github.com/zk-coins)

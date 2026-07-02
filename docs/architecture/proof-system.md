@@ -32,7 +32,7 @@ The protocol uses **two** PCD circuits ([Proof types §2.2](/specification#22-pr
 
 ## Plonky2 + Poseidon-Goldilocks
 
-Both circuits are [Plonky2](https://github.com/0xPolygonZero/plonky2) circuits over the Goldilocks field with the Poseidon hash (`PoseidonGoldilocksConfig`), realising PCD through cyclic recursion ([Cryptographic primitives §1.1](/specification#11-cryptographic-primitives)). The per-account prover for `C` runs **in-process inside the node** — a single Rust process, no external prover service, CPU-only on a single host.
+Both circuits are [Plonky2](https://github.com/0xPolygonZero/plonky2) circuits over the Goldilocks field with the Poseidon hash (`PoseidonGoldilocksConfig`), realising PCD through cyclic recursion ([Cryptographic primitives §1.1](/specification#11-cryptographic-primitives)).
 
 ```rust
 // Conceptual: what the per-account compliance circuit C enforces per transition
@@ -70,7 +70,7 @@ A scanner verifies **one** `AggregateBatchProof` per inscription — never one p
 
 ## Data structures
 
-zkCoins keeps **exactly two** Merkle structures. There is **no** global, account-keyed commitment tree and **no** Merkle Mountain Range — earlier (v0) designs used both; the current model removes them.
+zkCoins keeps **exactly two** Merkle structures. There is **no** global, account-keyed commitment tree and **no** Merkle Mountain Range.
 
 | Structure | Scope | Purpose |
 |---|---|---|
@@ -93,19 +93,8 @@ Global:
 
 ## Prover
 
-Per-account proofs (`C`) are produced wallet/node-side as part of building a transition; the batch-aggregation proof (`C_batch`) is produced by the **publisher** when it assembles many `SpendRecord`s into a bundle ([State transitions §2.3](/specification#23-state-transitions)). Proving is CPU-only on a single host (Apple Silicon); no GPU and no external proving network are involved, and every proof is a real Plonky2 proof with full Zero-Knowledge guarantees.
-
-## Implementation strategies (from the paper)
-
-The Shielded CSV paper describes two practical PCD instantiations:
-
-1. **Folding schemes** — incremental proof compression, efficient for sequential proofs.
-2. **Recursive STARKs** — proof verification inside new proofs, with more established tooling.
-
-The current implementation uses Plonky2, whose FRI-based recursive proofs fall into category 2. Cyclic recursion — one circuit that verifies proofs of itself — is what turns the recursive-STARK approach into Proof-Carrying Data.
+Per-account proofs (`C`) are produced wallet/node-side as part of building a transition; the batch-aggregation proof (`C_batch`) is produced by the **publisher** when it assembles many `SpendRecord`s into a bundle ([State transitions §2.3](/specification#23-state-transitions)). Every proof is a real Plonky2 proof with full Zero-Knowledge guarantees.
 
 ## Performance
-
-Per-account proof generation runs on CPU on a single host and takes on the order of **seconds to minutes**, depending on circuit parameters and hardware. This cost is paid once per transition, before the publisher anchors the batch on Bitcoin.
 
 Verification is **constant-time** on both circuits: cyclic recursion keeps per-account proof size and verification cost independent of history length, and the `AggregateBatchProof` is constant-size in the member count `m` (asymptotic to the recursion-overhead floor of ~100 KB). A coin that changed hands many times verifies as fast as a freshly created one, and a scanner clears an entire batch with a single proof check.
