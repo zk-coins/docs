@@ -17,7 +17,7 @@ This split is packaging, not a trust boundary. It is the same separation as `bit
 
 ## What a node cannot do
 
-A node — including a public one you do not control — **can never steal, forge, or double-spend your coins.** That is enforced cryptographically: every transfer carries a recursive zero-knowledge validity proof, and every spend is anchored to an immutable on-chain commitment. Double-spend protection is enforced **inside the proof circuit** today (a proof of non-inclusion in the per-account coin history); a verifier-queryable global on-chain nullifier set is a roadmap item (see [Nullifier Design](nullifier-design)). A dishonest operator cannot fabricate value or take yours.
+A node — including a public one you do not control — **can never steal, forge, or double-spend your coins.** That is enforced cryptographically: every transfer carries a recursive zero-knowledge validity proof, and every spend is anchored on Bitcoin. Double-spend protection is the job of the global **nullifier accumulator** — the normative v1 design ([spec §1.6](/specification#16-trees-one-global-structure-one-per-account-structure), [§3.7](/specification#37-the-nullifier-accumulator)): a 256-bit sparse Merkle tree over every admitted nullifier, advanced by inscribed `prev_root → new_root` transitions and attested per batch by the publisher's `AggregateBatchProof`, so any verifier can check membership or non-membership against roots it reads from Bitcoin itself. A dishonest operator cannot fabricate value or take yours.
 
 ## What changes when the node is not yours
 
@@ -38,7 +38,7 @@ Because the wallet can switch nodes at any time and use several at once, a user 
 | Own wallet + **multiple foreign nodes** | disclosed to all of them | safe **as long as ≥1 is honest** | safe |
 | Own wallet + **a single foreign node** | disclosed to it | you trust it (it can lie or omit) | safe |
 
-**Why multiple nodes protect you.** The "at least one honest node" guarantee holds only because the wallet can **verify delivered data against Bitcoin**: an honest node supplies verifiable truth, a dishonest one cannot forge a valid proof, so the wallet keeps the verifiable answer and ignores the rest. Without client-side verification, more nodes would not help. (Full receive-side re-verification of the recursive proof is the trustless-receive roadmap item — see [Information Flow](information-flow).)
+**Why multiple nodes protect you.** The "at least one honest node" guarantee holds only because the wallet can **verify delivered data against Bitcoin**: an honest node supplies verifiable truth, a dishonest one cannot forge a valid proof, so the wallet keeps the verifiable answer and ignores the rest. Without client-side verification, more nodes would not help.
 
 **The eclipse case.** The Bitcoin analogy extends to its limit: if _all_ of a node's peers lie (an eclipse attack), even a self-hosted node is vulnerable — the "at least one honest peer" assumption. zkCoins inherits this network-liveness assumption directly, because it anchors on Bitcoin.
 

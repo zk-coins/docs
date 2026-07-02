@@ -10,7 +10,7 @@ const config = {
   baseUrl: '/',
 
   organizationName: 'zk-coins',
-  projectName: 'zkcoins-app',
+  projectName: 'docs',
 
   onBrokenLinks: 'throw',
   onBrokenAnchors: 'throw',
@@ -42,7 +42,11 @@ const config = {
     ],
   ],
 
-  plugins: [require.resolve('./plugins/llms-txt')],
+  plugins: [
+    require.resolve('./plugins/llms-txt'),
+    require.resolve('./plugins/noindex-preview'),
+    require.resolve('./plugins/strip-null-bytes'),
+  ],
 
   themes: ['@docusaurus/theme-mermaid'],
 
@@ -79,25 +83,26 @@ const config = {
             title: 'Documentation',
             items: [
               { label: 'Introduction', to: '/' },
+              { label: 'Requirements', to: '/requirements' },
+              { label: 'Specification', to: '/specification' },
               { label: 'Architecture', to: '/architecture/overview' },
               { label: 'Protocol', to: '/protocol' },
-              { label: 'Wallet', to: '/wallet' },
             ],
           },
           {
             title: 'Source Code',
             items: [
               {
-                label: 'Monorepo',
-                href: 'https://github.com/zk-coins/zkcoins-app',
+                label: 'Web App',
+                href: 'https://github.com/zk-coins/app',
               },
               {
                 label: 'Rust Backend',
-                href: 'https://github.com/zk-coins/zkcoins-app/tree/develop/rust/server',
+                href: 'https://github.com/zk-coins/node',
               },
               {
                 label: 'WASM Client',
-                href: 'https://github.com/zk-coins/zkcoins-app/tree/develop/rust/client',
+                href: 'https://github.com/zk-coins/app/tree/develop/rust/client',
               },
               {
                 label: 'Plonky2 Circuit',

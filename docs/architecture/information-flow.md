@@ -26,7 +26,7 @@ A's node holds A's entire bookkeeping; none of it leaves on its own:
 - **A's coins** — the coin objects A still holds, with their amounts and asset ids.
 - **A's full history** — the issuance of 100, the send of 20, every proof A produced.
 - **The Tapfreak definition** — `asset_id = H(A's key ‖ "Tapfreak" ‖ decimals ‖ issuance_version)` and its supply rules; A is the creator.
-- **A's copy of the global trees** (account SMT, commitment MMR) — A has them, but they are _derived from Bitcoin_, not secret to A.
+- **A's copy of the global nullifier accumulator** — A has it, but it is _derived from Bitcoin_ (the inscribed root transitions plus the verified batch bundles, [spec §3.7](/specification#37-the-nullifier-accumulator)), not secret to A.
 
 A reveals nothing except the single coin it chooses to send B.
 
@@ -48,7 +48,7 @@ B verifies all of it **against B's own node and B's own view of Bitcoin**:
 
 If all four hold, B is convinced — **without trusting A or A's node**. That is client-side validation. What B learns: "I received 20 valid TFREAK." Not A's balance, not A's other coins, not A's history.
 
-> **Status:** this full, trustless check is the **target**. Today a receiving node verifies only the **inclusion proof** and trusts the source; re-verifying the recursive proof (**S1**) and a verifier-queryable global spent-coin accumulator for step 4 (**S2**) are roadmap items — see [Status](#status--caveats) below.
+> **Status:** this full check is the **normative design**. Step 4 is specified as the global **nullifier accumulator** ([spec §3.7](/specification#37-the-nullifier-accumulator)).
 
 ## What B needs to spend the coins onward
 
@@ -64,14 +64,14 @@ Consequence: **the bundle is custody.** A seed phrase alone cannot restore spend
 C is uninvolved but runs a node and scans Bitcoin. C receives **only the public skeleton**:
 
 - the **opaque commitments** of A's mint and A's send (a rotating public key, a Schnorr signature, and two state hashes each), with their block and time,
-- folded into C's own copy of the **global roots and commitment history**.
+- folded into C's own copy of the **global nullifier accumulator** — the inscribed `prev_root → new_root` sequence ([spec §3.7](/specification#37-the-nullifier-accumulator)).
 
 C does **not** receive: the amount, the recipient, the fact that Tapfreak was involved, that it was 20, or that B took part. Only if B later pays C does C receive a bundle — until then, C learns nothing about A → B.
 
 ## What an explorer and a Bitcoin-only observer receive
 
 - An **explorer** is a public, read-only view of the **same Bitcoin data C sees**: the stream of commitments, the roots history, aggregate counts, and signature/anchoring checks. It **cannot** show amounts, the asset name "Tapfreak", balances, sender or recipient, or the graph. (One honest nuance: a commitment's _shape_ — a shorter message for an issuance vs a longer one for a transfer — may hint at the transaction _type_, never its content.)
-- A **Bitcoin-only observer** (no zkCoins node) sees the least: the inscriptions are present but **opaque** — each carries a rotating public key, a signature, and two state hashes (~177 bytes), identifiable as zkCoins by their marker, countable, timestamped, but otherwise **uninterpretable** — the same raw data the explorer decodes, just undecoded.
+- A **Bitcoin-only observer** (no zkCoins node) sees the least: the inscriptions are present but **opaque** — identifiable as zkCoins by their marker, countable, timestamped, but otherwise **uninterpretable** — the same raw data the explorer decodes, just undecoded. (Under the normative batched design an observer sees only one constant 231-byte `BatchInscription` per publisher batch — [spec §3.5](/specification#35-inscription-format).)
 
 ## Who sees what
 
@@ -103,7 +103,7 @@ Both come from the **same seed**, on **separate hardened BIP-32 branches**, so:
 
 This makes the trust statement precise: the node never holds the **spend** key; it may hold a **spend-less operational key**. A compromised node is therefore a **privacy breach (read) — never theft**, exactly matching "a node can see but cannot steal."
 
-Incoming bundles are addressed to the **operational key**, so the always-on node receives, decrypts and stores them without ever touching the spend key; the wallet comes online only to spend. _(This is an addressing change: today the address derives from the spend-side key, so advertising the operational key as the receive identity is part of the proposal — see [Status](#status--caveats).)_
+Incoming bundles are addressed to the **operational key**, so the always-on node receives, decrypts and stores them without ever touching the spend key; the wallet comes online only to spend.
 
 **Own node vs foreign node.** You give _your own_ node the derived operational key. A _foreign_ node never gets your key — instead the wallet issues it a **scoped, signed delegation** to that node's own key. Same self-host-vs-foreign spectrum as everywhere.
 
@@ -176,7 +176,7 @@ Delivery (push once) is not the same as **recovery** (pull anytime). Bitcoin sto
 
 **What the seed gives back (deterministic).** Every key (spend + operational + all rotating keys), the address/identity, the decryption ability, and the deterministic pull-tags — enough to prove ownership and to enumerate and decrypt everything that is yours.
 
-**What Bitcoin gives back (the index + integrity anchor).** The full ordered set of commitments and the global roots — reconstructable by any node. It lets you **authenticate every recovered bundle** (proof valid + anchored; the global double-spend check is the **S2** roadmap item — see [Status](#status--caveats)). Because the on-chain commitment carries your signing public key, you can also **privately recognise your own commitments** — your seed derives the keys; outsiders cannot link the rotating keys, but you can — recovering the skeleton of your own activity.
+**What Bitcoin gives back (the index + integrity anchor).** Under the normative batched design the chain carries only the publishers' `BatchInscription`s — publisher key, accumulator `prev_root → new_root` transitions, and `bundle_locator`s — so what any node reconstructs from Bitcoin alone is the **verified accumulator root sequence**: the index against which you **authenticate every recovered bundle** (proof valid + anchored; the global double-spend check runs against the nullifier accumulator — normative in v1, [spec §3.7](/specification#37-the-nullifier-accumulator)). Recognising your own activity is **not** read off the chain: each batch's off-chain `BatchBundle` is fetched by its `bundle_locator`, and because every member `SpendRecord` inside it carries the spender's rotating public key — which your seed re-derives — you **privately recognise your own SpendRecords** inside the verified bundles, while outsiders cannot link them ([spec §4.5 step 2](/specification#45-recovery)).
 
 **What is irreducibly external — and how it comes back.** The coin **values** (amounts, recipients), especially of **incoming** coins, are _choices others made_; they live only in the bundles and cannot be derived from a hash or your seed. Under an **honest network** these bundles are simply **returned on request**: you prove ownership (or present your tags), cooperating nodes serve every bundle addressed to you, and you **verify each one against Bitcoin**.
 
@@ -233,13 +233,6 @@ The full grammar and resolution flow are specified in the [Access & Explorer §5
 - **Scoped** — it discloses that single transaction in full and **nothing else**: no other transactions, no balances, no spend authority.
 - **Privacy cost** — a third-party explorer operator (and anyone with the link) learns that one transaction; self-hosting the explorer avoids exposing it to an operator.
 - **Availability** — any node holding the replicated bundle (A, B, or another) can serve it; confirmation does not hinge on A being online.
-
-## Status / caveats
-
-- **Trustless verification is the target, not today's behaviour.** "B verifies without trusting A" needs two roadmap items: re-verifying the full recursive proof on receipt (**S1**), and a verifier-queryable **global spent-coin accumulator** for the double-spend check (**S2**). Today a receiving node checks only the inclusion proof and trusts the source; double-spend is enforced _in the circuit_ (proof of non-inclusion), not via an on-chain nullifier set.
-- **The whole off-chain layer is proposed** (roadmap), not yet implemented: the two-key model (today's wallet uses a single, non-hardened derivation branch and addresses by the spend-side key), node-as-relay, Nostr delivery, recovery-pull, capability-gated access, and shareable confirmation links. Today delivery is implicit same-node.
-- **Trustless emission (S5).** Permissionless, un-privileged minting ("A mints") is the emission roadmap item.
-- **Asset names are never on-chain.** "Tapfreak" lives only in the peer-to-peer coin data and the `asset_id`.
 
 ## Related pages
 

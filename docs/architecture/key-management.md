@@ -30,23 +30,9 @@ Each transaction uses the current public key and derives the next one. This prov
 - **Deterministic derivation** — all keys can be re-derived from the seed
 - **Deterministic address** — same seed always produces the same account address
 
-## Key storage
-
-Keys are stored encrypted in the browser's IndexedDB using AES-256-GCM via the Web Crypto API:
-
-- **Seed phrase wallets:** encryption key derived from user password (PBKDF2, 100k iterations)
-- **Passkey wallets:** encryption key derived from WebAuthn PRF output (HKDF-SHA256)
-
-The master private key is never stored in plaintext. Decryption requires user authentication on each session.
-
 ## Schnorr signatures
 
-Transaction commitments are signed with Schnorr signatures over the secp256k1 curve — the same cryptography that powers Bitcoin's Taproot. The signing happens in WebAssembly, compiled from the Rust `bitcoin` crate:
-
-```typescript
-// In the browser via WASM
-const signature = wasm.signSchnorr(privateKeyHex, messageHashHex);
-```
+Transaction commitments are signed with Schnorr signatures over the secp256k1 curve — the same cryptography that powers Bitcoin's Taproot.
 
 ## Account address
 
@@ -79,9 +65,3 @@ Unlike regular Bitcoin wallets, recovering a seed phrase alone does not restore 
 
 This is a fundamental property of Client-Side Validation: the blockchain only stores opaque commitments, not transaction data. The wallet must keep its own records.
 :::
-
-Planned backup approach:
-
-1. Export wallet state as encrypted file (master key + coin proofs)
-2. Import on another device
-3. Re-scan the blockchain for commitments to rebuild local state
