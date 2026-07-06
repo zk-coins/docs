@@ -2,7 +2,7 @@
 
 **Private Bitcoin payments via Shielded CSV** — no new chain, no token, no consensus change, no trusted operator. Only Bitcoin, zero-knowledge proofs, and the user's own keys.
 
-This is the **documentation repository** and the single place that describes the whole system end to end. New here? Start with the **[Specification](https://docs.zkcoins.app/specification)** (the full A-to-Z technical design) or the **[Architecture overview](https://docs.zkcoins.app/architecture/overview)**.
+This is the **documentation repository** and the single place that describes the whole system end to end. New here? Start with the **[Specification](https://docs.zkcoins.app/specification)** (the full A-to-Z technical design) or the **[Requirements](https://docs.zkcoins.app/requirements)**.
 
 | | Production | Dev |
 |---|---|---|
@@ -14,7 +14,7 @@ The Bitcoin network is a per-deployment **env variable** — production runs on 
 
 ## What zkCoins is
 
-zkCoins lets you send value on Bitcoin without anyone seeing the amount, the asset, who paid, or who received. Bitcoin stores only **opaque markers** that a spend happened — not the coin's contents, which travel privately between sender and receiver as a small encrypted bundle. Double-spend protection is the chain's job: each spent coin publishes a one-time nullifier on Bitcoin, and any second appearance is rejected. Your **seed** derives every key, your **wallet** is the only thing that can spend, **any node** can serve you, and you verify every figure against Bitcoin yourself.
+zkCoins lets you send value on Bitcoin without anyone seeing the amount, the asset, who paid, or who received. Coin contents never touch the chain — they travel privately between sender and receiver as encrypted bundles. On Bitcoin, a permissionless **publisher** anchors many spends at once with a single constant-size **`BatchInscription`** that commits the global nullifier accumulator's state transition; a coin's nullifier can enter that accumulator only once, so any second spend is rejected. Your **seed** derives every key, your **wallet** is the only thing that can spend, **any node** can serve you, and you verify every figure against Bitcoin yourself.
 
 Built on the zkCoins concept (Robin Linus) and the Shielded CSV construction (Jonas Nick, Liam Eagen, Robin Linus).
 
@@ -34,7 +34,7 @@ Supporting repos: [`zk-coins/research`](https://github.com/zk-coins/research) (p
 
 ## This repository (docs)
 
-A Docusaurus site published to Cloudflare Pages. Sections: Introduction, Requirements, **Specification**, Implementation Mandate, Architecture, Protocol, Wallet, Comparisons, Tech Decisions, Roadmap, Risks.
+A Docusaurus site published to Cloudflare Pages. Sections: Introduction, Requirements, **Specification**, Implementation Mandate, Protocol, Comparisons, Risks.
 
 ### Development
 

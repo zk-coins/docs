@@ -1,5 +1,4 @@
 ---
-sidebar_position: 1
 title: Specification
 ---
 
@@ -231,7 +230,7 @@ seed  (256-bit; BIP-39 mnemonic, or Passkey PRF → HKDF)
 
 `1798'` is the chosen BIP-43 purpose index for zkCoins (hardened). All branch separations are **hardened**: the VIEW and `op` branches are hardened children of `A`, so a party holding them **cannot** derive the SPEND branch.
 
-**Who holds what** (this table is the cryptographic basis of the [Trust Model](/architecture/trust-model)):
+**Who holds what** (this table is the cryptographic basis of the trust model, [§6.6](#66-threat-model-and-trust-configurations)):
 
 | Key | Held by | Can do | Cannot do |
 |---|---|---|---|
@@ -1739,7 +1738,7 @@ Before it signs, the wallet **MUST** fetch the current authoritative state (the 
 - A wallet **MAY** switch nodes at any time, by configuration alone, with no migration step. No node can lock a wallet in.
 - A wallet **MAY** use **multiple nodes simultaneously** — querying several, submitting through one or more.
 
-**Why multi-node is safe.** The wallet verifies every answer against Bitcoin (§6.2, [Requirement 4](/requirements)). An honest node returns verifiable truth; a dishonest one cannot forge a valid recursive proof, a valid `AggregateBatchProof`, or a valid on-chain `BatchInscription`. So when the wallet fans a query out to several nodes, it **MUST** keep the answer that verifies and **MAY** ignore all others. This is the **"at least one honest node"** property: correctness holds as long as ≥1 queried node is honest. It depends on client-side verification — without it, more nodes would not help. The configurations this yields are tabulated in the [Trust Model](/architecture/trust-model).
+**Why multi-node is safe.** The wallet verifies every answer against Bitcoin (§6.2, [Requirement 4](/requirements)). An honest node returns verifiable truth; a dishonest one cannot forge a valid recursive proof, a valid `AggregateBatchProof`, or a valid on-chain `BatchInscription`. So when the wallet fans a query out to several nodes, it **MUST** keep the answer that verifies and **MAY** ignore all others. This is the **"at least one honest node"** property: correctness holds as long as ≥1 queried node is honest. It depends on client-side verification — without it, more nodes would not help. The configurations this yields are summarised in [§6.6](#66-threat-model-and-trust-configurations).
 
 **Selecting the latest state under multiple verifying answers.** Multi-node fan-out can return **more than one** answer that verifies — typically because the queried nodes are at different sync states (each holds a valid snapshot of the lineage at a different `send_counter`). The wallet **MUST** select as authoritative "latest" the answer with the **highest `send_counter`** among those whose anchoring `BatchInscription` is in state `completed` ([§3.10](#310-transaction-states)) before signing the next transition. Two verifying answers with the **same** `send_counter` but **different** `new_account_state_hash` are an account-level fork — the SPEND-key holder signed two parallel transitions at the same counter. A wallet that detects this **MUST NOT** sign a further transition until the user resolves it, because sole legitimate control of `sk₀` and `skᵢ` never produces equivocation; detection here means either operator error (the same seed driven from two wallet instances against stale state) or a custody breach of the SPEND branch. The protocol does **not** automatically pick a fork-winner; the choice is the holder's. When **no** candidate has a `completed` anchor (e.g. every recent spend is still within finality), the wallet **MAY** build the next transition against the highest-counter `pending` candidate, accepting the reorg risk that the inclusion block of the chosen prev state could be displaced before the §3.9 finality bound; deployments handling extreme value **SHOULD** wait for `completed` before extending.
 
@@ -1806,7 +1805,7 @@ The human-readable `name` is **never** placed on-chain (Foundations §1.4).
 
 ### 6.6 Threat model and trust configurations
 
-Custody is **cryptographically safe in every configuration**: no node holds a SPEND-branch key (Foundations §1.2), value integrity is enforced by proof soundness and the nullifier accumulator, and every spend's nullifier reaches the accumulator only via a publisher `AggregateBatchProof` anchored by an immutable on-chain `BatchInscription`. The three wallet–node configurations differ only in **privacy** and in **whom you trust for correctness and availability** — never in custody. The authoritative matrix lives in the [Trust Model](/architecture/trust-model); summarised:
+Custody is **cryptographically safe in every configuration**: no node holds a SPEND-branch key (Foundations §1.2), value integrity is enforced by proof soundness and the nullifier accumulator, and every spend's nullifier reaches the accumulator only via a publisher `AggregateBatchProof` anchored by an immutable on-chain `BatchInscription`. The three wallet–node configurations differ only in **privacy** and in **whom you trust for correctness and availability** — never in custody:
 
 - **Own wallet + own node.** Full privacy, trustless correctness, safe custody. The node sees your plaintext, but you are the operator, so nothing leaks.
 - **Own wallet + multiple foreign nodes.** Plaintext is disclosed to all of them; correctness is safe **as long as ≥1 is honest** (§6.3); custody safe.
