@@ -1,5 +1,4 @@
 ---
-sidebar_position: 3
 title: Protocol
 ---
 
@@ -37,11 +36,11 @@ Each coin carries a proof of its entire history, compressed into a constant-size
 
 ### 2. Compact nullifiers — 64 bytes in the paper, batched off-chain in zkCoins v1
 
-In the **paper's** final design, a combination of the account model, Sign-to-Contract, and Schnorr Half-Aggregation compresses the on-chain footprint from a full Bitcoin transaction to exactly 64 bytes per transaction. The **zkCoins v1 specification** goes further by aggregation: nullifiers never appear on Bitcoin at all — they travel in the off-chain `BatchBundle`, and the chain carries only the accumulator's root transition inside one constant 231-byte `BatchInscription` per batch, so the per-spend cost falls well below the paper's 64-byte witness figure (64 B of witness data ≈ 16 vB): ~3.2 vBytes per record at 100 records ([spec §3.8](/specification#38-fees-and-economics)). See [Nullifier Design](architecture/nullifier-design) for the full breakdown.
+In the **paper's** final design, a combination of the account model, Sign-to-Contract, and Schnorr Half-Aggregation compresses the on-chain footprint from a full Bitcoin transaction to exactly 64 bytes per transaction. The **zkCoins v1 specification** goes further by aggregation: nullifiers never appear on Bitcoin at all — they travel in the off-chain `BatchBundle`, and the chain carries only the accumulator's root transition inside one constant 231-byte `BatchInscription` per batch, so the per-spend cost falls well below the paper's 64-byte witness figure (64 B of witness data ≈ 16 vB): ~3.2 vBytes per record at 100 records ([spec §3.8](/specification#38-fees-and-economics)). See [spec §3.7](/specification#37-the-nullifier-accumulator) for the full accumulator design.
 
 ### 3. Privacy by construction
 
-The ZK proofs hide all transaction details — amounts, sender, receiver, transaction graph. The only information revealed is that a transaction occurred and an approximate creation time for the coin.
+The ZK proofs hide all transaction details — amounts, sender, receiver, transaction graph. In the paper's per-spend design, the only information revealed is that a transaction occurred and an approximate creation time for the coin; in the zkCoins v1 batched design even the per-batch record count stays off-chain ([spec §3.5](/specification#35-inscription-format)).
 
 ## Performance
 
@@ -60,7 +59,7 @@ The table below contrasts a regular Bitcoin transaction with the **Shielded CSV 
 - **Not a sidechain** — it uses Bitcoin L1 directly
 - **Not a rollup** — no sequencer, no data availability layer
 - **Not a mixer** — privacy is structural, not obfuscation
-- **Not a token** — no new asset, just a different way to transact BTC
+- **Not a token** — no native protocol token to bootstrap; value lives in client-side-validated coins (multi-asset by issuance, [spec §6.5](/specification#65-issuance--versioned-schemas-v1-minimal))
 - **Not a soft fork** — works on Bitcoin as it exists today
 
 ## Cryptographic primitives
@@ -72,4 +71,4 @@ The table below contrasts a regular Bitcoin transaction with the **Shielded CSV 
 | Schnorr Half-Aggregation | Compress multiple nullifier signatures |
 | Proof-Carrying Data | Recursive ZK proofs of transaction validity |
 | Recursive zkSNARKs / STARKs | PCD instantiation |
-| Sorted Merkle Trees | Nullifier accumulator, non-inclusion proofs |
+| Sparse Merkle Trees | Nullifier accumulator, membership + non-membership proofs (zkCoins v1: 256-bit-depth SMT, [spec §1.7.6](/specification#176-nullifier-accumulator-sparse-merkle-tree)) |

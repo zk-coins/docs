@@ -1,12 +1,11 @@
 ---
 slug: /
-sidebar_position: 1
 title: Introduction
 ---
 
 # zkCoins
 
-zkCoins is a wallet for **Shielded CSV** — a protocol that brings true privacy to Bitcoin through Client-Side Validation and Zero-Knowledge Proofs. No soft fork required. No new consensus rules. Bitcoin as it exists today.
+zkCoins is a protocol and system — node, wallet, and explorer — realizing **Shielded CSV**, which brings true privacy to Bitcoin through Client-Side Validation and Zero-Knowledge Proofs. No soft fork required. No new consensus rules. Bitcoin as it exists today.
 
 ## What can users do?
 
@@ -45,8 +44,8 @@ zkCoins implements the [Shielded CSV protocol](https://eprint.iacr.org/2025/068)
 
 ## Quick links
 
-- [Architecture Overview](/architecture/overview)
-- [Privacy Model](/architecture/privacy-model)
+- [Specification](/specification)
+- [Requirements](/requirements)
 - [Protocol Details](/protocol)
 - [Known Risks](/risks)
 - [GitHub](https://github.com/zk-coins)

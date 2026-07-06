@@ -1,5 +1,4 @@
 ---
-sidebar_position: 7
 title: Comparisons
 ---
 
@@ -14,7 +13,7 @@ zkCoins is the first real-world **implementation** of two whitepapers:
 - the **Shielded CSV** construction by Jonas Nick (Blockstream), Liam Eagen (Alpen Labs), and Robin Linus (ZeroSync) — [eprint 2025/068](https://eprint.iacr.org/2025/068);
 - the original **zkCoins** concept, prototyped as [ZeroSync/ZKCoins](https://github.com/ZeroSync/ZKCoins).
 
-The project at **zkcoins.com does not compete with these papers — it realizes them.** It claims no invention of the underlying scheme; its contribution is bringing the design to a running node, wallet, and the off-chain transport/recovery layer needed to operate it. Where this page says "zkCoins", read "the Shielded CSV scheme as realized by zkCoins".
+The project at **zkcoins.app does not compete with these papers — it realizes them.** It claims no invention of the underlying scheme; its contribution is bringing the design to a running node, wallet, and the off-chain transport/recovery layer needed to operate it. Where this page says "zkCoins", read "the Shielded CSV scheme as realized by zkCoins".
 
 ## The differentiator is a combination, not a single property
 
@@ -37,7 +36,7 @@ Almost every related protocol nails **two of the three** and misses the third:
 | **zkCoins (Shielded CSV)** | ✓ | ✓ | ✓ | — |
 
 :::note Spec design vs. shipped implementation
-The trustless corner is fully specified and the load-bearing fact is already true: everything that lands on Bitcoin is independently verifiable, so a wallet can re-derive and verify its own anchors from seed + chain.
+The trustless corner is fully specified and the load-bearing fact is already true: everything that lands on Bitcoin is independently verifiable, so a node can re-derive and verify its anchors from the seed, the chain, and the content-addressed, `k`-replicated off-chain bundles ([spec §4.5–§4.6](/specification#45-recovery)).
 
 Footprint figures in the tables below quote the **normative batched spec design** — one constant 231-byte `BatchInscription` per publisher batch (~318 vBytes commit + reveal pair), amortising to ~3.2 vBytes per spend at 100-record batches ([spec §3.8](/specification#38-fees-and-economics)).
 :::

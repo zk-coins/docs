@@ -1,5 +1,4 @@
 ---
-sidebar_position: 4
 title: Implementation Mandate
 ---
 
@@ -33,14 +32,14 @@ Done = node ✓ **and** sdk ✓ **and** app ✓, each conformant and the three p
 
 A layer is done only when **all** of the following hold:
 
-- **Spec-conformant.** Every normative MUST/MUST NOT in `docs/specification.md` that applies to the layer is implemented. The conformance test vectors ([spec test-vector section](./specification.md#test-vectors-conformance-harness)) are generated and pinned (§5 below), and both node and SDK reproduce them bit-for-bit.
+- **Spec-conformant.** Every normative MUST/MUST NOT in `docs/specification.md` that applies to the layer is implemented. The conformance test vectors ([spec test-vector section](./specification.md#test-vectors-conformance-harness)) are generated and pinned (§4 below), and both node and SDK reproduce them bit-for-bit.
 - **A-to-Z tested end to end.** Beyond unit coverage there is a full-journey test that exercises a real flow across all three layers running locally: create two accounts, mint, pay (with a real publisher batching the `SpendRecord` and inscribing a `BatchInscription` against a local/regtest Bitcoin), the recipient discovers + verifies + credits the coin, and a confirmation link renders. No mocks on the protocol path — real proofs, real inscriptions, real Nostr/Blossom transport.
 
-## 5. Conformance vectors come first
+## 4. Conformance vectors come first
 
 The spec's Poseidon-dependent values are marked `<REGEN>` because they must be **produced**, not invented (the spec explicitly forbids guessing Poseidon digests). The **first** node task is to implement [spec §1.7.1/§1.7.2](./specification.md) (Poseidon-Goldilocks + the `E(·)` field encoding) and the §1.7.9 circuit build, then compute every `<REGEN>` value (the empty roots, `asset_id`, `ash`, `coin.identifier`, `nf`, the Merkle roots, and the two `circuit_digest`s per network) and **submit them back to `docs/specification.md` as a PR**. Once two independent implementations agree on the same hex, those values are locked and become the cross-implementation conformance baseline (the SDK cross-Rust parity suite, `sdk/test/cross-rust/`, builds on them). Do not treat any `<REGEN>` row as authoritative until it is generated and pinned.
 
-## 7. Working method: autonomous, logged, professional, consistent
+## 5. Working method: autonomous, logged, professional, consistent
 
 Both the implementor **and** the agent that maintains/completes this spec work the same way:
 
