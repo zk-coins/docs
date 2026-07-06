@@ -69,7 +69,6 @@ Every doc page needs frontmatter:
 
 ```markdown
 ---
-sidebar_position: 3
 title: Page Title
 ---
 
@@ -77,6 +76,8 @@ title: Page Title
 
 Content starts here.
 ```
+
+Page order is controlled exclusively by `sidebars.js` — do not add `sidebar_position` frontmatter.
 
 ### Style Guide
 
