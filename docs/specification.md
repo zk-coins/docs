@@ -1551,7 +1551,7 @@ flowchart TB
 | Layer | What runs there | Repo | Role / trust |
 |---|---|---|---|
 | **App · Explorer** | end-user wallet UI (LNURL receive §4.3, push receipts §4.9) · public explorer web-app | `zk-coins/app` · `zk-coins/explorer` | presentation; the app holds keys on-device, the explorer holds none |
-| **SDK** | thin client — on-device key derivation and signing, node/API calls | `zk-coins/sdk` | custody stays on the device; REST + stream client |
+| **SDK** | thin client — on-device client-side primitives (key derivation, hashing, signing), node/API calls | `zk-coins/sdk` | custody stays on the device; REST + stream client |
 | **zkCoins API** (+ own PostgreSQL) | public REST and LNURL; hosted-wallet service | the API-layer repo | **optional**, off by default; owns a **non-value-bearing** database |
 | **zkCoins node** (+ PostgreSQL + Publisher) | the trustless **kernel**: scan · accumulator · verify · prove · store · publisher/broadcaster | `zk-coins/node` | the trustless core; owns the **value-bearing** database (§4.8) |
 | **bitcoind · Nostr relay** | Bitcoin L1 settlement and ordering · off-chain transport and data availability | upstream (own or external) | inherits Bitcoin's trust; transport trusted only for availability (§4.1) |
@@ -2241,6 +2241,6 @@ The `batch_message` preimage (covered by the BIP-340 challenge) is the fixed con
 3. Substitute the regenerated values into V.3 (`asset_id`, `coin_history_root`) and V.5 (`message@0`).
 4. Compute `ash@0` from the resulting `serialize(AccountState)` per [§1.7.4](#174-serializeaccountstate) and verify it matches the V.4 entry.
 5. Compute the BIP-340 signature with sign-to-contract per [§3.2](#32-batchinscription-signing-bip-340--sign-to-contract) and fill in V.5's `signature`. The signing key is a real secp256k1 key derived from a real BIP-32 path; a separate test-key fixture is needed because the V.1 illustrative `Pk₀_sample` is a raw 32-byte string, not a curve point.
-6. Submit the completed vectors back to the spec as a PR; the reference is locked once the SDK's independent primitive-level re-implementation reproduces the hash- and derivation-level values bit-for-bit — the two `circuit_digest`s are locked by the node's deterministic §1.7.9 build alone.
+6. Submit the completed vectors back to the spec as a PR; the reference is locked once the SDK's independent primitive-level re-implementation reproduces the hash- and derivation-level values bit-for-bit — the two `circuit_digest`s are locked by the node's deterministic §1.7.9 build alone, and the `signature` values (V.5, V.6) are locked by BIP-340 verification including the sign-to-contract tweak check ([§3.2](#32-batchinscription-signing-bip-340--sign-to-contract)), not byte equality.
 
 Until V.4 is filled in by a reference implementation, no `<REGEN>` row should be treated as authoritative. **Do not invent Poseidon digests.** A wrong vector is worse than no vector: it would lead two implementations to validate against each other's mistakes.

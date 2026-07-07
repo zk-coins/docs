@@ -45,6 +45,6 @@ A security proof establishes that the *specified* protocol is sound. That the *r
 | Gate | What must hold |
 |---|---|
 | **Public testnet** | Specification deep-review complete; conformance vectors generated and pinned; the A-to-Z suite passes across node, SDK, and app. |
-| **Real value (mainnet)** | Every incentive verdict is **holds** or **holds under stated assumptions** — no open and no **broken** verdicts (Workstream 1); security definitions and paper proofs are published (Workstream 2, steps 1–2); an external audit is completed with findings resolved (step 3); a vulnerability disclosure process is live ([SECURITY.md](https://github.com/zk-coins/docs/blob/develop/SECURITY.md)). |
+| **Real value (mainnet)** | Every incentive verdict is **holds** or **holds under stated assumptions** — no open and no **broken** verdicts (Workstream 1); security definitions and paper proofs are published (Workstream 2, steps 1–2); the cryptographic review of the §1.7 reference instantiation the spec requires before mainnet is complete ([spec §1.7.8](/specification#178-reference-instantiation-review-status)); an external audit is completed with findings resolved (step 3); a vulnerability disclosure process is live ([SECURITY.md](https://github.com/zk-coins/docs/blob/develop/SECURITY.md)). |
 
 These gates are ordered stations, not aspirations: a release that has not passed its gate does not ship.
