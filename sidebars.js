@@ -8,6 +8,7 @@ const sidebars = {
     'protocol',
     'comparisons',
     'risks',
+    'assurance',
   ],
 };
 
