@@ -612,7 +612,7 @@ Node / prover:
      {recipient = owner, amount, asset_id}
   5. run C as an InitialProof (clause 1, InitialProof path) when this is the account's first
      transition, or as an AccountUpdateProof with asset_issuance present when the creator
-     mints again on an existing account (clause 3 admits asset_issuance in any transition;
+     mints on an account that already has a prior transition (clause 3 admits asset_issuance in any transition;
      steps 1 and 3 then use the current skᵢ/Pkᵢ, rotating to Pkᵢ₊₁, instead of sk₀/Pk₀ → Pk₁;
      the asset_id derivation in step 2 is unchanged — it always binds Pk₀, and
      asset_issuance.creator_pubkey remains Pk₀). Either way the v1 issuance circuit
@@ -623,7 +623,7 @@ Node / prover:
 
 Produces an off-chain mint object:  { Pk₀ (x-only), nullifiers = [] (a mint spends nothing),
   BIP-340(sk₀, inr ‖ ocr), message = inr ‖ ocr }
-  (for a follow-up mint on an existing account, the current Pkᵢ/skᵢ take the place of Pk₀/sk₀)
+  (for a mint on an account with a prior transition, the current Pkᵢ/skᵢ take the place of Pk₀/sk₀)
   A mint contributes no nullifiers to the accumulator and therefore does NOT require a
   BatchInscription. Its validity is established off-chain: the receiver of any subsequent
   CoinProof verifies the mint's recursive proof transitively (cyclic recursion, §2.2)
