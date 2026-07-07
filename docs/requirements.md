@@ -20,7 +20,7 @@ The integrity of funds is enforced by cryptography and Bitcoin alone. No party �
 
 ### 4. Client-side validation
 
-A receiver accepts a coin only after independently verifying its full validity proof; correctness never depends on trusting the sender, the node, or any third party.
+A receiver — itself, or its own node acting on its behalf — accepts a coin only after independently verifying its full validity proof; correctness never depends on trusting the sender, a foreign node, or any third party. (Following the Bitcoin full-node model, the thin wallet trusts *its own* node exactly as a Bitcoin wallet trusts its own `bitcoind`; the trustless path is self-hosting that node, not bolting verification onto the wallet.)
 
 ### 5. Custody only in the wallet
 
