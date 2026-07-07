@@ -11,7 +11,7 @@ title: Assurance Roadmap
 Two distinct failure classes threaten the protocol, and they need different instruments:
 
 - **Incentive failures.** Every role behaves as specified only if behaving as specified is that actor's best strategy. Cryptographic proofs do not cover this: a protocol can be mathematically sound and still fail in production because rational operators act differently than the design assumes. Incentive failures surface only once the network is live and someone exploits them — and a live decentralized system cannot simply be patched. They must be found **before** launch, by analysis.
-- **Implementation failures.** The specification can be right and the code wrong. zkCoins deliberately runs a **single protocol implementation** (the Rust node; the TypeScript SDK independently re-implements only the client-side primitives — derivation and signing). There is no second full implementation to cross-check against, so the independent view a second client would provide must come from elsewhere: the conformance harness and an external audit.
+- **Implementation failures.** The specification can be right and the code wrong. zkCoins deliberately runs a **single protocol implementation** (the Rust node; the TypeScript SDK independently re-implements only the client-side primitives — derivation, hashing, and signing). There is no second full implementation to cross-check against, so the independent view a second client would provide must come from elsewhere: the conformance harness and an external audit.
 
 Both workstreams follow the project's standing rule: whatever they change flows through this repository as a spec PR first ([Implementation Mandate](/implementation-mandate)).
 

@@ -34,7 +34,7 @@ Supporting repos: [`zk-coins/research`](https://github.com/zk-coins/research) (p
 
 ## This repository (docs)
 
-A Docusaurus site published to Cloudflare Pages. Sections: Introduction, Requirements, **Specification**, Implementation Mandate, Protocol, Comparisons, Risks.
+A Docusaurus site published to Cloudflare Pages. Sections: Introduction, Requirements, **Specification**, Implementation Mandate, Protocol, Comparisons, Risks, Assurance Roadmap.
 
 ### Development
 

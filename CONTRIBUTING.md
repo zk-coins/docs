@@ -43,7 +43,8 @@ docs/
 │   ├── implementation-mandate.md # Standing instruction to every implementor
 │   ├── protocol.md               # Shielded CSV protocol reference
 │   ├── comparisons.md            # vs RGB, Lightning, Zcash, etc.
-│   └── risks.md                  # Known risks and limitations
+│   ├── risks.md                  # Known risks and limitations
+│   └── assurance.md              # Assurance roadmap (incentive analysis, verification staircase, gates)
 ├── src/css/custom.css            # Theme overrides (Bitcoin orange)
 ├── static/img/                   # Favicon, logos
 ├── docusaurus.config.js          # Site config
