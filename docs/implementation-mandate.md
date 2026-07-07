@@ -32,7 +32,7 @@ Done = node ✓ **and** sdk ✓ **and** app ✓, each conformant and the three p
 
 A layer is done only when **all** of the following hold:
 
-- **Spec-conformant.** Every normative MUST/MUST NOT in `docs/specification.md` that applies to the layer is implemented. The conformance test vectors ([spec test-vector section](./specification.md#test-vectors-conformance-harness)) are generated and pinned (§4 below), and both node and SDK reproduce them bit-for-bit.
+- **Spec-conformant.** Every normative MUST/MUST NOT in `docs/specification.md` that applies to the layer is implemented. The conformance test vectors ([spec test-vector section](./specification.md#test-vectors-conformance-harness)) are generated and pinned (§4 below), and node and SDK each reproduce the values in their scope bit-for-bit (the SDK the hash- and derivation-level values; the two `circuit_digest`s come from the node's deterministic §1.7.9 build).
 - **A-to-Z tested end to end.** Beyond unit coverage there is a full-journey test that exercises a real flow across all three layers running locally: create two accounts, mint, pay (with a real publisher batching the `SpendRecord` and inscribing a `BatchInscription` against a local/regtest Bitcoin), the recipient discovers + verifies + credits the coin, and a confirmation link renders. No mocks on the protocol path — real proofs, real inscriptions, real Nostr/Blossom transport.
 
 ## 4. Conformance vectors come first
