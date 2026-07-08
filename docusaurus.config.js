@@ -86,6 +86,10 @@ const config = {
               { label: 'Requirements', to: '/requirements' },
               { label: 'Specification', to: '/specification' },
               { label: 'Protocol', to: '/protocol' },
+              { label: 'Implementation Mandate', to: '/implementation-mandate' },
+              { label: 'Comparisons', to: '/comparisons' },
+              { label: 'Risks', to: '/risks' },
+              { label: 'Assurance', to: '/assurance' },
             ],
           },
           {

@@ -219,7 +219,7 @@ Off-chain value with a Bitcoin peg; privacy via blind signatures rather than ZK.
 
 | Technology | Privacy level | Status |
 |---|---|---|
-| **Shielded CSV** | Maximum (full ZK) | |
+| **Shielded CSV** | Maximum (full ZK) | Testnet (running node) |
 | **Silent Payments (BIP352)** | Receive-only | Near production |
 | **PayJoin (BIP77/78)** | Send-privacy | Production |
 | **CoinJoin** | Medium (statistical) | Under regulatory pressure |

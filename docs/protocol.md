@@ -70,5 +70,5 @@ The table below contrasts a regular Bitcoin transaction with the **Shielded CSV 
 | Sign-to-Contract | Embed transaction hash into Schnorr signature |
 | Schnorr Half-Aggregation | Compress multiple nullifier signatures |
 | Proof-Carrying Data | Recursive ZK proofs of transaction validity |
-| Recursive zkSNARKs / STARKs | PCD instantiation |
+| Recursive zkSNARK (Plonky2, cyclic recursion + FRI) | PCD instantiation |
 | Sparse Merkle Trees | Nullifier accumulator, membership + non-membership proofs (zkCoins v1: 256-bit-depth SMT, [spec §1.7.6](/specification#176-nullifier-accumulator-sparse-merkle-tree)) |
