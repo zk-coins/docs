@@ -26,7 +26,7 @@ Each transition carries a recursive zero-knowledge validity proof. Generating it
 
 **Risk: A node you delegate to sees your transaction details.**
 
-A node that proves and serves on your behalf holds your operational bundle (`ivk` / `ovk` / `op`) and therefore sees your plaintext — amounts, assets, senders, and recipients ([spec §6.1](/specification#61-components-and-responsibilities), [§6.6](/specification#66-threat-model-and-trust-configurations)). Using someone else's node discloses this to that operator — the same spectrum as pointing a Bitcoin wallet at someone else's Electrum server.
+A node that proves and serves on your behalf holds your operational bundle (`ivk` / `ovk` / `op` / `nk` / `op_secret`) and therefore sees your plaintext — amounts, assets, senders, and recipients ([spec §6.1](/specification#61-components-and-responsibilities), [§6.6](/specification#66-threat-model-and-trust-configurations)). Using someone else's node discloses this to that operator — the same spectrum as pointing a Bitcoin wallet at someone else's Electrum server.
 
 **Mitigation:** Self-host. Your own node verifies your transactions and sees your plaintext, and since you are the operator, nothing leaks — trustlessness and privacy at once ([spec §6.6](/specification#66-threat-model-and-trust-configurations)). The SPEND branch never leaves the wallet in any configuration ([spec §1.2](/specification#12-key-hierarchy)), so a node — yours or foreign — can never steal, forge, or double-spend; only privacy and liveness are delegated.
 
@@ -34,9 +34,9 @@ A node that proves and serves on your behalf holds your operational bundle (`ivk
 
 **Risk: The wallet device is the custody boundary.**
 
-The wallet holds the seed and is the sole custodian of the SPEND branch (`skᵢ`, `nk`); these keys never leave it ([spec §1.2](/specification#12-key-hierarchy)). A compromised wallet endpoint can extract them.
+The wallet holds the seed and is the sole custodian of the SPEND branch (`skᵢ`); the spend key never leaves it ([spec §1.2](/specification#12-key-hierarchy)). A compromised wallet endpoint can extract it. (`nk` — own hardened branch `A/3'` — is derived from the seed but delegated to the wallet's *own* node as part of the operational bundle so the node can build proving witnesses; it cannot spend, only link the account's own spends.)
 
-**Mitigation:** The key hierarchy is hardened so that the view/operational keys a wallet delegates to a node (`ivk` / `ovk` / `op`) **cannot** derive the SPEND branch ([spec §1.2](/specification#12-key-hierarchy)) — a captured node, or a leaked view grant, never yields spend authority. Securing the wallet device itself (key storage at rest, authentication) is the user's responsibility, as with any self-custodial wallet.
+**Mitigation:** The key hierarchy is hardened so that the operational bundle a wallet delegates to a node (`ivk` / `ovk` / `op` / `nk` / `op_secret`) **cannot** derive the SPEND branch ([spec §1.2](/specification#12-key-hierarchy)) — a captured node, or a leaked view grant, never yields spend authority. Securing the wallet device itself (key storage at rest, authentication) is the user's responsibility, as with any self-custodial wallet.
 
 ## Coin creation time leak
 
