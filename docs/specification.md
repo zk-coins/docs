@@ -568,8 +568,8 @@ w = {
                                                      // created this coin (delivered inside its CoinProof bundle);
                                                      // breaks the would-be coin.identifier ↔ new_ash recursion
     coin_index                                       // the coin's output ordinal in its creating transition
-                                                     //   (= inclusion_proof.leaf_index of its original CoinProof, §1.5);
-                                                     //   needed to recompute coin.identifier in clause 2(c)
+                                                     // (= inclusion_proof.leaf_index of its original CoinProof, §1.5);
+                                                     // needed to recompute coin.identifier in clause 2(c)
   },
   txn_sig        = BIP-340(skᵢ, message),            // the account's single transition signature (SpendRecord)
   txn_pubkey     = Pkᵢ (x-only),                     // current_pubkey, authorises this whole transition
@@ -579,8 +579,8 @@ w = {
     creating_proof,                                  // the creating transition's recursive proof π (verified in-circuit)
     inclusion_proof,                                 // membership of coin.identifier in creating_proof's output_coins_root
     creating_prev_ash,                               // PRIOR account_state_hash of the creating transition; lets clause 10(b)
-                                                     //   recompute coin.identifier over the full (recipient, asset_id, amount)
-                                                     //   tuple (delivered inside the coin's CoinProof bundle, §1.5)
+                                                     // recompute coin.identifier over the full (recipient, asset_id, amount)
+                                                     // tuple (delivered inside the coin's CoinProof bundle, §1.5)
     creating_anchors_opening,                        // {anchors_root, anchors_rand} opening the creating proof's anchors_commitment (§1.7.10)
     creating_anchors_extension,                      // MMR extension witness: extends(creating anchors_root, this transition's anchors_root)
     creating_spend_record,                           // serialize(SpendRecord) of the creating transition (absent for a mint)
