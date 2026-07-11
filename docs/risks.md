@@ -86,6 +86,14 @@ A payment is delivered as an off-chain `CoinProof` bundle that the sender hands 
 
 **Mitigation:** Delivery is store-and-forward, so the recipient need not be online at send time — only eventually reachable. Relays retain the gift-wrapped bundle until the recipient (or its always-on node) comes online and runs the `detect_tag` scan ([spec §4.2](/specification#42-bundle-delivery), [§4.4](/specification#44-note-discovery)); the always-on node, not the wallet, holds the live subscription and verifies on the wallet's behalf ([spec §4.9](/specification#49-real-time-push-delivery)). The sender retains and replicates its copy until it receives an acknowledgement ([spec §4.2](/specification#42-bundle-delivery)).
 
+## Unobservable total supply
+
+**Risk: The total supply of a v1 asset is cryptographically unobservable, and over-issuance by the asset's creator is neither prevented nor detectable at the protocol level.**
+
+Assets and amounts are hidden by design ([spec §3.5](/specification#35-inscription-format)), so no observer can sum a v1 asset's circulating supply. What the protocol does enforce is that nobody *else* can inflate an asset: mint authority is monopolised on the creator's spend key, and per-asset conservation binds every other account ([spec §2.4](/specification#24-soundness-summary), [§6.5](/specification#65-issuance--versioned-schemas-v1-minimal)). The creator itself, however, faces no cap: a mint consumes no inputs, contributes no nullifier, and need not be anchored on Bitcoin ([spec §2.3.1](/specification#231-mint--issuance)), so further mints extend a single private linear lineage and leave no public artefact ([spec §6.5](/specification#65-issuance--versioned-schemas-v1-minimal)).
+
+**Mitigation:** Supply discipline is a creator's commitment, not a protocol guarantee — hold a v1 asset only to the extent you trust its issuer, exactly as with any single-issuer asset ([spec §6.5](/specification#65-issuance--versioned-schemas-v1-minimal)). Protocol-enforced, auditable supply is deferred to a future `IssuanceTerms` version; the version-binding through `asset_id` guarantees that coins minted under different issuance schemas cannot be confused ([spec §6.5, forward compatibility](/specification#forward-compatibility-future-versions)).
+
 ## Carrying real Bitcoin requires a bridge
 
 **Risk: The protocol moves shielded coins, not on-chain BTC.**
