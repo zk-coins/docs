@@ -210,6 +210,15 @@ The fixed strings `zkCoins/v1/genesis` (an `Hc` *input* constant, [§1.4](#14-id
 
 Reusing a context for two purposes is forbidden. Where a later section writes shorthand such as `Hc("Coin", …)` or `H("Invoice" ‖ …)`, this is equivalent to the full prefixed form `Hc("zkCoins/v1/Coin", …)` / `H("zkCoins/v1/Invoice" ‖ …)`; **implementations MUST use the full prefixed string**, the shorthand is a notation convenience. The address derivation `address = H(Pk₀ ‖ nk_commit)` ([§1.4](#14-identifiers-and-hashes)) is the one identifier with no context prefix — by design, since its input `Pk₀ ‖ nk_commit` is already SHA-256-collision-bound.
 
+**HKDF parameter mapping (normative).** Every `HKDF(tag, material)` call in this document — `K_tx`, `K_out` ([§1.3](#13-per-coin-keys-note-encryption--detection)), `nav_rand` ([§1.4](#14-identifiers-and-hashes)), and the ZBE `kb` ([§4.2.1](#421-bundle-blob-encryption-zbe-normative)) — denotes HKDF-SHA-256 per RFC 5869 with one fixed parameter mapping:
+
+- **`IKM`** = `material` — the raw byte-concatenation of the shorthand's `‖`-joined arguments ([§1.7.2](#172-field-encoding-e-of-hc-inputs)'s note that HKDF preimages absorb raw bytes, not the `Hc` length-prefixed input-list encoding), each argument in its existing fixed-width byte encoding used throughout this document.
+- **`salt`** = 32 zero bytes.
+- **`info`** = `tag` — the full `"zkCoins/v1/<context>"` string, ASCII bytes, no length prefix or terminator.
+- **`L`** (output length) = 32 bytes.
+
+That is, `HKDF(tag, material) = HKDF-Expand(HKDF-Extract(salt = 0x00×32, IKM = material), info = tag, L = 32)`. [§4.2.1](#421-bundle-blob-encryption-zbe-normative)'s `kb = HKDF-SHA256(IKM = K_tx, salt = 32 zero bytes, info = "zkCoins/v1/BlobKey", L = 32)` is this same mapping spelled out for the single-argument case `material = K_tx`; it applies identically to every other `HKDF` call site, so `K_tx`, `K_out`, and `anchors_rand` are bit-reproducible across implementations.
+
 ### 1.2 Key hierarchy
 
 All key material descends deterministically from a single 256-bit **seed**. The seed is the only thing a user backs up ([Requirement 6](/requirements)).
@@ -270,7 +279,8 @@ Per output coin:
   out_ciphertext = NIP44_v2(K_out, K_tx)                  (outgoing-recovery envelope; §4.2 self-delivery)
 ```
 
-- The coin plaintext is encrypted under `K_tx` (NIP-44 v2). Only a holder of `ivk` (the recipient, or its node) can re-derive `K_tx` and decrypt.
+- `K_tx` and `K_out` instantiate the [§1.1](#11-cryptographic-primitives) `HKDF(tag, material)` parameter mapping (`IKM = material` — here `ss ‖ epk` or `ovk ‖ epk` — `salt` = 32 zero bytes, `info = tag`, `L = 32`).
+- The coin plaintext — `serialize(Coin)` ([§1.5](#15-core-data-structures), the coin's `{identifier, recipient, amount, asset_id}`) — is encrypted under `K_tx` (NIP-44 v2) as `ciphertext = NIP44_v2(K_tx, serialize(Coin))`; this is the `CoinProof.ciphertext` field ([§1.5](#15-core-data-structures)). It is **distinct** from the bundle-level ZBE output the whole serialised `CoinProof` is wrapped in for transport and content-addressing ([§4.2](#42-bundle-delivery) steps 1–2, [§4.2.1](#421-bundle-blob-encryption-zbe-normative)) — the two are different byte strings under different schemes that happen to share the informal name "ciphertext"; only the bundle-level one is ever hashed for `blob_id`. Only a holder of `ivk` (the recipient, or its node) can re-derive `K_tx` and decrypt either.
 - `detect_tag` lets a recipient/node find its own coins **without trial-decrypting every event**. The **sender** computes it from the shared secret `ss = ECDH(esk, IVPK)`; the **recipient**, holding `ivk`, recomputes `ss = ECDH(ivk, epk)` for each candidate's published `epk`, then `Hc("zkCoins/v1/DetectTag", ss ‖ epk)`, and matches against the published `detect_tag` — one ECDH plus one Poseidon hash per scanned event, replacing the full AEAD trial-decryption **and** the (≈100 KB) blob fetch for every non-matching event. Because every coin uses a fresh `epk`, each recipient's events carry **all-distinct** tags: a tag does **not** link two of one recipient's coins, and a relay that holds neither `ivk` nor the sender's `esk` can **neither** pre-filter for the recipient **nor** correlate the recipient's events. Detection does not reduce the *count* of candidates the recipient pulls. `ivk` is **seed-derivable**, so detection doubles as the recovery scan key ([Requirement 6](/requirements)).
 - **Why the shared secret, not a recipient-only key (normative rationale).** The tag **MUST** derive from `ss` — not from a value bound to the recipient's secret `ivk` alone — because the **sender** sets the tag at send time and holds only the recipient's public `IVPK`. It can compute `ss = ECDH(esk, IVPK)`, but **cannot** compute any function of the recipient's secret key. A recipient-only detection key (e.g. `HKDF(ivk)`) would shrink the recipient's per-event check to a single hash, but is **unsatisfiable for an open, no-prior-interaction address**: a per-coin tag that is simultaneously (i) sender-computable from a static public key and (ii) unlinkable to outsiders must carry its per-coin entropy through a Diffie–Hellman with the fresh `epk`, so the recipient's check is inherently one ECDH per candidate, never a bare hash. The bandwidth lever is the optional Fuzzy message detection below, not a cheaper tag derivation.
 - **Key-reuse safety (normative).** The same shared secret `ss` feeds both the **secret** note key `K_tx = HKDF("zkCoins/v1/NoteKey", ss ‖ epk)` and the **public** `detect_tag = Hc("zkCoins/v1/DetectTag", ss ‖ epk)`. The two are domain-separated outputs of `ss ‖ epk` under distinct context strings **and** distinct primitives (HKDF-SHA-256 vs Poseidon); modelling each primitive as an independent random oracle, neither value reveals the other. In particular the on-the-wire `detect_tag` does **not** leak `ss` (Poseidon preimage resistance, [§1.7.1](#171-poseidon-instance-and-digest-encoding)), so publishing the tag does **not** weaken `K_tx` or the coin's confidentiality.
@@ -344,6 +354,8 @@ CoinProof    = {                            // the value-bearing off-chain bundl
 Invoice      = { amount, recipient: address, asset_id, memo? }     // shareable, off-chain
 ```
 
+**`serialize(Coin)` (normative).** Wherever `Coin` is carried in a byte layout that is hashed, content-addressed, or read as a wire value — the `coin` field of `CoinProof` above, and the [§1.3](#13-per-coin-keys-note-encryption--detection) `ciphertext = NIP44_v2(K_tx, serialize(Coin))` envelope — it is the fixed **112-byte** concatenation of its four fields, each at its [§1.7.3](#173-fixed-widths) width: `identifier` (32 bytes) ‖ `recipient` (32 bytes, the `address`) ‖ `amount` (16 bytes big-endian, u128) ‖ `asset_id` (32 bytes). There is no length prefix or optional field: every `Coin` serializes to exactly these 112 bytes.
+
 ### 1.6 Trees: one global structure, one per-account structure
 
 | Structure | Scope | Contents | Built from |
@@ -400,6 +412,7 @@ The same `x` always produces the same `E(x)`, regardless of which call uses it. 
 | `issuance_version` | 8 (u8) | One small-numeric element; bound into `asset_id` (§1.4) and `IssuanceTerms.terms_hash` ([Architecture §6.5](#65-issuance--versioned-schemas-v1-minimal)) |
 | `coin_index` | 32 (u32) | One small-numeric element |
 | `send_counter` | 64 (u64) | Encoded as **8-byte big-endian** byte-string input per §1.7.2 (1 length element + 2 limbs of 7 bytes = 3 absorbed elements); same 8 bytes big-endian in `serialize` |
+| `unix_seconds` (`not_before`, `not_after`, `expiry`, [§5.1](#51-capability-gated-pull), [§5.2](#52-view-grant)) | 64 (u64) | Encoded as **8-byte big-endian**, identical treatment to `send_counter` above; this is the width used wherever these fields are concatenated in a raw `H(…)` preimage (e.g. `grant_message`, §5.2), not only inside an `Hc` input list |
 | `block_anchor.height` | 32 (u32) | One small-numeric element; 4 bytes big-endian on-chain (§3.5) |
 | `name_hash`, `address`, `nk`, `epk`, `Pkᵢ` | 256 | Byte-string input, encoded per §1.7.2 (length prefix + 5 chunks) |
 | `Hc` digest (`asset_id`, `coin.identifier`, `nf`, `ash`, `nk_commit`, `ocr`, `inr`, any root) | 256 (4 limbs) | Digest input, encoded per §1.7.2 |
@@ -470,6 +483,8 @@ Insertion of `(Pkᵢ, Rᵢ)` by **first occurrence** ([On-chain §3.6](#36-chain
 - **Empty subtree at level `i`** has the precomputed hash `E'ᵢ` defined recursively by `E'₀ = H'_leaf(0)` and `E'ᵢ = H'_node(i, E'_{i-1}, E'_{i-1})`. The 257 values `E'₀, …, E'₂₅₆` are constants of the protocol; `E'₂₅₆` is the **empty coin-history root** (the `coin_history_root` of the canonical empty account, §2.2).
 
 **Operations.** A transition that spends `input_coins[j]` proves in-circuit that `coin.identifier = input_coins[j].identifier` has leaf state `1` against the prior `coin_history_root` (clause 2(b)); the same transition flips that leaf from `1` to `2` (spent) and admits each newly received output template by flipping its key from `0` to `1` (received-unspent). `coin_history_root` after the transition is the recomputed root over these updates and is the value bound into the new `AccountState` (clause 8, §1.7.4). The distinct `CoinHist/Leaf` and `CoinHist/Node` tags — and the per-level domain separation in `H'_node` — make these constants distinct from the nullifier accumulator's `E_i` even though the SMT skeleton is the same.
+
+**`balances` is the state-`1` partition (normative).** `AccountState.balances` ([§1.5](#15-core-data-structures)) is not an independently free field: by the [§2.1 clause 7](#21-the-compliance-predicate) closed relation, `balances(a)` equals, for every `asset_id` `a`, the sum of `amount` over this coin-history SMT's own state-`1` (held, unspent) leaves whose coin carries `asset_id = a` — by induction from the canonical empty account, where both `balances` and the coin-history tree are empty ([§2.2](#22-proof-types)). Every transition debits/credits exactly the same leaves on both sides (spend `1 → 2` debits `In(a)`; admit `0 → 1` credits the matching `output_templates`/`received_coins[]` amount, clause 7, clause 8), so the two structures never diverge.
 
 #### 1.7.7 Bech32m and Bitcoin conventions
 
@@ -627,7 +642,7 @@ w = {
 
 7. **New account state.** `new_account_state` is `prev_account_state` with: `balances` updated per clause 3 (debit spent inputs, credit change and any issuance) **and credited with every `received_coins[]` amount admitted by clause 10**, `current_pubkey = next_pubkey = Pkᵢ₊₁` (the same `w.next_pubkey` whose folding into `new_account_state_hash` clause 2 binds to the custody signature via sign-to-contract), `send_counter` incremented by one, and `coin_history_root` set to the value produced by clause 8 (the recomputed per-account coin-history SMT root, [Foundations §1.7.6](#176-nullifier-accumulator-sparse-merkle-tree)). The updated `balances` **MUST** hold at most `MAX_ACCOUNT_ASSETS` distinct non-zero entries ([§2.5](#25-circuit-dimensioning-normative)); the circuit builds `serialize(new_account_state)` over its fixed `MAX_ACCOUNT_ASSETS` balance slots with the inactive-slot discipline of [§1.7.4](#174-serializeaccountstate), so the in-circuit `ash` equals the out-of-circuit variable-length `Hc("AccountState", serialize(new_account_state))` bit-for-bit. `ProofData.new_account_state_hash` **MUST** equal `ash = Hc("AccountState", serialize(new_account_state))` ([Foundations §1.4, §1.7.4](#14-identifiers-and-hashes)). `new_account_state.owner` **and** `new_account_state.nk_commit` **MUST** be unchanged.
 
-8. **Coin-history update.** The per-account coin-history SMT is updated to mark spent inputs (`1 → 2`), admit the change/issuance coins (`0 → 1`), and admit every `received_coins[]` entry accepted by clause 10 (`0 → 1`); `ProofData.coin_history_root` **MUST** equal the resulting root.
+8. **Coin-history update.** The per-account coin-history SMT is updated to mark spent inputs (`1 → 2`), admit every output coin this transition returns to the account itself — `output_templates[k].recipient = prev_account_state.owner`, i.e. `Self(a)` of clause 7's `balances` update (the change coin(s) and any self-retained `asset_issuance` output alike) — (`0 → 1`), and admit every `received_coins[]` entry accepted by clause 10 (`0 → 1`); `ProofData.coin_history_root` **MUST** equal the resulting root.
 
 9. **Public-input binding.** All five `ProofData` fields — `new_account_state_hash`, `output_coins_root`, `input_nullifiers_root`, `coin_history_root`, `nav_commitment` — **MUST** be the in-circuit-computed values above and are the proof's public inputs; **and** the circuit **MUST** additionally expose **one** public output, the transition's **consumed key** `consumed_pubkey = Pkᵢ` (the `txn_pubkey` of clause 2, checked `== prev_account_state.current_pubkey`), so a successor (clause 1 key-binding (iii)) and a receiver (clause 10(d)) bind each on-chain nullifier's key to the *specific* key its transition consumed. `Pkᵢ` is **already** the public on-chain nullifier key (§3.1), so exposing it leaks nothing not already on Bitcoin; and it does **not** link an account's consecutive transitions — each `Pkᵢ` is a **fresh rotating** key and the rotation edge `Pkᵢ → Pkᵢ₊₁` stays hidden inside `new_account_state_hash` (clause 2/7), so a chain observer or a recipient sees only unlinkable one-time keys, and only the account's own secrets (via the recursion) privately tie them together ([Requirement 2](/requirements) preserved). Nothing **else** is public: amounts, asset ids, recipients, the other keys (`nk`; the rotated `next_pubkey` hidden inside `new_account_state_hash`, clause 2/7), counts, and the underlying conditional NAV `nav` (hidden inside `nav_commitment`, clause 1) remain in the witness (zero-knowledge).
 
@@ -669,6 +684,8 @@ Because recursion is **cyclic** — one fixed circuit that verifies proofs of it
 - **Conditional NAV.** The fifth public input `nav_commitment` hides the transition's conditional nullifier-accumulator value `nav` ([§2.1 clause 1](#21-the-compliance-predicate)) — the chain-derived accumulator value that contains all the transition's dependency nullifiers. A receiver opens it from the `CoinProof` bundle and checks `nav` is a **canonical** value on its own chain-derived accumulator ([§2.3.3 step 2](#233-receive)); the in-circuit prefix chain (clause 1, clause 10c) carries every **dependency** nullifier into `nav`, while the per-hop **predecessor-nullifier check** (clause 1) and clause 10(d) require each state-advancing transition's **own** `(Pkᵢ, Rᵢ)` to be a canonical member too — bound, key and leaf, to the *specific* key the transition consumed (clause 1 (iii), clause 10(d)) — so that single check attests the **whole lineage's** anchoring, and a reorg that orphans a dependency degrades the transition to a no-op ([§3.9](#39-finality-and-reorg-handling)) rather than stranding the account.
 
 **Network/chain separation (normative).** The verifier data of `C` is parameterised by a fixed network tag (`"zkCoins/v1/mainnet"`, `"zkCoins/v1/testnet"`, …), so a proof valid against one network's verifier data is unsatisfiable against another's. A conforming verifier MUST refuse a proof whose verifier data does not match the network it is operating on ([§1.7.9](#179-proof-system-parameters-normative)).
+
+**`C_balance` (normative, cross-reference).** The [§5.7](#57-balance-attestation-history-private) `BalanceAttestation` is produced by a second, **non-cyclic** circuit `C_balance` — unlike the compliance circuit `C` it never verifies a proof of itself, so it carries no cyclic-recursion machinery. It verifies exactly one `C`-proof `π` under `C`'s pinned verifier data (a non-cyclic foreign-verifier-data check), plus the balance-disclosure checks the §5.7 statement lists. Because a `BalanceAttestation` proof is handed to a disclosure verifier and its witness is the subject's **full** `AccountState` (every asset's balance, not only the one attested), `C_balance` **MUST** likewise be built with zero-knowledge enabled ([§1.7 circuit configuration](#179-proof-system-parameters-normative), [Requirement 2](/requirements)); its circuit configuration and pinned circuit digest are fixed by [§1.7.9](#179-proof-system-parameters-normative), exactly as for `C`.
 
 ### 2.3 State transitions
 
@@ -1225,6 +1242,8 @@ The chain guarantees the **integrity** of the head; self-delivery is what guaran
 
 The control event (step 3) and the acknowledgement are small and use **NIP-44 v2** directly. The **`CoinProof` bundle blob** (typically ~100 KB) exceeds NIP-44 v2's 65 535-byte plaintext limit, so it is encrypted with **zkCoins Bundle Encryption (ZBE)** — a chunked AEAD framing over **ChaCha20-Poly1305** (an IETF-standard AEAD; NIP-44 v2 uses the same ChaCha20 stream cipher but pairs it with HMAC-SHA-256 rather than Poly1305, so ZBE adds Poly1305 as its only new primitive — a standard, conservative choice). ZBE is its own on-wire format, **not** a sequence of NIP-44 v2 messages. ZBE applies to the value-bearing, recipient-encrypted `CoinProof` bundles — the only off-chain blob class in the paper model. (The nullifier accumulator is rebuilt from the on-chain nullifiers alone, [§3.6](#36-chain-scanning), so there is no public, consensus-bearing off-chain blob that would have to be stored in plaintext for every scanner to read.)
 
+The key derivation `kb` below is the fully spelled-out, single-argument instance of the general `HKDF(tag, material)` parameter mapping fixed in [§1.1](#11-cryptographic-primitives) (`material = K_tx`).
+
 ```
 Inputs:  K_tx  (32-byte per-coin note key, §1.3)
          P     (plaintext blob = serialize(CoinProof bundle))
@@ -1529,6 +1548,8 @@ grant_id      = H( grant_message )            // stable handle for revocation
 ```
 
 The signing tag `"zkCoins/v1/Grant"` is the reserved `Grant` context from [Foundations §1.1](#11-cryptographic-primitives); `H` and the input ordering are per [Foundations §1.4, §1.7](#14-identifiers-and-hashes).
+
+**Byte-level encoding of `grant_message` (normative).** As with `invoice_message` ([§4.3](#43-addressing-for-delivery)), `H(…)` is plain SHA-256 concatenation, not the `Hc` field-encoding of [§1.7.2](#172-field-encoding-e-of-hc-inputs). In declaration order: `version` (1 byte, u8; currently always `0x01`); `subject` (32 bytes, the address digest); `grantee` (32 bytes, x-only); `asset_ids` — one **discriminator byte**, `0x00` for the wildcard `"*"` (no further bytes), or `0x01` followed by a **u32-be count** and that many 32-byte `asset_id` digests in listed order; `not_before`, `not_after`, `expiry` (8 bytes big-endian each, u64, §1.7.3); `nonce` (its 16 raw bytes). Without the `asset_ids` discriminator and count, a wildcard grant and an explicit-list grant — or two explicit lists of different length — could not be distinguished from the concatenated bytes alone; this closes that ambiguity the same way the `invoice_message` fix above closes it for `memo`/`relays`.
 
 **Encoding.** A `ViewGrant` is serialised in the field order above and encoded as **Bech32m** with HRP **`zkgrant`** ([Foundations §1.7](#17-encoding-serialization-and-the-reference-instantiation)), so it is never confused with an `address` (`zk`) or a per-coin capability (`zkview`). A node **MUST** reject a grant under any other HRP.
 
@@ -1933,7 +1954,7 @@ The only thing that is **never** part of a node deployment is the SPEND branch �
 
 The wallet is a **thin client**. It never delegates spend authority; it delegates only viewing and serving:
 
-- **Own node.** The wallet entrusts its node with the full operational bundle `{ivk, ovk, op, nk, op_secret}` (Foundations §1.2) over an authenticated, encrypted channel. The node can then receive, decrypt, discover, prove, and serve on the account's behalf 24/7. None of the bundle can spend.
+- **Own node.** The wallet entrusts its node with the full operational bundle `{ivk, ovk, op, nk, op_secret}` (Foundations §1.2) over an authenticated channel — concretely, the ownership-proof-gated entrust/revoke endpoints and canonical bundle encoding of [§7.7](#77-wallet--node-bootstrapping-normative), carried over the node's already-mandatory TLS/Tor transport ([§7.5](#75-node-rest-api-normative)). The node can then receive, decrypt, discover, prove, and serve on the account's behalf 24/7. None of the bundle can spend.
 - **Foreign node.** The wallet **MUST NOT** hand a foreign operator the bundle. Instead it issues that node a scoped, `op`-signed **view grant** (Bech32m HRP `zkgrant`, Foundations §1.7) that authorises a bounded read — defined in [Access & Explorer](#5--access--explorer).
 
 Before it signs, the wallet fetches the current authoritative state (the account's latest `AccountState`, the relevant nullifier-set state, and the input bundles) from its node. Verifying that state against Bitcoin is the **node's** job, performed on the wallet's behalf — the Bitcoin full-node model ([Requirement 4](/requirements) is always "the receiver, **or its node on its behalf**"): the wallet trusts **its own** node exactly as a Bitcoin wallet trusts its own `bitcoind`, and trust is reduced by **self-hosting**, never by bolting verification onto the thin client. Relying on a *foreign* node instead is the deliberate trade-off of §6.6.
@@ -2021,7 +2042,9 @@ Custody is **cryptographically safe in every configuration**: no node holds a SP
 
 - **Own wallet + own node.** Full privacy, trustless correctness, safe custody. The node sees your plaintext, but you are the operator, so nothing leaks.
 - **Own wallet + multiple foreign nodes.** Plaintext is disclosed to all of them; the wallet gets fail-closed discrepancy detection (§6.3): with ≥1 honest node it never *accepts* a false answer, but any single dishonest node can stall it (it halts on disagreement), and consistent collusion of all configured nodes defeats it; custody safe. Running your own node removes this trade-off.
-- **Own wallet + a single foreign node.** Plaintext disclosed to it; you trust it for correctness and liveness (it can lie or omit), but it **cannot** steal, forge, or double-spend; custody safe.
+- **Own wallet + a single foreign node.** Plaintext disclosed to it; you trust it for correctness and liveness (it can lie or omit — including, for a send, proposing outputs that redirect the payment, since the thin wallet cannot independently check `ocr` against the outputs it posted before signing, see below); it **cannot** forge a signature, double-spend, or spend without your key — custody (key theft) safe.
+
+**Send-intent integrity is a correctness property, not custody.** "Cannot [steal, forge, or double-spend]" above is precise about **custody**: a node without the SPEND key can never produce a valid `txn_sig`, so it can never move a coin unilaterally, in every configuration. It does not mean every field a node proposes for the wallet's cooperative signature is independently checked by the wallet. For a send, the sole prover — in both the **own node** and **single foreign node** rows above — chooses the witness, including which `output_templates[]` (hence which `output_coins_root`) it builds the proof from, before the wallet ever sees it ([§7.5](#75-node-rest-api-normative)). Because the thin wallet runs no Poseidon (the thin-client rule), it cannot recompute `output_coins_root` from the templates it posted and so signs the node-reported `ocr` on trust that the node proved the templates it was given, not others ([§7.5](#75-node-rest-api-normative)). A dishonest or compromised single foreign node can therefore redirect a send's outputs to a party of its choosing within one cooperative signature — a correctness failure of the same kind this section already asks a foreign operator to be trusted for, not a break of the custody guarantee (no signature is forged, no coin moves without the wallet's key), but its effect on the sender is the same as theft. Self-hosting, or using only a node vetted for correctness and not merely liveness, is the only mitigation this design offers; see [Risks](/risks).
 
 **Node building blocks — own vs external.** Independently of the wallet↔node choice above, a node operator also chooses where its `bitcoind` and its `nostr-relay` come from ([§6.1](#61-components-and-responsibilities)). Running both yourself is the sovereign default. Pointing the node at an **external `bitcoind`** trades privacy (that node sees your chain queries) and raises eclipse exposure (the inherited assumption below), but **cannot** affect custody or correctness beyond that eclipse exposure — the node still re-verifies every inscription, bundle, and proof against its Bitcoin chain view ([Requirement 4](/requirements) via §6.2), and an external `bitcoind` can distort only that chain view, which the inherited ≥1-honest-peer assumption bounds. Using **external relay(s)** for transport sits on the same spectrum as any foreign relay: trusted only for availability and metadata-minimisation, never for correctness or custody (§4.1). Both are deliberate trade-offs, not new trust roots.
 
@@ -2149,6 +2172,46 @@ The **proving handshake** keeps custody in the wallet: the wallet posts the tran
 
 `status` and `phase` use the literal strings of the `/v1/jobs/<job_id>` object above; a client that cannot hold an SSE connection falls back to polling with `Retry-After`.
 
+**Job result, `awaiting_signature`, and error shapes (normative).** The `/v1/jobs/<job_id>` object carries phase- and outcome-specific payloads in three additional fields; `kind` echoes the `TransitionRequest.kind` (`"mint"|"send"|"receive"`, above) that started the job:
+
+```
+// present only while status == "awaiting_signature":
+awaiting_signature = { input_nullifiers_root, output_coins_root }   // hex; inr, ocr (§1.4)
+
+// present only once status == "completed":
+result = {
+  new_account_state_hash : hex,              // ash; ProofData.new_account_state_hash (§1.4)
+  output_coins_root      : hex,
+  input_nullifiers_root  : hex,
+  output_coin_ids        : [hex],             // coin.identifier of every output coin produced;
+                                              //   empty for kind == "receive" (§2.3.3, which
+                                              //   spends and outputs nothing)
+  publisher_pubkey?      : hex                // present only when kind == "send"; echoes the
+                                              //   SpendRecord's publisher hand-off target (§7.6)
+}
+
+// present only once status ∈ {failed, cancelled}:
+error = { error: machine_code, message: string }   // the §7.5 generic error-body shape, above
+```
+
+`machine_code` for this endpoint family (`/v1/tx`, `/v1/jobs/*`) — not exhaustive; a node MAY use additional codes for conditions not listed here, in the same `{error, message}` shape:
+
+| `machine_code` | Meaning |
+|---|---|
+| `invalid_input_coin` | an `input_coins` entry is unknown to the node, already spent locally, or fails ownership/history/identifier binding ([§2.1 clause 2](#21-the-compliance-predicate)) |
+| `insufficient_balance` | the requested `output_templates` exceed the input value for some asset ([§2.1 clause 3](#21-the-compliance-predicate)) |
+| `bounds_exceeded` | `input_coins`, `output_templates`, or `fold_coin_ids` exceeds `max_tx_inputs`/`max_tx_outputs`/`max_rx_coins` (above, [§2.5](#25-circuit-dimensioning-normative)) |
+| `unknown_publisher` | `publisher_pubkey` does not resolve to a reachable, authenticated publisher profile ([§3.8](#38-fees-and-economics), kind `30421`) |
+| `stale_message` | the `/sign` body's sign-to-contract nonce does not open the `H(ProofData)` this job surfaced in its `awaiting_signature` phase (§3.2) |
+| `invalid_signature` | the `/sign` body's BIP-340 signature or sign-to-contract tweak does not verify against `txn_pubkey` ([§2.1 clause 2](#21-the-compliance-predicate)) |
+| `job_not_found` | the `job_id` is unknown to this node |
+| `wrong_phase` | `/sign` or `/cancel` was called while the job is not in the phase that accepts it |
+| `proving_failed` | witness assembly or proof generation failed |
+| `publish_rejected` | the chosen publisher rejected the finalised `SpendRecord` ([§7.6](#76-publisher-interface-normative)); `message` carries the publisher's `reason` |
+| `circuit_digest_mismatch` | the node's own build does not match the `circuit_digests` it advertises at `/v1/info` ([§1.7.9](#179-proof-system-parameters-normative)) |
+
+The `GET /v1/jobs/<job_id>/stream` `complete`/`error` frames (above) carry the same `result`/`error` objects; the `phase` frame carries `awaiting_signature` inline in its `data` once `phase == "awaiting_signature"`.
+
 **Capability-gated pull — the [§5.1](#51-capability-gated-pull) challenge–response, made concrete:**
 
 | Method | Path | Body / Returns |
@@ -2171,7 +2234,27 @@ The publisher MUST verify, before accepting: the nullifier's BIP-340 signature `
 
 ### 7.7 Wallet ↔ node bootstrapping (normative)
 
-A wallet is configured with **one** node base URL (and MAY hold several for the multi-node fan-out of [§6.3](#63-node-portability-and-multi-node-operation)). From `/v1/info` it learns the network, the pinned `circuit_digests` (which it MUST check against its own pinned constants before trusting any proof the node returns), the relay and Blossom URLs, and the protocol bounds. The wallet derives all keys from the seed ([§1.2](#12-key-hierarchy)); it entrusts its **own** node with the operational bundle `{ivk, ovk, op, nk, op_secret}` over an authenticated channel ([§6.2](#62-wallet--node)) and issues a scoped `zkgrant` to any **foreign** node. Switching nodes is a configuration change with no migration ([§6.3](#63-node-portability-and-multi-node-operation)): every value-bearing object is either seed-derivable or fetchable, content-addressed and verifiable, from any node.
+A wallet is configured with **one** node base URL (and MAY hold several for the multi-node fan-out of [§6.3](#63-node-portability-and-multi-node-operation)). From `/v1/info` it learns the network, the pinned `circuit_digests` (which it MUST check against its own pinned constants before trusting any proof the node returns), the relay and Blossom URLs, and the protocol bounds. The wallet derives all keys from the seed ([§1.2](#12-key-hierarchy)); it entrusts its **own** node with the operational bundle `{ivk, ovk, op, nk, op_secret}` over the authenticated channel defined below and issues a scoped `zkgrant` to any **foreign** node ([§5.2](#52-view-grant)). Switching nodes is a configuration change with no migration ([§6.3](#63-node-portability-and-multi-node-operation)): every value-bearing object is either seed-derivable or fetchable, content-addressed and verifiable, from any node.
+
+**Operational bundle wire encoding (normative).** The entrusted bundle is a fixed 161-byte string, in the [§1.2](#12-key-hierarchy) field order:
+
+```
+serialize(OperationalBundle) := version (1 byte, = 0x01) ‖ ivk (32B) ‖ ovk (32B) ‖ op (32B) ‖ nk (32B) ‖ op_secret (32B)
+```
+
+Each of the five secrets is a 256-bit scalar ([§1.7.3](#173-fixed-widths)); a node MUST reject an unrecognised `version` byte.
+
+**Bootstrap endpoints (normative).** A wallet entrusts and revokes the bundle at its own node's base URL, gated by proof of the account's `sk₀` — the same **ownership proof** already defined for the [§5.1](#51-capability-gated-pull) pull endpoint, so no new authentication primitive is introduced:
+
+| Method | Path | Body / Returns |
+|---|---|---|
+| `POST` | `/v1/bootstrap/challenge` | body = `{ subject: address, action: "entrust" \| "revoke" }` → `{ nonce, expiry, domain }` (§5.1 `Challenge` shape) — `domain = "zkCoins/v1/EntrustChallenge"` or `"zkCoins/v1/RevokeChallenge"` per `action`, distinct from the [§5.1](#51-capability-gated-pull) `"zkCoins/v1/PullChallenge"` domain so a proof issued for one purpose cannot be replayed for another |
+| `POST` | `/v1/bootstrap/entrust` | body = `{ challenge, ownership_proof: OwnershipProof, bundle }` → `{ accepted: bool }` — `ownership_proof` is the [§5.1(a)](#a-ownership-proof) `OwnershipProof` over `chal = H(domain ‖ nonce ‖ chan_bind ‖ subject ‖ expiry)` under the `"zkCoins/v1/EntrustChallenge"` domain; `bundle = serialize(OperationalBundle)` (lowercase hex, §7.1), carried over the transport already mandatory for this API (TLS 1.3/1.2 or Tor v3, [§7.5](#75-node-rest-api-normative)) — no additional application-layer encryption is layered on top, matching every other sensitive body this API already carries under that same transport guarantee |
+| `POST` | `/v1/bootstrap/revoke` | body = `{ challenge, ownership_proof: OwnershipProof }` → `{ revoked: bool }` — `ownership_proof` as above, under the `"zkCoins/v1/RevokeChallenge"` domain |
+
+A node MUST verify `chan_bind` and `chal` for these two endpoints exactly as [§5.1](#51-capability-gated-pull) requires for a pull `OwnershipProof` — constant-time comparison, single-use `nonce`, `expiry` enforced — before accepting an entrust or revoke request.
+
+**Fail-closed revocation.** On a verified `/v1/bootstrap/revoke`, a node MUST (1) immediately stop using the bundle for any further proving, discovery, decryption, or serving on the subject's behalf, and (2) irrecoverably erase its stored copy of `{ivk, ovk, op, nk, op_secret}`. As with view-grant revocation ([§5.2](#52-view-grant)), this binds only a node the subject still controls and can still reach: it stops *that* node's future use, but — like any already-disclosed secret — it **cannot** compel a node that has gone rogue, been compromised, or already exfiltrated the bundle to actually delete its copy, and it does **not** undo any plaintext that node already observed. None of `ivk`/`ovk`/`op`/`nk`/`op_secret` can be rotated independently of the account `A` they are derived under ([§1.2](#12-key-hierarchy)); a subject who suspects the bundle itself is compromised, rather than merely switching operators, MUST move to a new account to regain confidentiality of future activity.
 
 ### 7.8 Kernel RPC — the internal interface (normative)
 
@@ -2259,7 +2342,7 @@ A short, scannable reference for the jargon, notation, and identifier names used
 - **Goldilocks** — the proof field `𝔽` with prime `p = 2^64 − 2^32 + 1`; pinned for Poseidon. ([§1.1](#11-cryptographic-primitives))
 - **Half-aggregation** — non-interactive compression of many transitions' BIP-340 nullifier signatures into one shared aggregate scalar `s_agg`, retaining each `(Pkⱼ, Rⱼ)`; performed **on-chain** by a publisher (no secret keys, no proof) so `m` nullifiers cost ~64 bytes each. ([§3.3](#33-half-aggregation))
 - **`Hc`** — see *Notation*.
-- **HKDF** — HKDF-SHA-256, used for symmetric/derived secrets (`K_tx`). ([§1.1](#11-cryptographic-primitives))
+- **HKDF** — HKDF-SHA-256 (RFC 5869), used for symmetric/derived secrets (`K_tx`, `K_out`, `anchors_rand`, ZBE's `kb`); the `HKDF(tag, material)` shorthand's `IKM`/`salt`/`info`/`L` parameter mapping is fixed once, normatively, in [§1.1](#11-cryptographic-primitives). ([§1.1](#11-cryptographic-primitives))
 - **InitialProof** — the first transition of an account; `prev_proof` is absent and `prev_account_state` is the canonical empty account. ([§2.2](#22-proof-types))
 - **`inr` (input_nullifiers_root)** — Poseidon Merkle root over a transition's spent `nf`s under tag `NullifiersRoot`. ([§1.4](#14-identifiers-and-hashes), [§1.7.5](#175-poseidon-merkle-tree-used-for-ocr-and-inr))
 - **Inscription** — Taproot commit/reveal envelope whose witness payload starts with the 2-byte marker `0x42 0x42` and carries a half-aggregated nullifier set `(Pkⱼ, Rⱼ)` + `s_agg` (~64 B per transition). ([§3.5](#35-inscription-format))

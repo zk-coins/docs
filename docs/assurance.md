@@ -32,7 +32,7 @@ Output: one analysis document per mechanism, linked from [Risks](/risks). Result
 
 The path to "demonstrably secure", in order — each step builds on the previous one:
 
-1. **Security definitions.** Precise statements of what *secure* means for zkCoins: no forgery, no double-spend, and privacy of amounts, assets, and participants expressed as indistinguishability properties. The definitions become part of the [Specification](/specification).
+1. **Security definitions.** Precise statements of what *secure* means for zkCoins: no forgery, no double-spend, and privacy of amounts, assets, and participants expressed as indistinguishability properties — stated precisely enough to capture the linkability gaps [Risks](/risks) already documents (intra-transaction co-output visibility via the shared `output_coins_root`, and cross-transition publisher linkage via the fee-coin `ash` chain), so v1's actual unlinkability guarantee is neither over- nor under-stated. The definitions become part of the [Specification](/specification).
 2. **Paper proofs.** Reductions showing the protocol meets those definitions under standard assumptions (hash security, discrete log/Schnorr, the proof system's soundness and zero-knowledge). Written up, published, and reviewable.
 3. **Machine-checked and external verification.** Machine-checked proofs or model checking for the protocol state machine where feasible, and an **external audit** of both the specification and the node implementation. With a single implementation, the audit carries the weight that a second independent implementation would otherwise carry.
 
