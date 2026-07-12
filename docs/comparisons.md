@@ -38,7 +38,7 @@ Almost every related protocol nails **two of the three** and misses the third:
 :::note Spec design vs. shipped implementation
 The trustless corner is fully specified and the load-bearing fact is already true: everything that lands on Bitcoin is independently verifiable, so a node can re-derive and verify its anchors from the seed, the chain, and the content-addressed, `k`-replicated off-chain bundles ([spec §4.5–§4.6](/specification#45-recovery)).
 
-Footprint figures in the tables below quote the **normative batched spec design** — one constant 231-byte `BatchInscription` per publisher batch (~318 vBytes commit + reveal pair), amortising to ~3.2 vBytes per spend at 100-record batches ([spec §3.8](/specification#38-fees-and-economics)).
+Footprint figures in the tables below quote the **normative spec design** — a ~64-byte half-aggregated nullifier per transition (~16 vB), constant in the transition's input count ([spec §3.8](/specification#38-fees-and-economics)).
 :::
 
 ---
@@ -54,7 +54,7 @@ Both use Client-Side Validation on Bitcoin, but serve different purposes.
 | **Focus** | Private payments | Smart contracts + tokens |
 | **Privacy** | Full (ZK proofs hide everything; global anonymity set) | Limited (history revealed to counterparty) |
 | **Proof size** | Constant (independent of history) | Grows with transaction history |
-| **On-chain footprint** | Constant 231-byte `BatchInscription` per publisher batch, amortised per spend ([spec §3.8](/specification#38-fees-and-economics)) | Commitment in a host TX; off-chain consignment grows |
+| **On-chain footprint** | ~64-byte half-aggregated nullifier per transition (~16 vB), constant in input count ([spec §3.8](/specification#38-fees-and-economics)) | Commitment in a host TX; off-chain consignment grows |
 | **Smart contracts** | No | Yes (zk-AluVM, Turing-complete) |
 | **DeFi/Lending** | Not yet | Possible (bilateral) |
 
@@ -82,7 +82,7 @@ Taproot Assets shares the Bitcoin anchor and the off-chain-data model, but has *
 | **Layer** | L1 (Client-Side Validation) | L2 (payment channels) |
 | **Privacy** | Full (ZK proofs) | Good (onion routing) |
 | **Interactivity** | Receiver must be reachable | Routing path required |
-| **Capacity** | Bounded by Bitcoin L1 (one constant-size `BatchInscription` per batch, amortised per spend) | Theoretically unlimited |
+| **Capacity** | Bounded by Bitcoin L1 (one ~64-byte nullifier per transition, ~16 vB) | Theoretically unlimited |
 | **Offline receive** | No | No |
 
 Lightning and Shielded CSV are complementary; CSV assets could theoretically flow through Lightning channels.
@@ -96,7 +96,7 @@ Lightning and Shielded CSV are complementary; CSV assets could theoretically flo
 | **Privacy model** | Mandatory for CSV users | Optional (~10-20% usage) |
 | **ZK system** | Plonky2 (cyclic recursion, FRI) | Halo2 |
 | **Trusted setup** | None | Eliminated since NU5 |
-| **On-chain footprint** | Constant 231-byte `BatchInscription` per batch, amortised per spend | Full transaction |
+| **On-chain footprint** | ~64-byte half-aggregated nullifier per transition (~16 vB) | Full transaction |
 
 Zcash is the conceptual parent of the commitment/nullifier shield. The key divergence: Zcash secures its own chain; zkCoins inherits Bitcoin's.
 
@@ -107,7 +107,7 @@ Zcash is the conceptual parent of the commitment/nullifier shield. The key diver
 | **Blockchain** | Bitcoin | Own chain |
 | **Privacy approach** | ZK proofs | Ring signatures + Stealth + RingCT |
 | **Anonymity set** | **All coins ever created** | Ring of 16 decoys |
-| **Scalability** | Constant 231 B per batch on-chain — ~3.2 vBytes per spend at 100-record batches | ~2-3 KB per TX |
+| **Scalability** | ~64 B per transition on-chain (~16 vB), constant in input count | ~2-3 KB per TX |
 | **Statistical attacks** | Not possible | Possible (decoy-selection analysis) |
 
 ### vs. CoinJoin
@@ -118,7 +118,7 @@ Zcash is the conceptual parent of the commitment/nullifier shield. The key diver
 | **Amounts hidden** | Yes | No (equal-output) |
 | **Coordinator** | None | Required |
 | **On-chain analysis** | Not possible | Difficult but not impossible |
-| **Cost** | Amortised share of one batch inscription (constant per batch) | Multiple UTXOs (expensive) |
+| **Cost** | One ~64-byte nullifier per transition (~16 vB) | Multiple UTXOs (expensive) |
 | **Regulatory risk** | Low (no coordinator) | High (coordinators prosecuted) |
 
 ### vs. Silent Payments (BIP352)
