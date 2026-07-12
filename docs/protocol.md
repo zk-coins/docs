@@ -36,7 +36,7 @@ Each coin carries a proof of its entire history, compressed into a constant-size
 
 ### 2. Compact nullifiers — 64 bytes in the paper, batched off-chain in zkCoins v1
 
-In the **paper's** final design, a combination of the account model, Sign-to-Contract, and Schnorr Half-Aggregation compresses the on-chain footprint from a full Bitcoin transaction to exactly 64 bytes per transaction. The **zkCoins v1 specification** goes further by aggregation: nullifiers never appear on Bitcoin at all — they travel in the off-chain `BatchBundle`, and the chain carries only the accumulator's root transition inside one constant 231-byte `BatchInscription` per batch, so the per-spend cost falls well below the paper's 64-byte witness figure (64 B of witness data ≈ 16 vB): ~3.2 vBytes per record at 100 records ([spec §3.8](/specification#38-fees-and-economics)). See [spec §3.7](/specification#37-the-nullifier-accumulator) for the full accumulator design.
+In the **paper's** final design, a combination of the account model, Sign-to-Contract, and Schnorr Half-Aggregation compresses the on-chain footprint from a full Bitcoin transaction to exactly 64 bytes per transaction — and the paper writes that nullifier **to Bitcoin**, so the chain itself guarantees the availability of the data every verifier needs for its double-spend checks. The **zkCoins v1 specification** makes a deliberate tradeoff instead: nullifiers do not appear on Bitcoin — they travel in the off-chain `BatchBundle`, and the chain carries only the accumulator's root transition inside one constant 231-byte `BatchInscription` per batch (~3.2 vBytes per record at 100 records, [spec §3.8](/specification#38-fees-and-economics)). This buys a constant on-chain footprint at the cost of an explicit data-availability assumption: the batch bundle is replicated to `k = 3` independent holders rather than guaranteed by Bitcoin ([spec §4.6](/specification#46-data-availability--replication-factor-k)), a liveness dependency the [Risks page](/risks#batchbundle-data-availability-and-retention-incentive) lays out in full. See [spec §3.7](/specification#37-the-nullifier-accumulator) for the full accumulator design.
 
 ### 3. Privacy by construction
 
@@ -57,7 +57,7 @@ The table below contrasts a regular Bitcoin transaction with the **Shielded CSV 
 ## What Shielded CSV is NOT
 
 - **Not a sidechain** — it uses Bitcoin L1 directly
-- **Not a rollup** — no sequencer, no data availability layer
+- **Not a rollup** — no sequencer, no coordinator; validity proofs move peer-to-peer between sender and receiver, and only the nullifier accumulator's root transition anchors to Bitcoin L1
 - **Not a mixer** — privacy is structural, not obfuscation
 - **Not a token** — no native protocol token to bootstrap; value lives in client-side-validated coins (multi-asset by issuance, [spec §6.5](/specification#65-issuance--versioned-schemas-v1-minimal))
 - **Not a soft fork** — works on Bitcoin as it exists today
