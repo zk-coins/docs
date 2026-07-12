@@ -57,7 +57,7 @@ The table below contrasts a regular Bitcoin transaction with the **Shielded CSV 
 ## What Shielded CSV is NOT
 
 - **Not a sidechain** — it uses Bitcoin L1 directly
-- **Not a rollup** — no sequencer, no coordinator; validity proofs move peer-to-peer between sender and receiver, then anchor to Bitcoin L1
+- **Not a rollup** — no sequencer, no coordinator; validity proofs move peer-to-peer between sender and receiver, and only the nullifier accumulator's root transition anchors to Bitcoin L1
 - **Not a mixer** — privacy is structural, not obfuscation
 - **Not a token** — no native protocol token to bootstrap; value lives in client-side-validated coins (multi-asset by issuance, [spec §6.5](/specification#65-issuance--versioned-schemas-v1-minimal))
 - **Not a soft fork** — works on Bitcoin as it exists today
