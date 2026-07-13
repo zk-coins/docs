@@ -11,14 +11,14 @@ zkCoins is a protocol and system — node, wallet, and explorer — realizing **
 
 | Action | Description |
 |---|---|
-| **Create Wallet** | Generate a BIP32 HD wallet locally. Keys never leave the browser. |
+| **Create Wallet** | Generate a BIP32 HD wallet locally. The seed and SPEND keys remain in the wallet; only the non-spending operational bundle may be delegated to the wallet's own node. |
 | **Receive** | Share your address. Incoming coins appear automatically. |
-| **Send** | Send coins to any zkCoins address. Only sender and receiver see the details. |
+| **Send** | Send coins to any zkCoins address. Details are visible only to the participants and any node they deliberately trust with plaintext. |
 | **Faucet** | Mint testnet coins for testing (testnet only). |
 
 ## How it works
 
-When you send zkCoins, the protocol generates a Zero-Knowledge proof that the transaction is valid — without revealing amounts, sender, receiver, or transaction history. The coin data itself (amounts, balances, history) never touches the chain. On Bitcoin, each spend publishes a single **~64-byte half-aggregated nullifier** — a permissionless **publisher** may half-aggregate many nullifiers into one inscription, or a wallet may self-publish its own ([spec §3.5](/specification#35-inscription-format)).
+Every state-advancing transition — send, receive, or mint — generates a Zero-Knowledge proof that it is valid without revealing amounts, sender, receiver, or transaction history. The coin data itself (amounts, balances, history) never touches the chain. On Bitcoin, each transition publishes one **~64-byte half-aggregated nullifier** — a permissionless **publisher** may half-aggregate many nullifiers into one inscription, or the wallet's own node may self-publish its nullifier ([spec §3.4](/specification#34-the-publisher), [§3.5](/specification#35-inscription-format)).
 
 ```
 Normal Bitcoin TX:    full transaction — sender, receiver, amount, all visible
@@ -35,8 +35,8 @@ The blockchain serves one purpose: anchoring the per-transition nullifiers that 
 - **No protocol changes**: works on Bitcoin as it exists today, no soft fork
 - **Compact on-chain footprint**: a ~64-byte half-aggregated nullifier per transition (~16 vB), independent of how many coins it spends ([spec §3.8](/specification#38-fees-and-economics))
 - **Constant proof size**: verification cost is independent of transaction history
-- **No coordinator**: publishing is permissionless — contention-free, anyone can run a publisher, and wallets can self-publish
-- **Self-custodial**: keys are generated and stored locally in the browser
+- **No coordinator**: publishing is permissionless — contention-free, anyone can run a publisher, and a wallet can use its own node to self-publish
+- **Self-custodial**: the seed and SPEND keys stay in the wallet; no node receives spend authority
 
 ## Protocol
 
