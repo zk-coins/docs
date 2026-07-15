@@ -12,9 +12,10 @@ protocol only after it is incorporated into the normative [Specification](/speci
 implemented, and verified at the applicable release gate.
 
 The current release decision is **research only, with no real value at risk**. Open or partially
-closed P0 findings, including the current-target receive-publication contradiction V3-P0-01,
-prevent a Regtest-prototype release under the project's own release rules and prevent every Signet,
-testnet, and mainnet release.
+closed P0 findings, including the current-target receive-publication contradiction V3-P0-01, prevent
+a Regtest-prototype release under the project's own release rules and prevent every Signet, testnet,
+and mainnet release. The project-mandated DNS-continuity gate V3-P1-01 independently blocks the same
+releases until its required design and fault-injection evidence exist.
 
 :::
 
@@ -45,9 +46,11 @@ set of 42 consolidated findings below: 10 P0, 17 P1, 10 P2, and 5 P3.
 
 A separate review of the current target found V3-P0-01, a normative contradiction introduced after
 the pinned baseline. It is tracked explicitly because following either side of that contradiction
-changes funds liveness. It is not assigned a baseline raw ID and does not alter the 290/290 baseline
-traceability result. The register therefore contains 42 baseline workstreams plus one current-target
-delta finding, for 43 tracked work items in total.
+changes funds liveness. A subsequent project-mandated transport analysis adds V3-P1-01: established,
+authenticated sessions must remain independent of DNS after connection setup. Neither delta finding
+has a baseline raw ID, and neither alters the 290/290 baseline traceability result. The register
+therefore contains 42 baseline workstreams plus two current-target delta findings, for 44 tracked
+work items in total: 11 P0, 18 P1, 10 P2, and 5 P3.
 
 The 25 perspectives are review lenses, not a claim that 25 external human auditors approved this
 work. “Complete” means complete for this review set; undiscovered defects can still exist. The
@@ -73,6 +76,7 @@ reviewed specification defect. It does not establish implementation conformance 
 | Custody | The SPEND key remains in the wallet. Private `CoinProof` and account-state data are also custody-critical because their complete loss can make an internal coin permanently unspendable. The current signing handshake does not yet bind a wallet-verifiable canonical intent. |
 | Public data availability | The public double-spend view is rebuilt from V3 nullifiers on Bitcoin and no longer depends on a public off-chain `BatchBundle`. |
 | Private data availability | `CoinProof` bundles remain encrypted, off-chain bearer data with a target replication factor. Bitcoin cannot reconstruct a universally lost private bundle. |
+| Transport and DNS continuity | Clearnet reachability, relay and blob URLs, publisher endpoints, and internal service names can depend on DNS. The current specification does not guarantee that an already-open authenticated transport remains usable when resolvers fail. DNS may block a new dial or reconnect; it must not become a continuing authority or liveness dependency for an established session. |
 | Exit model | There is no BTC exit because core zkCoins does not accept BTC. An internal asset remains spendable only while its private proof/state material and spend authority remain recoverable. |
 | Upgrade model | The project is greenfield and has no production lineage to migrate. Before real value, it still needs a prospective release-identity, opt-in fork or reviewed bridge, rollback, and succession model. |
 
@@ -95,18 +99,23 @@ Every fix in this register follows these constraints:
 7. One full node implementation remains acceptable if independent primitive parity, independent
    decoders and test harnesses where security-relevant, reproducible artefacts, formal review, and
    external audits provide a justified alternative to a second full implementation.
+8. DNS is used only to discover and open a transport. Once every required networked hop is
+   authenticated and established and any in-process hop is available within its operator-isolation
+   boundary, resolver failure must not close, drain, rebind, redirect, or block that channel. New dials
+   and reconnects may fail, but no implementation may weaken TLS, hostname, onion, mTLS, or
+   peer-identity validation to hide that failure.
 
 ## Status summary
 
 | Status | Meaning | Baseline 42 | V3 delta | All tracked |
 |---|---|---:|---:|---:|
-| `OPEN` | The reviewed defect or its V3 equivalent remains materially unresolved. | 11 | 1 | 12 |
+| `OPEN` | The reviewed defect, its V3 equivalent, or a current-target gap remains materially unresolved. | 11 | 2 | 13 |
 | `PARTIAL` | Current text closes part of the defect, but a stated security, consistency, or evidence requirement remains. | 23 | 0 | 23 |
 | `CLOSED IN SPEC` | Current normative V3 text fully addresses a surviving specification defect; implementation evidence would still be required. | 0 | 0 | 0 |
 | `SUPERSEDED BY V3` | The vulnerable V1 object or mechanism no longer exists; it must not be reintroduced. | 4 | 0 | 4 |
 | `CONDITIONAL` | The work becomes mandatory at the stated claim, deployment, or release boundary. | 4 | 0 | 4 |
 
-## Current-target delta finding
+## Current-target delta findings
 
 ### V3-P0-01 — Pure-receive publication rules contradict one another
 
@@ -137,6 +146,173 @@ Every fix in this register follows these constraints:
   after publication, and reorg before and after `completed`. Every accepted successor proves
   membership of the exact receive nullifier under the receive proof's exposed `consumed_pubkey`; an
   unanchored receive head can never be reported as spendable or canonical.
+
+### V3-P1-01 — Established authenticated transports lack DNS-outage continuity
+
+- **Status:** `OPEN`
+- **Current sections:** [§4.1](/specification#41-roles-and-transport),
+  [§4.2](/specification#42-bundle-delivery),
+  [§4.3](/specification#43-addressing-for-delivery),
+  [§4.9](/specification#49-real-time-push-delivery),
+  [§6.1](/specification#61-components-and-responsibilities),
+  [§7.2](/specification#72-transport-map-normative),
+  [§7.5](/specification#75-node-rest-api-normative),
+  [§7.8](/specification#78-kernel-rpc--the-internal-interface-normative)
+- **Finding:** The specification names the network planes and defines peer or message authentication
+  for only some of them, but it does not define any plane's resolver or connection-pool lifecycle.
+  In particular, NIP signatures authenticate Nostr events rather than the relay socket, and the
+  `bitcoind` and PostgreSQL transport/authentication profiles are not specified. An implementation
+  may therefore resolve a hostname per request, drain a healthy pool after TTL expiry, or translate
+  `SERVFAIL` or an empty resolver update into zero usable endpoints. It may also make DNS health part
+  of session authorization. A DNS-only outage can
+  then stop an already-connected wallet, node, relay, blob store, publisher, or internal service even
+  though its existing socket and peer remain healthy. If this happens after a signature or
+  delivery hand-off, it can stall publication, private-state delivery, replication, ACK, or recovery.
+- **Severity rationale:** This is P1 because it creates a system-wide, avoidable liveness and
+  censorship path but does not by itself demonstrate theft, invalid-state acceptance, or permanent
+  loss. Any implementation that discards an accepted transition, bundle, change record, nonce, or
+  outbox entry when DNS fails also triggers the P0 crash-atomicity defect RB-P0-10.
+
+**Accepted fault boundary.** A *DNS-only outage* starts at time `t0`: configured resolvers time out,
+return `SERVFAIL`/`NXDOMAIN`, or provide no endpoints, while the network route, peer processes,
+storage, keys, application authorization, and already-open sockets remain healthy. An *established
+channel* means every required networked hop is already open and authenticated under its deployment
+profile, while any non-networked in-process hop is available and operator-isolated. A cached hostname
+or IP, a previously used endpoint, or an open client-to-load-balancer socket whose upstream connection
+is absent is not an established end-to-end channel. A new HTTP request or protocol frame on an
+existing persistent transport is not a new connection. A socket reset, peer restart, route or NAT
+failure, HTTP/2 `GOAWAY`, WebSocket close, expired authorization that cannot renew in-band, or a
+missing upstream hop is a different fault; reconnect may then fail as explicitly accepted.
+Tor v3 `.onion` routing does not use ordinary DNS; a Tor daemon or circuit failure is a different
+fault, while any clearnet or internal DNS hop in the same deployment remains in scope. The optional
+APNs/FCM wake signal is outside the trustless core and cannot count as evidence for this guarantee;
+its loss must not block canonical delivery or an already-established core receipt path.
+The resolver is trusted for new-connection reachability and necessarily learns resolution metadata;
+TLS/onion/mTLS authentication or the normatively defined deployment-local authentication and
+isolation mechanism, not DNS, binds the authorised peer or endpoint. The resolver has no authority
+over an already-authenticated session.
+
+**Project-native invariant.** The normative specification must define at least the transport states
+`resolving`, `connecting`, `authenticating`, `established`, `reconnect_wait`, and `closed`, with these
+rules:
+
+1. DNS participates only in `resolving` for a new transport. Entering `established` binds the channel
+   to its configured origin and the peer identity authenticated by TLS hostname/SNI and certificate,
+   Tor v3 onion key, mTLS identity, or a deployment-profile-specific local authentication and
+   isolation mechanism. The remediation must normatively define that mechanism for every networked
+   pool, including `bitcoind` and PostgreSQL. For Nostr, relay endpoint authentication and signed-event
+   authentication are distinct checks and neither substitutes for the other.
+2. DNS timeout, `SERVFAIL`, `NXDOMAIN`, TTL expiry, cache invalidation, rebinding, or an address change
+   alone must not make an `established` channel leave that state; change its peer, origin, SNI, Host,
+   ALPN, authorization, or `chan_bind`; clear its healthy pool; or fail a readiness check for that
+   channel.
+3. Requests, new HTTP/2 streams, gRPC calls, SSE events, WebSocket/Nostr frames, keepalives, and
+   in-band reauthentication or rekeying that fit on the existing channel must proceed without a
+   resolver call. DNS is not on the active data path.
+4. The invariant applies to every hop. A reverse proxy, load balancer, service mesh, or split
+   API/kernel deployment must retain its already-established upstream pools, authenticated or
+   operator-isolated as its deployment profile requires, as well as the client-facing connection. A
+   frontend connection cannot be used to claim continuity when its required backend hop still needs
+   a new dial.
+5. DNS failure must never trigger plaintext HTTP, disabled hostname or certificate checks,
+   IP-as-identity, an unverified stale-address dial, cross-origin connection coalescing, or silent
+   selection of another node, relay, store, publisher, or proxy. An optional cached-address reconnect
+   remains a new connection and is safe only with the original endpoint/origin, applicable SNI, and
+   complete deployment-profile peer or local-endpoint validation; it is outside the continuity
+   guarantee.
+6. If an operation requires a missing hop or the socket actually closes, a new connection or
+   reconnect may fail. Accepted work remains fail-closed in a durable transactional outbox with its
+   idempotency key, cursor, target origin, authorization context, and retry state. DNS failure cannot
+   produce a false `delivered`, `replicated`, `credited`, `published`, or `completed` state, and cannot
+   let a sender delete its last private-data copy.
+7. After resolver recovery, queued work reconnects with normal deployment-profile peer or endpoint
+   validation and resumes idempotently from its durable cursor. Backoff and jitter prevent retry
+   storms; queue exhaustion applies backpressure before accepting or signing new work, never eviction
+   of value-bearing state.
+8. The invariant lasts as long as the authenticated or operator-isolated transports and application
+   authorization remain open. Each deployment also publishes and tests a minimum
+   `dns_continuity_window`. Heartbeats must be shorter than every hop's idle timeout; routine
+   maximum-age, drain, credential-refresh, and connection-rotation policies must exceed that window or
+   renew in-band. A security revocation may close a session, but it is recorded as a security event
+   rather than misreported as DNS continuity.
+
+**Channel-by-channel effect.** A workflow continues only when every channel it needs is already
+established; the failure of an unneeded or not-yet-open plane must not disturb the others.
+
+| Channel | Must continue over an established transport | May be unavailable during DNS outage |
+|---|---|---|
+| Wallet/SDK ↔ node API | REST requests on an existing H1 keep-alive or H2 connection; proving handshake; job and receipt SSE/WebSocket streams; in-band pull challenge/session use | Initial node dial, node switch, reconnect, or an additional pool socket |
+| API layer ↔ kernel | Existing in-process path or already-open operator-internal gRPC unary/server streams; mTLS identity where that §7.8 profile is used | New container/upstream connection after the internal hop closes |
+| Kernel ↔ `bitcoind` and PostgreSQL | Chain reads, broadcasts, and durable state operations on pools already authenticated under the deployment profile added by this remediation | Initial dial, replacement pool member, or reconnect after a real socket/database failure |
+| Node ↔ Nostr relay | `EVENT`, `REQ`, ACK, Ping/Pong, delivery, discovery, and receipt traffic on the open WebSocket; NIP signatures authenticate events separately from relay endpoint identity | A new relay, relay migration, or WebSocket reconnect |
+| Node ↔ Blossom store/replica | `GET`, `HEAD`, and `PUT` to the same origin through an existing H1/H2 pool | A locator on an unopened origin or replacement connection; missing replication remains pending |
+| Spender node/kernel ↔ remote publisher REST | The single quote-bound `POST /v1/publish/spendrecord` and its immediate response on an existing H1/H2 channel | Selecting or dialing a publisher; closure also requires the specification to add the authenticated publisher endpoint source that the current publisher profile omits |
+| Local API/kernel self-publisher | Existing in-process `Publish` path, or the already-open §7.8 internal channel in a split deployment; no separate publisher DNS dial | A new internal RPC connection after that channel closes |
+| Explorer/browser ↔ current origins | Existing HTTPS and relay streams, subject to the same authenticated-channel rules | A new explorer, relay, blob origin, redirect, or browser connection |
+| Handle resolver | Requests on an already-open authenticated HTTPS connection may continue | First-time handle resolution, refresh requiring a new connection, or a different domain; a previously authenticated direct Invoice remains subject to its own validity rules |
+| Proxy/LB/service mesh hops | Existing frontend and backend pools for the logical channel | Any missing or closed upstream connection; DNS-independent frontend health alone is insufficient |
+| Optional APNs/FCM wake path | No protocol-critical continuity obligation; an opaque wake that arrives may only accelerate the existing verified fetch path | Vendor-managed delivery or reconnect may be unavailable; it cannot replace canonical Nostr delivery or core continuity evidence |
+
+**Counterexample and attack scenario.** The wallet opens an H2 connection to its node, creates a
+transition, and signs it. DNS then returns `SERVFAIL`. A TTL-coupled client pool drains the healthy H2
+socket, while the reverse proxy also clears its still-healthy API→kernel endpoints. The node has
+durable work but can no longer receive the signature, deliver the `CoinProof`, or hand the nullifier
+to the publisher. A careless retry path reports the job failed or drops the delivery record. The
+required design instead keeps every established hop usable; if any hop truly closes, it leaves the
+job and private state durable and visibly pending until a secure reconnect is possible.
+
+**Acceptance criteria.** Closure requires executable fault injection, not a configuration claim:
+
+1. Establish and authenticate every enabled networked hop in each supported deployment profile, and
+   make every non-networked in-process hop available under its operator-isolation boundary, including
+   frontend and upstream proxy paths. Then blackhole DNS, inject timeout, `SERVFAIL`, `NXDOMAIN`, empty
+   endpoint updates and rebinding, and run beyond all configured TTLs.
+2. While rejecting every new socket and permitting only already-established flows, complete a real
+   Bitcoin Core Regtest V3 funds flow with every distinct anchoring gate visible: mint proof → mint
+   nullifier publisher hand-off → Bitcoin first-occurrence/finality → mint `completed` → pay/send
+   proof plus durable, `k`-replicated `CoinProof` delivery → send nullifier publisher hand-off →
+   Bitcoin first-occurrence/finality → send `completed` → recipient re-verification → receive proof,
+   signature, fold, and durable persist → verified/pending receipt push that is explicitly not final
+   or spendable → encrypted ACK → receive nullifier publisher hand-off → Bitcoin
+   first-occurrence/finality → receive `completed` → spendable-status push. Use a pre-authenticated
+   direct Invoice and the warmed node, kernel, database, `bitcoind`, Nostr, Blossom, publisher, proxy,
+   and core SSE/WebSocket push channels; APNs/FCM cannot satisfy this step. All three publications and
+   all three chain-observation/finality gates must traverse only connections established before fault
+   time `t0` and complete without a reconnect. No protocol step may collapse mint, send, and receive
+   into one publication or delay the initial verified receipt until receive finality.
+3. Exercise H1 sequential reuse, new H2 streams, gRPC unary/server streams, SSE, WebSocket/Nostr,
+   Blossom upload/download, `bitcoind` RPC, database operations, and publisher hand-off for the full
+   declared `dns_continuity_window`. Where the supported profile implements them, also exercise TLS
+   1.3 `KeyUpdate` and in-band application reauthentication without a resolver call. A TLS 1.2,
+   non-TLS local, or long-lived-authorization profile instead keeps the same authenticated or
+   operator-isolated channel usable for the full window; its configured credential lifetime must
+   exceed that window when no in-band renewal exists.
+4. Measure `active_channel_closures_caused_by_dns = 0`,
+   `resolver_calls_on_established_channel_hot_path = 0`, and
+   `false_success_after_dns_failure = 0`. Connection IDs and authenticated peer identities or
+   operator-local endpoint bindings remain unchanged. A changed DNS answer must not migrate an
+   established socket or alter its bound origin, SNI, Host, ALPN, authorization, or `chan_bind`.
+5. In a separate rebinding case, deliberately close the channel and permit the resulting new-dial
+   attempt. Enforce the configured origin's deployment-specific address policy: an endpoint outside
+   its allowed or pinned address set is rejected before connect, including an unexpected
+   public-origin→loopback/private/link-local rebinding. An explicitly local or self-hosted origin may
+   use its configured local address class, but only with its pinned endpoint policy and required
+   local/TLS/mTLS peer authentication. Test both rejection of the unauthorised rebind and acceptance
+   of the authorised local target. A public attacker endpoint that passes address policy still fails
+   TLS/onion/mTLS peer authentication before any authorization, secret, or application-protocol
+   payload is sent. The dial retains the original origin and, where applicable, SNI, Host, and
+   peer-identity policy. If last-known-good or cached-address reconnect is implemented, test it
+   separately against the legitimate peer or local endpoint with the original origin/applicable SNI
+   and complete certificate, onion, mTLS, or normatively specified local authentication/isolation
+   validation; the cached IP is never accepted as identity and this remains outside the continuity
+   guarantee.
+6. Close each networked channel deliberately while DNS remains unavailable. Only that channel enters
+   `reconnect_wait`; new dials and first-time handle resolution fail clearly, all accepted work and
+   cursors remain durable, other established channels continue, and no insecure fallback occurs.
+7. Restore DNS first to the original address and then to a legitimate new address. Normal TLS, onion,
+   mTLS, or normatively specified local authentication/isolation checks run for the new connection or
+   endpoint, queued work resumes exactly once from durable state, and duplicate events, ACKs,
+   publishes, and credits are idempotently rejected.
 
 ## P0 findings
 
@@ -722,7 +898,7 @@ authoritative for the current target.
 | **Total** |  | **72** | **133** | **79** | **6** | **290** |
 
 The post-challenge register consolidates those 290 records into the 42 baseline findings above.
-V3-P0-01 is additional and has no baseline raw ID. Severity is
+V3-P0-01 and V3-P1-01 are additional and have no baseline raw IDs. Severity is
 based on the strongest reproducible impact, not a vote. A security veto can be removed only by new
 evidence, a normative specification change where required, and a focused re-review.
 
@@ -923,8 +1099,9 @@ not compensate for an earlier unresolved safety property.
    applicable gates.
 3. **Bitcoin and proof determinism:** close RB-P0-05, RB-P0-08, RB-P1-01, RB-P1-02, RB-P1-06,
    and RB-P1-17; then freeze and generate the release artefacts.
-4. **Bounded operation:** close RB-P1-07, RB-P1-13, and the performance, capacity, dependency, and
-   UX work in RB-P2 before a shared environment accepts users.
+4. **Bounded operation:** close V3-P1-01, RB-P1-07, RB-P1-13, and the performance, capacity,
+   dependency, and UX work in RB-P2 before a shared environment accepts users. Resolver failure may
+   block a new dial, but never an established authenticated channel.
 5. **External assurance and launch perimeter:** complete independent cryptographic and Bitcoin
    Script reviews, operational drills, governance, legal review, and public claim verification before
    any mainnet consideration.
@@ -938,9 +1115,9 @@ its stated deployment or claim condition is met.
 | Gate | Minimum result from this register |
 |---|---|
 | Further research | Allowed only with no real value, explicit research status, and unproved claims labelled as such. Open findings remain visible. |
-| Implementation work | One coherent V3 relation and state machine; project-native resolutions selected for every P0/P1 design gap; no implementation may silently choose missing semantics. |
-| Regtest prototype | No `OPEN` or `PARTIAL` P0, isolated environment, no real value, and every trust assumption documented; generated circuit identity and negative proof vectors; destructive recovery; real mock-free node/SDK/app flow against Bitcoin Core Regtest. Every `SUPERSEDED BY V3` entry's stated rejection/regression evidence passes so retired formats cannot return unnoticed. |
-| Signet/testnet | Regtest gate plus a formal ZK relation and pinned statement/witness, negative proof suite, defined state recovery and deposit/withdrawal flow where applicable, reorg and realistic fee/resource tests, monitoring and restore, documented admin/upgrade rights, and privacy-observability tests. No real-value representation. |
+| Implementation work | One coherent V3 relation and state machine; project-native resolutions selected for every P0/P1 design gap; a transport state machine that keeps established authenticated channels DNS-independent and makes new-dial failure durable and fail-closed; no implementation may silently choose missing semantics. |
+| Regtest prototype | No `OPEN` or `PARTIAL` P0, isolated environment, no real value, and every trust assumption documented; generated circuit identity and negative proof vectors; destructive recovery; real mock-free node/SDK/app flow against Bitcoin Core Regtest. The enabled transport set passes the V3-P1-01 resolver-blackout test with new sockets denied, zero DNS-induced active-channel closures, zero active-path resolver calls, and zero false success states. Every `SUPERSEDED BY V3` entry's stated rejection/regression evidence passes so retired formats cannot return unnoticed. |
+| Signet/testnet | Regtest gate plus a formal ZK relation and pinned statement/witness, negative proof suite, defined state recovery and deposit/withdrawal flow where applicable, reorg and realistic fee/resource tests, monitoring and restore, documented admin/upgrade rights, privacy-observability tests, and a production-topology DNS-continuity soak spanning every declared TTL, heartbeat, credential refresh, proxy idle policy, and `dns_continuity_window`. No real-value representation. |
 | Limited mainnet | Signet/testnet gate plus no `OPEN` or `PARTIAL` P0 or P1; independent cryptography/circuit and Bitcoin Script/transaction audits; recovery audit; bridge and withdrawal audit plus tested emergency exit wherever BTC is bound; realistic fee- and mempool-stress tests; reproducible maximum-size benchmarks; bounded funds at risk; public security-disclosure process; legal review of the actual deployment. |
 | Production | Limited-mainnet gate plus formal funds-safety and exit-liveness invariants, long-term private-data strategy, reproducible release artefacts and complete vectors, exercised incident/governance model, two independent implementations or the documented independent-assurance alternative, and public claims matched to measured evidence. |
 
@@ -953,5 +1130,6 @@ mechanisms. It defines arbitrary-depth replay but not yet the complete circuit-l
 and its current text contradicts itself on mandatory receive publication. It does not close complete
 wallet intent authorization, private bearer recovery, byte-exact Bitcoin transaction construction,
 S2C algebra, circuit identity/decoding, successor-key validity, crash atomicity, formal cryptographic
-composition, or the operational and launch perimeter. No average score can override those remaining
-P0 findings.
+composition, resolver-independent established-session liveness, or the operational and launch
+perimeter. No average score can override those remaining P0 findings; V3-P1-01 is an additional
+project-mandated blocker for any network gate that requires its DNS-continuity evidence.
