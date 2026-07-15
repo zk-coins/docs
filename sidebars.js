@@ -9,6 +9,8 @@ const sidebars = {
     'comparisons',
     'risks',
     'assurance',
+    'paper-conformance-analysis',
+    'paper-conformance-remediation',
   ],
 };
 

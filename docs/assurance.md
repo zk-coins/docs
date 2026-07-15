@@ -15,6 +15,10 @@ Two distinct failure classes threaten the protocol, and they need different inst
 
 Both workstreams follow the project's standing rule: whatever they change flows through this repository as a spec PR first ([Implementation Mandate](/implementation-mandate)).
 
+:::warning Paper-conformance remediation is an open release gate
+The [paper-deviation analysis](/paper-conformance-analysis) documents how an earlier specification baseline (`docs@6816fc3`) changed load-bearing parts of the original zkCoins and Shielded CSV constructions, including nullifiers, batch availability, accumulator admission, reorg handling, fees, and mint anchoring. [PR #97](https://github.com/zk-coins/docs/pull/97) returned the model to on-chain half-aggregated state nullifiers, Bitcoin first occurrence and conditional NAV (now normative); [Paper-Conformance Remediation](/paper-conformance-remediation) tracks the remaining executable-conformance and assurance gates that must close before the protocol carries real value.
+:::
+
 ## Workstream 1 — Incentive analysis
 
 Scope: every mechanism whose correctness or liveness depends on actor behaviour rather than cryptography. [Risks](/risks) is the maintained catalog; the analysis must use the current on-chain-nullifier model, in which publishing is contention-free and the public accumulator is rebuilt from Bitcoin alone, while private `CoinProof` availability remains a replicated off-chain liveness requirement ([spec §3.4](/specification#34-the-publisher), [§3.6](/specification#36-chain-scanning), [§4.6](/specification#46-data-availability--replication-factor-k)).
@@ -44,7 +48,7 @@ A security proof establishes that the *specified* protocol is sound. That the *r
 
 | Gate | What must hold |
 |---|---|
-| **Public testnet** | Specification deep-review complete; conformance vectors generated and pinned; the A-to-Z suite passes across node, SDK, and app. |
-| **Real value (mainnet)** | Every incentive verdict is **holds** or **holds under stated assumptions** — no open and no **broken** verdicts (Workstream 1); security definitions and paper proofs are published (Workstream 2, steps 1–2); the cryptographic review of the §1.7 reference instantiation the spec requires before mainnet is complete ([spec §1.7.8](/specification#178-reference-instantiation-review-status)); an external audit is completed with findings resolved (step 3); a vulnerability disclosure process is live ([SECURITY.md](https://github.com/zk-coins/docs/blob/develop/SECURITY.md)). |
+| **Public testnet** | Paper-conformance remediation Gate A (specification completeness) is closed; specification deep-review complete; conformance vectors generated and pinned; the A-to-Z suite passes across node, SDK, and app. |
+| **Real value (mainnet)** | Paper-conformance remediation Gates A–C are closed; every incentive verdict is **holds** or **holds under stated assumptions** — no open and no **broken** verdicts (Workstream 1); security definitions and paper proofs are published (Workstream 2, steps 1–2); the cryptographic review of the §1.7 reference instantiation the spec requires before mainnet is complete ([spec §1.7.8](/specification#178-reference-instantiation-review-status)); an external audit is completed with findings resolved (step 3); a vulnerability disclosure process is live ([SECURITY.md](https://github.com/zk-coins/docs/blob/develop/SECURITY.md)). |
 
 These gates are ordered stations, not aspirations: a release that has not passed its gate does not ship.
