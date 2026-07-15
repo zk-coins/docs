@@ -13,6 +13,7 @@ const sidebars = {
     'assurance',
     'paper-conformance-analysis',
     'paper-conformance-remediation',
+    'specification-review-remediation',
   ],
 };
 

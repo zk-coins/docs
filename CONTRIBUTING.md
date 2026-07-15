@@ -55,7 +55,8 @@ docs/
 │   ├── protocol.md               # Shielded CSV protocol reference
 │   ├── comparisons.md            # vs RGB, Lightning, Zcash, etc.
 │   ├── risks.md                  # Known risks and limitations
-│   └── assurance.md              # Assurance roadmap (incentive analysis, verification staircase, gates)
+│   ├── assurance.md              # Assurance roadmap (incentive analysis, verification staircase, gates)
+│   └── specification-review-remediation.md # Review findings, current dispositions, and release gates
 ├── src/css/custom.css            # Theme overrides (Bitcoin orange)
 ├── static/img/                   # Favicon, logos
 ├── docusaurus.config.js          # Site config
