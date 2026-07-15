@@ -82,7 +82,7 @@ The anonymity set is global — every coin in the system — but if very few peo
 
 **Risk: A chosen publisher can refuse to publish a valid transition or delay it.**
 
-A publisher receives a transition nullifier and fee `CoinProof`, half-aggregates signatures, and broadcasts the inscription. It holds no spend key, recursive proof, coin plaintext, or consensus-critical off-chain data, so it cannot forge a transition or steal funds; its only protocol-level power is to withhold or delay publication ([spec §3.4](/specification#34-the-publisher)).
+A publisher receives a transition nullifier and the fee `CoinProof`, half-aggregates signatures, and broadcasts the inscription. It holds no SPEND key and no consensus-critical off-chain data, and it never sees the plaintext of the sender's payment or change coins — so it cannot forge a signature, double-spend, or spend without the wallet's key. (It *is* a recipient of the one fee coin it is paid, whose `CoinProof` — recursive proof and plaintext — it verifies and decrypts, the basis of the *Publisher-observed spend linkage* below; but that is the fee coin alone, never the payment.) Its only protocol-level power is to withhold or delay publication ([spec §3.4](/specification#34-the-publisher)).
 
 **Mitigation:** Publishing is permissionless and contention-free. A nullifier references no shared accumulator root and cannot go stale merely because another publisher writes first, so the account can submit the same nullifier to another publisher or have its own node self-publish it; redundant publication is idempotent under the first-occurrence rule ([spec §3.4](/specification#34-the-publisher), [§3.6](/specification#36-chain-scanning)). Half-aggregation lowers fees but is not required for correctness or liveness.
 
