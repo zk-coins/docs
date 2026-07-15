@@ -2,7 +2,7 @@
 title: Specification Review Remediation
 ---
 
-# Specification review findings and remediation
+# Specification Review Findings and Remediation
 
 :::warning Review status
 
@@ -133,10 +133,13 @@ Every fix in this register follows these constraints:
   predecessor-nullifier membership for that receive, so the account lineage can become permanently
   unextendable.
 - **Project-native fix:** Delete the publication exemption. Normatively require every successful
-  receive transition to produce a `SpendRecord` and hand `{Pk_i, R_i, s_i, R'_i}` to the selected
-  publisher path, including a self-operated publisher. The publisher uses `R'_i` only for the
-  off-chain opening check and inscribes only the canonical V3 raw or aggregate payload; `R'_i` is
-  forbidden on chain. The receive remains non-creditable and non-extendable until its nullifier
+  receive transition to produce a `SpendRecord` and hand the on-chain nullifier material
+  `{Pk_i, R_i, s_i}` to the selected publisher path, including a self-operated publisher. The
+  pre-tweak nonce `R'_i` never travels to the publisher — it is off-chain bundle data that goes
+  sender→recipient inside the `CoinProof`, where the *receiver* performs the sign-to-contract
+  opening check `R_i = R'_i + H(R'_i ‖ H(ProofData))·G` (§2.3.3 step 4). The publisher
+  half-aggregates only `(Pk_i, R_i)` and inscribes the canonical V3 raw or aggregate payload;
+  `R'_i` is forbidden on chain. The receive remains non-creditable and non-extendable until its nullifier
   reaches the specified admissible state. Define one state machine for receive proof creation,
   private persistence, publication, first-occurrence loss, completion, retry, reorg, and abandonment;
   it must preserve the thin-wallet boundary and use the same V3 publisher path as send and mint.
