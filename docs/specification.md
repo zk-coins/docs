@@ -1792,6 +1792,8 @@ The node is **one program**, but not every operator runs all of it. A small **co
 | **Public wallet API** — proving and submission on behalf of **hosted** accounts (the multi-tenant service a public provider runs) | optional operator role | **off** |
 | **Publisher** — half-aggregate collected transition nullifiers and inscribe them ([§3.4](#34-the-publisher)) | optional operator role | **off** |
 | Aliasing / `user@domain` handles and similar wallet-app conveniences | application features, not core | **off** |
+| Lightning bridge — Lightning ⇄ zkCoins swaps at the operator edge ([extension](/lightning-bridge)) | application features, not core | **off** |
+| Mail bridge — SMTP interop for handles ([extension](/mail-bridge)) | application features, not core | **off** |
 
 A few standard **deployment profiles** follow:
 
@@ -1968,7 +1970,7 @@ The node exposes five interface families, specified here at an implementation-ne
 
 The `read.account` path is **capability-gated**: a node **MUST** reject a request that does not present a valid ownership proof or `op`-signed view grant. Bearer view secrets (`zkview`/`zkavk`) and balance attestations are **not** node authorisations — the explorer applies them client-side to bundles obtained from the relay mesh or a holder, so `explorer.read` widens only what the secret-holder can decrypt from already-public material ([Access & Explorer §5.1](#51-capability-gated-pull)). The `submit.tx` path needs no capability because the submitted transition carries its own validity proof and self-authenticating `SpendRecord`; a node **MUST** verify that proof before publishing.
 
-**Core surface vs optional roles.** The families above are the node **core** surface — every node serves them, for the accounts it is responsible for. The optional operator roles ([§6.1](#61-components-and-responsibilities)) layer **on top** of the same surface rather than adding new wire protocols: the **public wallet API** is `read.account` + `submit.tx` (with proving) offered for **hosted** accounts (those that have delegated their operational bundle to this provider) instead of only the operator's own; the **publisher** consumes already-submitted transitions to half-aggregate and inscribe their nullifiers ([§3.4](#34-the-publisher)); application conveniences (aliasing / `user@domain` handles) are additional, separately-gated endpoints **outside** this core set. A node advertises which optional surfaces it exposes so clients gate fail-closed ([§6.1](#61-components-and-responsibilities)).
+**Core surface vs optional roles.** The families above are the node **core** surface — every node serves them, for the accounts it is responsible for. The optional operator roles ([§6.1](#61-components-and-responsibilities)) layer **on top** of the same surface rather than adding new wire protocols: the **public wallet API** is `read.account` + `submit.tx` (with proving) offered for **hosted** accounts (those that have delegated their operational bundle to this provider) instead of only the operator's own; the **publisher** consumes already-submitted transitions to half-aggregate and inscribe their nullifiers ([§3.4](#34-the-publisher)); application conveniences (aliasing / `user@domain` handles, the [Lightning bridge](/lightning-bridge), and the [mail bridge](/mail-bridge)) are additional, separately-gated endpoints **outside** this core set. A node advertises which optional surfaces it exposes so clients gate fail-closed ([§6.1](#61-components-and-responsibilities)).
 
 ### 6.5 Issuance — versioned schemas, v1 (minimal)
 
