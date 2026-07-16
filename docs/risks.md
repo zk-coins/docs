@@ -78,6 +78,16 @@ A payment is delivered as an off-chain `CoinProof` bundle that the sender hands 
 
 **Mitigation:** Delivery is store-and-forward, so the recipient need not be online at send time — only eventually reachable. Relays retain the gift-wrapped bundle until the recipient (or its always-on node) comes online and runs the `detect_tag` scan ([spec §4.2](/specification#42-bundle-delivery), [§4.4](/specification#44-note-discovery)); the always-on node, not the wallet, holds the live subscription and verifies on the wallet's behalf ([spec §4.9](/specification#49-real-time-push-delivery)). The sender retains and replicates its copy until it receives an acknowledgement ([spec §4.2](/specification#42-bundle-delivery)).
 
+## Unobservable total supply
+
+**Risk: A v1 asset's aggregate supply is unobservable, so a creator's over-issuance is undetectable as to quantity.**
+
+v1 issuance is bound to the creator's spend key but uncapped. Because coin amounts are zero-knowledge, no party — holder, node, or explorer — can sum an asset's total supply. Every mint is nevertheless a state-advancing transition that anchors on Bitcoin by publishing an on-chain nullifier `(Pkᵢ, Rᵢ)` ([spec §2.3.1](/specification#231-mint--issuance), [§3.10](/specification#310-transaction-states)). Issuance frequency and timing are therefore chain-visible; only the minted amount stays hidden, so a creator can inflate supply undetectably only as to quantity, not as to the fact that mints happened.
+
+This anchoring closes the mint-fork: two mints advancing from the same prior state share the same `current_pubkey = Pkᵢ` and publish the same nullifier key. The global accumulator admits each `Pkᵢ` at most once by first-occurrence ([§3.6](/specification#36-chain-scanning)), so a creator cannot issue two conflicting coins against one state.
+
+**Mitigation:** Holders trust the creator as they would any single-issuer asset; a protocol-enforced, auditable supply cap is available via `IssuanceTerms_v2` ([spec §6.5](/specification#65-issuance--versioned-schemas-v1-minimal)).
+
 ## Carrying real Bitcoin requires a bridge
 
 **Risk: The protocol moves shielded coins, not on-chain BTC.**
