@@ -12,7 +12,7 @@ The mail bridge is an **optional operator role of the API layer**, **off by defa
 
 The mail bridge makes a handle `alice@<domain>` ([spec §4.3](/specification#43-addressing-for-delivery)) **also a working email address**. It carries messages on two rails behind that one address:
 
-- **Native rail (end-to-end-encrypted).** Messaging over the **same Nostr transport and `op` identity the protocol already uses** ([spec §7.3](/specification#73-nostr-event-kinds-normative)): NIP-17 private direct messages — kind 14 rumors, NIP-44 v2 encryption, NIP-59 gift wrap — addressed to the recipient's `op` key. The message is end-to-end encrypted to the recipient and the operator forwards only the gift-wrapped event.
+- **Native rail (encrypted to the `op` key).** Messaging over the **same Nostr transport and `op` identity the protocol already uses** ([spec §7.3](/specification#73-nostr-event-kinds-normative)): NIP-17 private direct messages — kind 14 rumors, NIP-44 v2 encryption, NIP-59 gift wrap — addressed to the recipient's `op` key. The message is encrypted **to the holder of the recipient's `op` key**: in a sovereign deployment that is the user's own node, so the encryption is end-to-end to the user; for a **hosted** account the hosting provider holds the operational bundle — `op` included ([spec §6.1](/specification#61-components-and-responsibilities)) — and **can read native-rail content**. Which of the two applies is the recipient's wallet–node trust configuration ([spec §6.6](/specification#66-threat-model-and-trust-configurations)), not a property of the rail. The mail-bridge operator itself forwards only the gift-wrapped event.
 - **Fallback rail (ordinary email).** Plain SMTP email, for any recipient that has no native handle.
 
 The **full messaging semantics** of the native rail — threading, read state, attachments, delivery receipts, and the rest — are **application-defined and out of scope here**. This page specifies only what the bridge itself owes: **discovery**, **downgrade protection**, **labeling**, and the **SMTP edge**.
@@ -25,7 +25,7 @@ Whether an operator runs the mail bridge is part of its advertised role set ([sp
 
 To message `bob@example.com`, the client resolves the handle exactly as for a payment: an HTTPS `GET` to `https://example.com/.well-known/zkcoins/bob` ([spec §4.3](/specification#43-addressing-for-delivery)).
 
-- If the handle **resolves and verifies**, the message goes **end-to-end** to the resolved `op_pubkey` over the resolved `relays`. Nothing extra is fetched — the §4.3 response already carries `op_pubkey` and `relays`, everything the native rail needs.
+- If the handle **resolves and verifies**, the message goes **encrypted to the resolved `op_pubkey`** over the resolved `relays` — end-to-end to the user whenever the user's own node holds `op` (*Two rails* above). Nothing extra is fetched — the §4.3 response already carries `op_pubkey` and `relays`, everything the native rail needs.
 - Otherwise the operator sends **ordinary SMTP mail** to `bob@example.com`.
 
 Before the **first** unencrypted send to a recipient, the client **MUST** indicate that the message **leaves as plain email** — the sender always knows, before committing, which rail carries their words.
@@ -51,7 +51,7 @@ Sender identity on the email rail is **unauthenticated beyond domain-level check
 
 These rules are **normative for clients and security-critical** — they are what keeps the authenticated native rail from being spoofed by the unauthenticated email rail:
 
-- **(a) Separate the rails.** Email-rail and native-rail content **MUST** be **visually and structurally separated**. An unencrypted email **MUST NOT** render inside the same thread context as the end-to-end messages of the same contact — the two rails never share a conversation view.
+- **(a) Separate the rails.** Email-rail and native-rail content **MUST** be **visually and structurally separated**. An unencrypted email **MUST NOT** render inside the same thread context as the native-rail messages of the same contact — the two rails never share a conversation view.
 - **(b) No money from email.** Payment requests and payment-triggering actions **MUST NOT** be actionable from email-rail content. With respect to money the email rail is **display-and-reply only**: an email may show a payment ask as inert text, but no button, link, or gesture in email-rail content may initiate a zkCoins or [Lightning-bridge](/lightning-bridge) payment.
 - **(c) Rail always visible.** The rail of **every** message is **always visible** — the user can never be in doubt whether a given message came over the encrypted native rail or over plain email.
 
@@ -60,9 +60,11 @@ These rules are **normative for clients and security-critical** — they are wha
 The disclosure the operator gets differs sharply between the rails, and clients **MUST** present it honestly:
 
 - On the **email rail**, the operator **necessarily processes full plaintext**. This is inherent to SMTP — the operator is the mail server and cannot forward a message it cannot read. Subject, body, and headers are all in its view.
-- On the **native rail**, the operator forwards only **gift-wrapped events** ([spec §7.3](/specification#73-nostr-event-kinds-normative)) and sees none of the content.
+- On the **native rail**, the operator forwards only **gift-wrapped events** ([spec §7.3](/specification#73-nostr-event-kinds-normative)) and sees none of the content — **unless the same operator (or another) also hosts the account's operational bundle**, in which case it holds `op` and can read native-rail content. That disclosure is a property of the **hosting choice** ([spec §6.6](/specification#66-threat-model-and-trust-configurations)), not of the rail.
 
-Choosing the email rail for a recipient is therefore choosing to expose that message's plaintext to the operator; choosing the native rail is not. The state that these two disclosures are different — not merely that email is "less private" — belongs in front of the user.
+The native rail's **metadata** is also weaker than the payment path's, and the honest fix is disclosure: a standard NIP-17 gift wrap carries the recipient's `op_pubkey` as a cleartext `p` tag, so relays and the forwarding operator learn **which `op` key receives** each native message, plus its timing and volume. Coin delivery deliberately avoids exactly this — its outer events identify no recipient at all (the `zkdt`/`zkepk` scan tags, [spec §4.2](/specification#42-bundle-delivery), [§4.7](/specification#47-metadata-and-privacy-tradeoffs)). The native messaging rail does not inherit that property: content stays sealed, but the recipient identity and the traffic pattern do not.
+
+Choosing the email rail for a recipient is therefore choosing to expose that message's plaintext to the mail operator; choosing the native rail exposes content only to whoever holds the recipient's `op` — the user's own node in the sovereign deployment, the hosting provider for a hosted account ([spec §6.6](/specification#66-threat-model-and-trust-configurations)). The fact that these two disclosures are different — not merely that email is "less private" — belongs in front of the user.
 
 ## Operations
 
