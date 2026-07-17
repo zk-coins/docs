@@ -6,6 +6,8 @@ const sidebars = {
     'specification',
     'implementation-mandate',
     'protocol',
+    'lightning-bridge',
+    'mail-bridge',
     'comparisons',
     'risks',
     'assurance',
