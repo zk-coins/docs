@@ -32,7 +32,7 @@ The relevant trade-off is:
 
 | Construction | Bitcoin-visible nullifiers | Contention-free self-publish | Objective reconstruction | Constant per-batch size | Decision |
 |---|---:|---:|---:|---:|---|
-| current 231-byte root chain | no | no | no, needs `BatchBundle` | yes | retire to research |
+| pre-#97 231-byte root chain | no | no | no, needs `BatchBundle` | yes | retired by #97 |
 | full validation envelope with root chain | yes | no | yes | no | rejected |
 | independent off-chain batches + first occurrence | no | yes | no; selective serving breaks safety | yes | rejected |
 | Shielded CSV state nullifiers + first occurrence | yes | yes | yes | no, asymptotic 64 B/update | **selected** |
@@ -176,18 +176,19 @@ Consequences:
 - no separate synthetic issuance nullifier is needed under this selected paper model;
 - creator authorization, per-asset conservation and the explicitly unlimited v1 creator-supply policy remain separate in-circuit checks.
 
-The specification must remove the unanchored `mint-verified` path. A recipient credits issuance only after the creating state nullifier reaches the configured confirmation policy and its transition commitment opens correctly.
+PR #97 removed the unanchored `mint-verified` path: a recipient credits issuance only after the creating state nullifier reaches the configured confirmation policy and its transition commitment opens correctly.
 
 ## 5. Fees and open publishing
 
 The publisher role remains open and non-custodial:
 
-- a sender can gossip its signed state-nullifier entry and intermediate proof to multiple publishers without selecting one in advance;
-- the first valid aggregate containing `Pk_i` wins by Bitcoin order;
+- the spender picks a publisher from its `op`-signed profile, which specifies a flat `fee` per transition in the publisher's chosen `fee_asset_id`, and includes exactly one fee output coin `{recipient = fee_address, amount >= fee, asset_id = fee_asset_id}` in the transition that publisher will anchor ([spec §3.8]);
+- the fee coin sits under the transition's single `output_coins_root` (`ocr`) and is atomically bound with the payment by the one on-chain nullifier through sign-to-contract, so the publisher cannot collect the fee without anchoring the payment and an un-anchored transition's fee coin never reaches `completed`;
 - the fee is an ordinary output coin the sender includes for the publisher, addressed to the publisher's off-chain payout address ([spec §3.8](/specification#38-fees-and-economics)) — there is no on-chain fee field;
-- only the publisher that anchors the winning nullifier can spend that fee coin;
+- if the selected publisher censors, the spender re-picks with a fresh fee coin to a new `fee_address`, or self-publishes; first-occurrence nullifier semantics make competing transitions idempotent, so at most one is anchored and exactly one fee is paid, to the publisher that actually anchors it;
 - a wallet may publish a one-entry aggregate itself;
-- no publisher signature, registry, sequencer, exclusive root lease or coordinator is required.
+- no publisher signature, registry, sequencer, exclusive root lease or coordinator is required;
+- the paper's first-to-publish-wins gossip race, in which multiple publishers compete without being selected in advance, is deferred as a forward-compatible privacy upgrade because it requires a two-step payment structure that v1 does not fix.
 
 Publisher economics, front-running resistance and fee-claim privacy require an explicit proof and test suite. “Permissionless” does not by itself prove that the market remains decentralized.
 
