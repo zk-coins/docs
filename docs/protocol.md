@@ -24,7 +24,7 @@ Traditional blockchains require every node to validate every transaction. Shield
 
 1. The **sender** creates a transaction and generates a validity proof
 2. The proof is sent **directly to the receiver** (off-chain)
-3. Only a **compact commitment** is written to the blockchain — a **~64-byte half-aggregated nullifier per transition**, published on Bitcoin (a publisher may half-aggregate many; a wallet may self-publish one), so the on-chain cost is independent of how many coins the transition spends ([spec §3.5](/specification#35-inscription-format), [§3.8](/specification#38-fees-and-economics))
+3. Only a **compact commitment** is written to the blockchain — a **~64-byte half-aggregated nullifier per transition**, published on Bitcoin (a publisher may half-aggregate many; a wallet's own node may self-publish one), so the on-chain cost is independent of how many coins the transition spends ([spec §3.5](/specification#35-inscription-format), [§3.8](/specification#38-fees-and-economics))
 4. The receiver verifies the proof **client-side**
 5. The blockchain provides the **immutable ordering** that prevents double-spending: because the nullifiers are on-chain, every node rebuilds the global nullifier accumulator by first-occurrence (first-spend-wins) directly from Bitcoin ([spec §3.7](/specification#37-the-nullifier-accumulator)) — two honest nodes at the same tip can never diverge
 

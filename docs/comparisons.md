@@ -36,7 +36,7 @@ Almost every related protocol nails **two of the three** and misses the third:
 | **zkCoins (Shielded CSV)** | ✓ | ✓ | ✓ | — |
 
 :::note Spec design vs. shipped implementation
-The trustless corner is fully specified and the load-bearing fact is already true: everything that lands on Bitcoin is independently verifiable, so a node can re-derive and verify its anchors from the seed, the chain, and the content-addressed, `k`-replicated off-chain bundles ([spec §4.5–§4.6](/specification#45-recovery)).
+The trustless corner is fully specified: every node rebuilds the public nullifier accumulator from Bitcoin alone, while each private `CoinProof` remains content-addressed, independently verifiable, and `k`-replicated for recovery ([spec §3.6–§3.7](/specification#36-chain-scanning), [§4.5–§4.6](/specification#45-recovery)).
 
 Footprint figures in the tables below quote the **normative spec design** — a ~64-byte half-aggregated nullifier per transition (~16 vB), constant in the transition's input count ([spec §3.8](/specification#38-fees-and-economics)).
 :::
@@ -70,7 +70,7 @@ The closest "assets on Bitcoin via CSV" cousin, from Lightning Labs.
 |---|---|---|
 | **Validation** | Client-Side Validation + ZK | Client-Side Validation (Merkle proofs) |
 | **Privacy** | Full shield (anonymity set) | Transparent — proofs reveal asset, amount, lineage to the counterparty |
-| **Data availability** | Off-chain bundle + node/relay | Universe servers (off-chain proof archives) |
+| **Data availability** | Private `CoinProof` off-chain (`k`-replicated); public nullifiers on Bitcoin | Universe servers (off-chain proof archives) |
 | **Anchor** | Bitcoin Taproot | Bitcoin Taproot |
 
 Taproot Assets shares the Bitcoin anchor and the off-chain-data model, but has **no shielding** — it is the "Bitcoin + decentralized, but not private" corner of the triangle.
