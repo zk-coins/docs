@@ -6,6 +6,10 @@ title: Risks
 
 This page documents the known risks, limitations, and open problems of the zkCoins **target design** — the protocol defined in the [Specification](/specification), which is the single normative source ([Implementation Mandate](/implementation-mandate)). Current implementation status — what the running node does today versus the spec — is **not** in scope here; it is tracked in the project's implementation roadmap (in the [node repository](https://github.com/zk-coins/node)). How the project verifies the design against these risks — and the gates that verification imposes before launch — is defined in the [Assurance Roadmap](/assurance). Transparency about limitations is essential.
 
+:::warning Remediation in progress
+The [paper-deviation analysis](/paper-conformance-analysis) records paper-conformance, publisher-contention and ledger-availability findings against an earlier fixed-size off-chain-batch design (`docs@6816fc3`, pre-#97). [PR #97](https://github.com/zk-coins/docs/pull/97) landed the accepted architecture direction — on-chain half-aggregated state nullifiers, Bitcoin first occurrence and conditional NAV — in the normative spec; [Paper-Conformance Remediation](/paper-conformance-remediation) tracks the executable-conformance and assurance gates that remain. Until those gates close, the target design is research-stage and must not carry real value.
+:::
+
 ## Data availability and recovery
 
 **Risk: Losing your coin data means losing the coins.**
