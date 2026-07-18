@@ -120,7 +120,7 @@ The recipient's `CoinProof` material MUST contain the exact `TransitionEssenceV3
 3. `Pk_i` is the `current_pubkey` of the consumed account state proven by the recursive relation;
 4. the aggregate NISSHAC signature verifies for the complete ordered key/commitment list and fixed message;
 5. this `(Pk_i, R_i)` is the canonical first occurrence of `Pk_i`;
-6. the committed transition is the execution branch selected by conditional NAV, or the proof-constrained no-op branch applies.
+6. the committed transition is the single execution branch selected by conditional NAV (v1 has no reorg no-op branch — §3.2).
 
 This resolves F-01 without a publisher-level S2C object. The pre-tweak/opening value is now explicitly transported wherever the paper's commitment verification needs it.
 
@@ -212,7 +212,7 @@ The final security package must separately establish:
 
 - NISSHAC CK-AEUF-CC-CMA security and commitment hiding/binding for the instantiated curve/hash suite;
 - no double spend from first occurrence plus recursive state-key continuity;
-- conditional-NAV safety and account recoverability under arbitrary reorgs;
+- conditional-NAV dependency-anchoring safety and the 6-confirmation reorg-finality bound (a ≥6-block reorg is an accepted break with no recovery path, not a property to prove recoverable — §3.9);
 - per-asset conservation and creator-only issuance;
 - privacy under the now chain-visible transaction count, rotating keys and commitments;
 - correctness of the concrete recursive circuit and implementation.
@@ -242,10 +242,10 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 |---|---|
 | §1.1/§1.7 | add v3 domains, NISSHAC primitives, encodings, verifier data and network binding |
 | §1.4–§1.6 | replace per-coin global nullifiers/root-chain objects with rotating account-state nullifiers and paper-compatible NAV history |
-| §2.1–§2.3 | bind transition essence/opening, first occurrence, state-key continuity and conditional execute/no-op branches |
+| §2.1–§2.3 | bind transition essence/opening, first occurrence, state-key continuity and the single conditional-NAV execute branch (no reorg no-op branch, §3.2) |
 | §2.5–§2.6 | remove `C_batch`; dimension NISSHAC and conditional-NAV gadgets; freeze backend |
 | §3.1–§3.8 | replace `BatchInscription`/`BatchBundle` admission with `AggregateStateNullifierV3`, scanning, half-aggregation and paper-style fees |
-| §3.9–§3.10 | define canonical-tip-relative state and arbitrary rollback/replay |
+| §3.9–§3.10 | define canonical-tip-relative state, bounded ≤5-block canonical replay and the 6-confirmation finality bound (a ≥6-block reorg is an accepted break) |
 | §4 | separate private `CoinProof` recovery from public ledger reconstruction; remove batch-locator mapping |
 | §5 | remove `mint-verified`; make acceptance/opening/reorg checks explicit |
 | §6 | distinguish paper-derived target, implementation status and residual trust/economic claims |
@@ -271,7 +271,7 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 - one-entry self-publish and multi-entry aggregation work on regtest and public testnet;
 - a clean node reconstructs state from Bitcoin without Nostr, Blossom or a zkCoins index;
 - mutation, duplicate, malformed-encoding, wrong-network and proof-substitution vectors fail;
-- arbitrary-reorg and conditional-no-op tests converge across two nodes;
+- ≤5-block reorg-replay tests converge across two nodes, and a ≥6-block reorg is surfaced as the accepted break boundary (§3.9);
 - private zero-local-state recovery is tested with stated replica failures.
 
 ### Gate C — assurance
