@@ -18,7 +18,7 @@ PR #97 returned the global double-spend boundary to the paper model, now normati
 2. Key first-occurrence by the state being consumed, represented by its rotating `current_pubkey = Pk_i`; remove the chained global `prev_root -> new_root` object.
 3. Let every verifier rebuild the same first-occurrence map and nullifier accumulator from canonical Bitcoin data alone.
 4. Commit each on-chain signature nonce to the exact off-chain transition essence and carry the opening in the recipient proof bundle, as Shielded CSV does.
-5. Adopt a conditional-NAV branch so a reorg either executes the committed transition or advances the account through a proof-constrained no-op instead of burning its balance.
+5. Bound reorg finality at 6 confirmations: absorb reorgs of ≤5 blocks by canonical replay and treat a reorg of ≥6 blocks as an accepted break, rather than the paper's arbitrary-depth conditional-NAV no-op — a deliberate deviation ([Paper-Deviation Analysis D-16](/paper-conformance-analysis), issues #105/#106).
 6. Route every state-advancing transition, including issuance, through that same on-chain state-nullifier path.
 7. Keep recursive `CoinProof` data encrypted and off-chain; its loss remains a bearer-data recovery risk but cannot split the public double-spend view.
 
@@ -41,13 +41,13 @@ A later coordinator lane may offer optional constant-size batching only if the d
 
 ## Findings and mandatory disposition
 
-**F-01, F-02, F-04 and F-06 are resolved in the normative spec** by PR #97: the on-chain `(Pk_i, R_i)` state nullifier ([spec §3.1](/specification#31-the-on-chain-object), [§1.7.10](/specification#1710-half-aggregation-with-commitments-nisshac-normative)), first-occurrence rebuild from Bitcoin alone ([spec §3.6](/specification#36-chain-scanning)), predecessor-nullifier anchoring of every state-advancing transition including issuance ([spec §2.1](/specification#21-the-compliance-predicate), [§2.3.1](/specification#231-mint--issuance), [§3.10](/specification#310-transaction-states)), and replication reserved for private bearer data ([spec §4.6](/specification#46-data-availability--replication-factor-k)). What remains open is the executable-conformance evidence (canonical vectors) and the assurance work — F-03, F-05, F-07, F-08 and the proof/backend/audit gates in [§10](#10-acceptance-gates). The **selected disposition** column records the design decision each finding drove; the **release gate** column records what still gates mainnet.
+**F-01, F-02, F-04 and F-06 are resolved in the normative spec** by PR #97: the on-chain `(Pk_i, R_i)` state nullifier ([spec §3.1](/specification#31-the-on-chain-object), [§1.7.10](/specification#1710-half-aggregation-with-commitments-nisshac-normative)), first-occurrence rebuild from Bitcoin alone ([spec §3.6](/specification#36-chain-scanning)), predecessor-nullifier anchoring of every state-advancing transition including issuance ([spec §2.1](/specification#21-the-compliance-predicate), [§2.3.1](/specification#231-mint--issuance), [§3.10](/specification#310-transaction-states)), and replication reserved for private bearer data ([spec §4.6](/specification#46-data-availability--replication-factor-k)). What remains open is the executable-conformance evidence (canonical vectors) and the assurance work — F-05, F-07, F-08 and the proof/backend/audit gates in [§10](#10-acceptance-gates). The **selected disposition** column records the design decision each finding drove; the **release gate** column records what still gates mainnet.
 
 | ID | Severity | Problem | Selected disposition | Release gate |
 |---|---:|---|---|---|
 | F-01 | high | The current publisher S2C check requires a pre-tweak point absent from its wire objects. | Delete the publisher root-transition signature. Use paper-style per-state NISSHAC commitments and transport every member's opening in its proof bundle. | vectors + testnet |
 | F-02 | high | `bundle_locator` does not directly resolve the Blossom `blob_id`. | Remove public-ledger bundle discovery from admission; the first-occurrence index is rebuilt from Bitcoin. | clean sync |
-| F-03 | high | A five-block reorg bound is treated as absolute. | Canonical-chain rollback/replay plus conditional NAV; confirmation depth remains wallet policy. | deep-reorg tests |
+| F-03 | high | A five-block reorg bound is treated as absolute. | **Resolved as deliberate deviation**: v1 fixes finality at a hard 6-confirmation bound instead of the paper's conditional-NAV no-op — reorgs of ≤5 blocks are absorbed by canonical replay, and a reorg of ≥6 blocks MAY break zkCoins as an accepted v1 limitation ([spec §3.9](/specification#39-finality-and-reorg-handling)). Refs: #105, #106. | resolved — no further gate; revisit only if a sound `DistinctElement` no-op construction is adopted |
 | F-04 | medium | A mint can be accepted without a Bitcoin state nullifier. | Every issuance is a state update whose consumed `Pk_i` must win first occurrence. | issuance-fork tests |
 | F-05 | high | Plonky2 is deprecated and the backend is not frozen. | Audit a maintained fork or migrate before genesis; pin verifier data and security assumptions. | before vectors |
 | F-06 | high | `k = 3` retention cannot guarantee public-ledger DA or operator independence. | Put every state nullifier on Bitcoin; use replication only for private proof recovery. | clean sync |
@@ -144,7 +144,7 @@ There is no `prev_root`, `new_root`, `BatchBundle`, `bundle_locator`, public `Ag
 
 `observed` means present on the current best chain. `accepted` means still present after the wallet's configured confirmation depth. Neither means absolute finality.
 
-On any reorg, regardless of depth, a node MUST:
+On a reorg within the tolerated window (≤5 blocks; the 6-confirmation finality bound, [spec §3.9](/specification#39-finality-and-reorg-handling)), a node MUST:
 
 1. remove nullifier entries introduced by disconnected blocks in reverse order;
 2. restore any earlier duplicate that becomes first after removal;
@@ -152,16 +152,15 @@ On any reorg, regardless of depth, a node MUST:
 4. replay connected blocks in canonical order;
 5. re-evaluate affected coins, transition branches and account lineage heads.
 
+A reorg of ≥6 blocks can displace a **final** nullifier and MAY break zkCoins — an accepted v1 limitation with no recovery path ([spec §3.9](/specification#39-finality-and-reorg-handling)), not a case this replay resolves.
+
 ### 3.2 Conditional execution rule
 
-Each `TransitionEssenceV3` commits to a conditional NAV covering all chain dependencies of its previous account state and input coins. The recursive predicate proves exactly one branch:
+Each `TransitionEssenceV3` commits to a conditional NAV covering all chain dependencies of its previous account state and input coins. The recursive predicate proves the single **execute** branch: the conditional NAV and every input object's NAV are prefixes of the live canonical NAV, and it applies the committed balance, spent-set, output and key-rotation transition. There is **no reorg no-op branch**.
 
-- **execute:** the conditional NAV and every input object's NAV are prefixes of the live canonical NAV; apply the committed balance, spent-set, output and key-rotation transition;
-- **reorg no-op:** prove a distinct element between the conditional NAV and live NAV; create no coins, spend no coins, keep owner, balances and private spent accumulator unchanged, and advance only to a fresh one-time state key so the account can continue after `Pk_i` has appeared on-chain.
+zkCoins v1 deliberately does **not** adopt the paper's conditional-NAV no-op (an exactly-one-of predicate with a `distinct-element` branch that lets an account continue after a dependency is orphaned). It fixes a hard **6-confirmation finality bound** instead ([spec §3.9](/specification#39-finality-and-reorg-handling)): reorgs of ≤5 blocks touch only non-final nullifiers and are absorbed by canonical replay; a reorg of ≥6 blocks MAY break zkCoins as an accepted v1 limitation. Accordingly the accumulator is a plain leaf-preserving SMT `prefix` relation and does **not** implement the paper's `distinct-element` no-op relation — a deliberate, registered deviation ([Paper-Deviation Analysis D-16](/paper-conformance-analysis), issues #105/#106). The union-membership, append-set and remove-set behaviours the execute branch and chain scan rely on remain provided by the SMT.
 
-The exact accumulator must support the paper's prefix, distinct-element, union-membership, append-set and remove-set proofs, or a replacement must come with a new proof of all equivalent properties. A plain unordered SMT root is not automatically a conditional-NAV substitute.
-
-Required tests include one-block and six-plus-block reorgs, arbitrary removed suffixes, duplicate-first-occurrence reversal, dependent receives/spends, and equality with clean replay of the replacement branch.
+Required tests include one-to-five-block reorgs, arbitrary removed suffixes within the tolerated window, duplicate-first-occurrence reversal, dependent receives/spends, equality with clean replay, and confirmation that a ≥6-block reorg is surfaced as the accepted break boundary ([spec §3.9](/specification#39-finality-and-reorg-handling)) rather than silently mis-handled.
 
 ## 4. Account transitions and issuance
 
@@ -228,7 +227,7 @@ Model checking cannot replace primitive proofs or implementation audit.
 | Commitment binding | substitute transition essence or opening; `R_i` no longer opens |
 | First occurrence | publish two valid commitments under one `Pk_i`; only the earlier canonical entry controls |
 | Reorg replay | remove the winner's block; the next canonical occurrence becomes first exactly as clean replay predicts |
-| Conditional NAV | remove a dependency while leaving the state nullifier; only the no-op branch verifies |
+| Reorg finality | a ≤5-block reorg orphaning a non-final dependency is absorbed by canonical replay; a ≥6-block reorg displacing a final dependency is the accepted break boundary ([spec §3.9](/specification#39-finality-and-reorg-handling)) |
 | State continuity | use a key not committed by the predecessor state; proof fails |
 | Mint fork exclusion | publish two same-state mints; at most the first produces accepted outputs |
 | Network separation | replay an object or proof under another network's verifier-data domain; verification fails |
@@ -263,7 +262,7 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 - one normative version contains no mixed v2 root-chain/v3 first-occurrence path;
 - NISSHAC, transition essence, opening, NAV operations, carrier and rejection rules are byte-exact;
 - every state advance and mint follows one first-occurrence rule;
-- no fixed reorg maximum or absolute-finality wording remains;
+- the 6-confirmation reorg-finality bound is stated consistently ([spec §3.9](/specification#39-finality-and-reorg-handling)), with ≥6-block reorgs marked as the accepted break boundary;
 - all performance and privacy claims match the selected construction.
 
 ### Gate B — executable conformance
@@ -294,7 +293,7 @@ Every release must distinguish:
 |---|---|---|---|---|
 | nullifier | rotating state key + NISSHAC commitment | v3 paper-model port | commit/link | vectors/proof |
 | ordering | Bitcoin first occurrence | canonical scan/reorg replay | commit/link | two-node test |
-| conditional NAV | ToS prefix/distinct-element logic | frozen v3 relation | commit/link | circuit proof |
+| reorg finality | SMT prefix + 6-confirmation bound (no distinct-element no-op) | frozen v3 relation | commit/link | replay + bound test |
 | recovery | private coin proof required | encrypted replicated bearer data | commit/link | restore test |
 | issuance | application-defined | creator-bound, unlimited, anchored | commit/link | issuance tests |
 | proof backend | abstract PCD | named frozen backend | commit/link | audit/benchmarks |
