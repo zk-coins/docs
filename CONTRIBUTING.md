@@ -16,6 +16,17 @@ This is a hard project rule. It shapes every design and implementation decision:
 
 When in doubt about whether a feature belongs in the wallet, SDK, or node: if it exists to reduce trust in the node, build it node-side, or document self-hosting as the answer. This rule is mirrored verbatim in [`zk-coins/node`](https://github.com/zk-coins/node/blob/develop/CONTRIBUTING.md), [`zk-coins/sdk`](https://github.com/zk-coins/sdk/blob/develop/CONTRIBUTING.md), [`zk-coins/app`](https://github.com/zk-coins/app/blob/develop/CONTRIBUTING.md), and [`zk-coins/docs`](https://github.com/zk-coins/docs/blob/develop/CONTRIBUTING.md).
 
+## Paper conformance — follow the source works, or justify every deviation
+
+zkCoins is a concrete realization of two source works: the **zkCoins concept** (Robin Linus, 2023) and the **Shielded CSV construction** (Jonas Nick, Liam Eagen, Robin Linus, [ePrint 2025/068](https://eprint.iacr.org/2025/068)). This is a hard project rule, on the same footing as the trust model above:
+
+**Either the specification conforms to the source papers, or it deviates — and every deviation MUST be justified in the specification itself: explicitly, completely, and rigorously, stating what the paper does, what zkCoins does instead, and precisely why the change is sound.** A deviation without a written, bombproof justification is a spec bug, not a design choice.
+
+- **Where the papers leave a choice open**, take the Bitcoin-consistent option and say so — that is an instantiation, not a deviation.
+- **A deviation that moves a load-bearing security or trust boundary** (the nullifier relation, the accumulator, the availability model, the fee construction, the reorg/no-op semantics) does not inherit the source papers' proofs. It MUST carry its own security argument; until it has one, the spec **MUST NOT** describe it as a "faithful port" or an "exact paper-model" construction.
+- **Deviations are tracked, never hidden.** Every one is registered with its rationale and release gate in the [Paper-Deviation Analysis](/paper-conformance-analysis) and [Paper-Conformance Remediation](/paper-conformance-remediation), and any open contradiction is listed in [Risks](/risks) and as a GitHub issue until it is closed.
+- The single-source-of-truth rule of the implementation mandate applies: if a spec claim overstates conformance, that is a spec bug — open a PR against `docs`, do not paper over it.
+
 ## Quick Start
 
 ```bash

@@ -10,6 +10,22 @@ This page documents the known risks, limitations, and open problems of the zkCoi
 The [paper-deviation analysis](/paper-conformance-analysis) records paper-conformance, publisher-contention and ledger-availability findings against an earlier fixed-size off-chain-batch design (`docs@6816fc3`, pre-#97). [PR #97](https://github.com/zk-coins/docs/pull/97) landed the accepted architecture direction — on-chain half-aggregated state nullifiers, Bitcoin first occurrence and conditional NAV — in the normative spec; [Paper-Conformance Remediation](/paper-conformance-remediation) tracks the executable-conformance and assurance gates that remain. Until those gates close, the target design is research-stage and must not carry real value.
 :::
 
+## Conditional-NAV reorg recovery is not yet satisfiable as specified
+
+**Risk: the compliance predicate cannot prove the no-op transition the reorg-recovery story depends on.**
+
+The spec adopts *Shielded CSV*'s conditional-NAV construction for reorg safety ([spec §2.1 clause 1](/specification#21-the-compliance-predicate), [§3.9](/specification#39-finality-and-reorg-handling)): a transition whose dependency was orphaned by a reorg is said to "degrade to an in-circuit no-op". But the paper's predicate is an **exactly-one-of** with two branches — a prefix branch **and** a provable `DistinctElement` no-op branch — while the spec's clause 1 provides only the unconditional `prefix(prev.nav, w.nav)`, with no `DistinctElement` alternative. In the paper's own hard case (the account's own nullifier survives while a dependency's nullifier is orphaned), clause 1 forces `w.nav` to retain the orphaned leaf, while the receiver requires `w.nav` to be canonical on the post-reorg history that no longer contains it — so no no-op witness exists. The advertised arbitrary-depth reorg survivability therefore does not hold as written.
+
+**Mitigation:** tracked as an open, load-bearing deviation ([issue #105](https://github.com/zk-coins/docs/issues/105)). Until the predicate carries a satisfiable `DistinctElement` no-op branch — or the relation is proved as a deliberate, sound replacement — the conditional-NAV / arbitrary-depth-reorg claims are not established, and per the [paper-conformance rule](https://github.com/zk-coins/docs/blob/develop/CONTRIBUTING.md) the "faithful conditional-NAV" language must be qualified accordingly.
+
+## Accumulator history relation deviates from the paper's ToS accumulator
+
+**Risk: the accumulator's history relation is presented as the paper model but is a different relation.**
+
+*Shielded CSV* uses a tuple-of-sets (ToS) accumulator whose history relations are an ordered `IsPrefix` and a `DistinctElement` at the same tuple position (paper §3.2, §3.6). The spec's [§3.7](/specification#37-the-nullifier-accumulator) `prefix(a, b)` is instead an **unordered, leaf-preserving SMT submap**, and the spec has no `DistinctElement` relation. The two disagree on valid reorg histories — e.g. regrouping the same nullifiers across blocks, or an orphan at an early position. The narrow consumed-key `ToSAccVVerifyUnionMembership` port ([§2.1](/specification#21-the-compliance-predicate)) is faithful, but the history/prefix relation is a deliberate replacement.
+
+**Mitigation:** tracked at [issue #106](https://github.com/zk-coins/docs/issues/106). Under the paper-conformance rule the spec must either make the relation ToS-equivalent or name the SMT-submap relation as a deliberate replacement with its own argument — not as an exact paper port.
+
 ## Data availability and recovery
 
 **Risk: Losing your coin data means losing the coins.**
