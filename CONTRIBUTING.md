@@ -9,12 +9,23 @@ zkCoins follows the **Bitcoin full-node model: your wallet trusts _your_ node, e
 This is a hard project rule. It shapes every design and implementation decision:
 
 - **Self-hosting gives you trustlessness and privacy at once.** Your own node verifies your transactions and sees your plaintext — and _you_ are the operator, so nothing leaks. The wallet must always be able to switch to a different node by changing a single configuration value.
-- **Using someone else's node is a trade-off you choose, not a flaw.** A public operator can never steal, forge, or double-spend your coins — that is enforced cryptographically (recursive proofs + Bitcoin-anchored nullifiers). What a foreign operator can see is your privacy, and it can affect liveness — the same spectrum as using an Electrum/SPV server instead of your own Bitcoin node.
+- **Using someone else's node is a trade-off you choose, not a flaw.** A public operator can never forge a signature, double-spend, or spend your coins without your key — that is enforced cryptographically (recursive proofs + Bitcoin-anchored nullifiers). It can, however, lie about your balances and history, and — because it alone builds the proving witness for a send — it can propose the wrong outputs for your cooperative signature to sign, redirecting a payment; the thin wallet cannot independently check this (no Poseidon, no client-side proof verification, per the rule above). This is a correctness trust, not a custody break — see [specification §6.6](https://docs.zkcoins.app/specification#66-threat-model-and-trust-configurations). What a foreign operator can always see is your privacy, and it can affect liveness — the same spectrum as using an Electrum/SPV server instead of your own Bitcoin node.
 - **The thin wallet and SDK are not a compromise.** No anti-node logic: no client-side proof verification, no scan loops, no view-key / spend-key splits, no consistency checks against a second node, no "node integrity" indicators in the UI. Trustlessness comes from running your own node, not from bolting verification onto a thin client. Anything that exists to reduce trust in the node belongs node-side — or the answer is self-hosting.
 - **The node is built so that self-hosting is easy.** Single container, documented configuration, deterministic state, no operator-specific dependencies.
 - **The SDK and wallet stay thin.** They expose seed + address + the small set of operations every familiar wallet SDK exposes. Integrators (Cake Wallet, LayerZ, BlueWallet, …) should be able to wire zkCoins up with the same effort as adding a second Bitcoin-family chain.
 
 When in doubt about whether a feature belongs in the wallet, SDK, or node: if it exists to reduce trust in the node, build it node-side, or document self-hosting as the answer. This rule is mirrored verbatim in [`zk-coins/node`](https://github.com/zk-coins/node/blob/develop/CONTRIBUTING.md), [`zk-coins/sdk`](https://github.com/zk-coins/sdk/blob/develop/CONTRIBUTING.md), [`zk-coins/app`](https://github.com/zk-coins/app/blob/develop/CONTRIBUTING.md), and [`zk-coins/docs`](https://github.com/zk-coins/docs/blob/develop/CONTRIBUTING.md).
+
+## Paper conformance — follow the source works, or justify every deviation
+
+zkCoins is a concrete realization of two source works: the **zkCoins concept** (Robin Linus, 2023) and the **Shielded CSV construction** (Jonas Nick, Liam Eagen, Robin Linus, [ePrint 2025/068](https://eprint.iacr.org/2025/068)). This is a hard project rule, on the same footing as the trust model above:
+
+**Either the specification conforms to the source papers, or it deviates — and every deviation MUST be justified in the specification itself: explicitly, completely, and rigorously, stating what the paper does, what zkCoins does instead, and precisely why the change is sound.** A deviation without a written, bombproof justification is a spec bug, not a design choice.
+
+- **Where the papers leave a choice open**, take the Bitcoin-consistent option and say so — that is an instantiation, not a deviation.
+- **A deviation that moves a load-bearing security or trust boundary** (the nullifier relation, the accumulator, the availability model, the fee construction, the reorg/no-op semantics) does not inherit the source papers' proofs. It MUST carry its own security argument; until it has one, the spec **MUST NOT** describe it as a "faithful port" or an "exact paper-model" construction.
+- **Deviations are tracked, never hidden.** Every one is registered with its rationale and release gate in the [Paper-Deviation Analysis](/paper-conformance-analysis) and [Paper-Conformance Remediation](/paper-conformance-remediation), and any open contradiction is listed in [Risks](/risks) and as a GitHub issue until it is closed.
+- The single-source-of-truth rule of the implementation mandate applies: if a spec claim overstates conformance, that is a spec bug — open a PR against `docs`, do not paper over it.
 
 ## Quick Start
 
@@ -36,20 +47,20 @@ npm start    # http://localhost:3092
 
 ```
 docs/
-├── docs/                  # Markdown content
-│   ├── intro.md           # Landing page (slug: /)
-│   ├── architecture/      # Architecture section
-│   ├── protocol.md        # Shielded CSV protocol reference
-│   ├── wallet.md          # Wallet user guide
-│   ├── comparisons.md     # vs RGB, Lightning, Zcash, etc.
-│   ├── tech-decisions.md  # Technology choice rationale
-│   ├── roadmap.md         # Project roadmap
-│   └── risks.md           # Known risks and limitations
-├── src/css/custom.css     # Theme overrides (Bitcoin orange)
-├── static/img/            # Favicon, logos
-├── docusaurus.config.js   # Site config
-├── sidebars.js            # Navigation structure
-└── package.json           # Dependencies (webpack pinned to 5.97.1)
+├── docs/                         # Markdown content
+│   ├── intro.md                  # Landing page (slug: /)
+│   ├── requirements.md           # The ten protocol requirements
+│   ├── specification.md          # The normative protocol specification (single source of truth)
+│   ├── implementation-mandate.md # Standing instruction to every implementor
+│   ├── protocol.md               # Shielded CSV protocol reference
+│   ├── comparisons.md            # vs RGB, Lightning, Zcash, etc.
+│   ├── risks.md                  # Known risks and limitations
+│   └── assurance.md              # Assurance roadmap (incentive analysis, verification staircase, gates)
+├── src/css/custom.css            # Theme overrides (Bitcoin orange)
+├── static/img/                   # Favicon, logos
+├── docusaurus.config.js          # Site config
+├── sidebars.js                   # Navigation structure
+└── package.json                  # Dependencies (webpack pinned to 5.97.1)
 ```
 
 ## Git Workflow
@@ -70,7 +81,6 @@ Every doc page needs frontmatter:
 
 ```markdown
 ---
-sidebar_position: 3
 title: Page Title
 ---
 
@@ -78,6 +88,8 @@ title: Page Title
 
 Content starts here.
 ```
+
+Page order is controlled exclusively by `sidebars.js` — do not add `sidebar_position` frontmatter.
 
 ### Style Guide
 

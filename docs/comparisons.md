@@ -1,5 +1,4 @@
 ---
-sidebar_position: 7
 title: Comparisons
 ---
 
@@ -14,7 +13,7 @@ zkCoins is the first real-world **implementation** of two whitepapers:
 - the **Shielded CSV** construction by Jonas Nick (Blockstream), Liam Eagen (Alpen Labs), and Robin Linus (ZeroSync) — [eprint 2025/068](https://eprint.iacr.org/2025/068);
 - the original **zkCoins** concept, prototyped as [ZeroSync/ZKCoins](https://github.com/ZeroSync/ZKCoins).
 
-The project at **zkcoins.com does not compete with these papers — it realizes them.** It claims no invention of the underlying scheme; its contribution is bringing the design to a running node, wallet, and the off-chain transport/recovery layer needed to operate it. Where this page says "zkCoins", read "the Shielded CSV scheme as realized by zkCoins".
+The project at **zkcoins.app does not compete with these papers — it realizes them.** It claims no invention of the underlying scheme; its contribution is bringing the design to a running node, wallet, and the off-chain transport/recovery layer needed to operate it. Where this page says "zkCoins", read "the Shielded CSV scheme as realized by zkCoins".
 
 ## The differentiator is a combination, not a single property
 
@@ -37,9 +36,9 @@ Almost every related protocol nails **two of the three** and misses the third:
 | **zkCoins (Shielded CSV)** | ✓ | ✓ | ✓ | — |
 
 :::note Spec design vs. shipped implementation
-The trustless corner is fully specified and the load-bearing fact is already true: everything that lands on Bitcoin is independently verifiable, so a wallet can re-derive and verify its own anchors from seed + chain.
+The trustless corner is fully specified: every node rebuilds the public nullifier accumulator from Bitcoin alone, while each private `CoinProof` remains content-addressed, independently verifiable, and `k`-replicated for recovery ([spec §3.6–§3.7](/specification#36-chain-scanning), [§4.5–§4.6](/specification#45-recovery)).
 
-Footprint figures in the tables below quote the **normative batched spec design** — one constant 231-byte `BatchInscription` per publisher batch (~318 vBytes commit + reveal pair), amortising to ~3.2 vBytes per spend at 100-record batches ([spec §3.8](/specification#38-fees-and-economics)).
+Footprint figures in the tables below quote the **normative spec design** — a ~64-byte half-aggregated nullifier per transition (~16 vB), constant in the transition's input count ([spec §3.8](/specification#38-fees-and-economics)).
 :::
 
 ---
@@ -55,7 +54,7 @@ Both use Client-Side Validation on Bitcoin, but serve different purposes.
 | **Focus** | Private payments | Smart contracts + tokens |
 | **Privacy** | Full (ZK proofs hide everything; global anonymity set) | Limited (history revealed to counterparty) |
 | **Proof size** | Constant (independent of history) | Grows with transaction history |
-| **On-chain footprint** | Constant 231-byte `BatchInscription` per publisher batch, amortised per spend ([spec §3.8](/specification#38-fees-and-economics)) | Commitment in a host TX; off-chain consignment grows |
+| **On-chain footprint** | ~64-byte half-aggregated nullifier per transition (~16 vB), constant in input count ([spec §3.8](/specification#38-fees-and-economics)) | Commitment in a host TX; off-chain consignment grows |
 | **Smart contracts** | No | Yes (zk-AluVM, Turing-complete) |
 | **DeFi/Lending** | Not yet | Possible (bilateral) |
 
@@ -71,7 +70,7 @@ The closest "assets on Bitcoin via CSV" cousin, from Lightning Labs.
 |---|---|---|
 | **Validation** | Client-Side Validation + ZK | Client-Side Validation (Merkle proofs) |
 | **Privacy** | Full shield (anonymity set) | Transparent — proofs reveal asset, amount, lineage to the counterparty |
-| **Data availability** | Off-chain bundle + node/relay | Universe servers (off-chain proof archives) |
+| **Data availability** | Private `CoinProof` off-chain (`k`-replicated); public nullifiers on Bitcoin | Universe servers (off-chain proof archives) |
 | **Anchor** | Bitcoin Taproot | Bitcoin Taproot |
 
 Taproot Assets shares the Bitcoin anchor and the off-chain-data model, but has **no shielding** — it is the "Bitcoin + decentralized, but not private" corner of the triangle.
@@ -83,7 +82,7 @@ Taproot Assets shares the Bitcoin anchor and the off-chain-data model, but has *
 | **Layer** | L1 (Client-Side Validation) | L2 (payment channels) |
 | **Privacy** | Full (ZK proofs) | Good (onion routing) |
 | **Interactivity** | Receiver must be reachable | Routing path required |
-| **Capacity** | Bounded by Bitcoin L1 (one constant-size `BatchInscription` per batch, amortised per spend) | Theoretically unlimited |
+| **Capacity** | Bounded by Bitcoin L1 (one ~64-byte nullifier per transition, ~16 vB) | Theoretically unlimited |
 | **Offline receive** | No | No |
 
 Lightning and Shielded CSV are complementary; CSV assets could theoretically flow through Lightning channels.
@@ -97,7 +96,7 @@ Lightning and Shielded CSV are complementary; CSV assets could theoretically flo
 | **Privacy model** | Mandatory for CSV users | Optional (~10-20% usage) |
 | **ZK system** | Plonky2 (cyclic recursion, FRI) | Halo2 |
 | **Trusted setup** | None | Eliminated since NU5 |
-| **On-chain footprint** | Constant 231-byte `BatchInscription` per batch, amortised per spend | Full transaction |
+| **On-chain footprint** | ~64-byte half-aggregated nullifier per transition (~16 vB) | Full transaction |
 
 Zcash is the conceptual parent of the commitment/nullifier shield. The key divergence: Zcash secures its own chain; zkCoins inherits Bitcoin's.
 
@@ -108,7 +107,7 @@ Zcash is the conceptual parent of the commitment/nullifier shield. The key diver
 | **Blockchain** | Bitcoin | Own chain |
 | **Privacy approach** | ZK proofs | Ring signatures + Stealth + RingCT |
 | **Anonymity set** | **All coins ever created** | Ring of 16 decoys |
-| **Scalability** | Constant 231 B per batch on-chain — ~3.2 vBytes per spend at 100-record batches | ~2-3 KB per TX |
+| **Scalability** | ~64 B per transition on-chain (~16 vB), constant in input count | ~2-3 KB per TX |
 | **Statistical attacks** | Not possible | Possible (decoy-selection analysis) |
 
 ### vs. CoinJoin
@@ -119,7 +118,7 @@ Zcash is the conceptual parent of the commitment/nullifier shield. The key diver
 | **Amounts hidden** | Yes | No (equal-output) |
 | **Coordinator** | None | Required |
 | **On-chain analysis** | Not possible | Difficult but not impossible |
-| **Cost** | Amortised share of one batch inscription (constant per batch) | Multiple UTXOs (expensive) |
+| **Cost** | One ~64-byte nullifier per transition (~16 vB) | Multiple UTXOs (expensive) |
 | **Regulatory risk** | Low (no coordinator) | High (coordinators prosecuted) |
 
 ### vs. Silent Payments (BIP352)

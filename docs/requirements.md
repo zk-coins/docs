@@ -1,5 +1,4 @@
 ---
-sidebar_position: 2
 title: Requirements
 ---
 
@@ -21,7 +20,7 @@ The integrity of funds is enforced by cryptography and Bitcoin alone. No party �
 
 ### 4. Client-side validation
 
-A receiver accepts a coin only after independently verifying its full validity proof; correctness never depends on trusting the sender, the node, or any third party.
+A receiver — itself, or its own node acting on its behalf — accepts a coin only after independently verifying its full validity proof; correctness never depends on trusting the sender, a foreign node, or any third party. (Following the Bitcoin full-node model, the thin wallet trusts *its own* node exactly as a Bitcoin wallet trusts its own `bitcoind`; the trustless path is self-hosting that node, not bolting verification onto the wallet.)
 
 ### 5. Custody only in the wallet
 
@@ -41,7 +40,7 @@ The protocol supports multiple distinct asset types, each identified by a global
 
 ### 9. Selective disclosure
 
-The holder of an account can voluntarily disclose, to a recipient of its choosing, a precisely bounded view of its own activity — and nothing beyond that bound. The protocol supports at least three granularities: (a) a single transaction; (b) the current balance of one asset, revealing no transaction or history; and (c) the account's full transaction history. Every disclosure is read-only — it never confers spend authority — and every disclosed fact must be cryptographically verifiable against Bitcoin rather than asserted by any node or explorer. Disclosure is opt-in: absent one, the privacy of Requirement 2 holds in full. Any explorer that presents such disclosures must be self-hostable.
+The holder of an account can voluntarily disclose, to a recipient of its choosing, a precisely bounded view of its own activity — and nothing beyond that bound. The protocol supports at least three granularities: (a) a single transaction; (b) the current balance of one asset, revealing no transaction amounts or counterparties and no transaction beyond the single on-chain anchor the attestation stands on (a documented v1 limit; a leak-free set-membership anchor is the planned upgrade — see [spec §5.7](/specification#57-balance-attestation-history-private)) — the balance attestation stands on the account's most recent anchored state, and because **every** state-advancing transition (send, receive, and mint) now publishes an on-chain state nullifier ([spec §3.10](/specification#310-transaction-states)), that anchor tracks the latest state; and (c) the account's full transaction history. Every disclosure is read-only — it never confers spend authority — and every disclosed fact must be cryptographically verifiable — never asserted by any node or explorer — against Bitcoin: each state-advancing transition in a coin's lineage is checked to be the **first occurrence** of its account-state nullifier on Bitcoin (see [spec §3.10](/specification#310-transaction-states), [§5.6](/specification#56-shareable-confirmation-links)). Disclosure is opt-in: absent one, the privacy of Requirement 2 holds in full. Any explorer that presents such disclosures must be self-hostable.
 
 ### 10. Node portability
 
