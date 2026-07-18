@@ -10,6 +10,20 @@ This page documents the known risks, limitations, and open problems of the zkCoi
 The [paper-deviation analysis](/paper-conformance-analysis) records paper-conformance, publisher-contention and ledger-availability findings against an earlier fixed-size off-chain-batch design (`docs@6816fc3`, pre-#97). [PR #97](https://github.com/zk-coins/docs/pull/97) landed the accepted architecture direction — on-chain half-aggregated state nullifiers, Bitcoin first occurrence and conditional NAV — in the normative spec; [Paper-Conformance Remediation](/paper-conformance-remediation) tracks the executable-conformance and assurance gates that remain. Until those gates close, the target design is research-stage and must not carry real value.
 :::
 
+## Reorg finality is bounded at 6 confirmations (v1 project directive)
+
+**Risk: a Bitcoin reorg of 6 or more blocks can orphan a final nullifier and break an account — v1 does not provide the paper's arbitrary-depth reorg recovery, fixing finality at 6 confirmations and treating a ≥6-block reorg as an accepted break.**
+
+*Shielded CSV* makes reorgs of any depth survivable through a conditional-NAV no-op: an `exactly-one-of` predicate with a prefix branch **and** a provable `DistinctElement` no-op branch ([paper §4.2](https://eprint.iacr.org/2025/068)). The zkCoins circuit has only the unconditional `prefix(prev.nav, w.nav)` — no `DistinctElement` branch — so that no-op has no satisfiable witness ([issue #105](https://github.com/zk-coins/docs/issues/105)). Rather than build a novel no-op construction, zkCoins v1 adopts a **deliberate hard finality bound** ([spec §3.9](/specification#39-finality-and-reorg-handling)): 6 confirmations = final; reorgs ≤5 blocks are absorbed by canonical replay and strand no account (nothing final depends on a non-final nullifier); a reorg of **≥6 blocks MAY break zkCoins** and has no recovery path. This is an explicit, accepted v1 limitation, registered as a deviation in the [paper-deviation analysis](/paper-conformance-analysis) per the [paper-conformance rule](https://github.com/zk-coins/docs/blob/develop/CONTRIBUTING.md). The former "faithful conditional-NAV / arbitrary-depth" language has been removed from the spec.
+
+## Accumulator history relation deviates from the paper's ToS accumulator
+
+**Risk: the accumulator's history relation is presented as the paper model but is a different relation.**
+
+*Shielded CSV* uses a tuple-of-sets (ToS) accumulator whose history relations are an ordered `IsPrefix` and a `DistinctElement` at the same tuple position (paper §3.2, §3.6). The spec's [§3.7](/specification#37-the-nullifier-accumulator) `prefix(a, b)` is instead an **unordered, leaf-preserving SMT submap**, and the spec has no `DistinctElement` relation. The two disagree on valid reorg histories — e.g. regrouping the same nullifiers across blocks, or an orphan at an early position. The narrow consumed-key `ToSAccVVerifyUnionMembership` port ([§2.1](/specification#21-the-compliance-predicate)) is faithful, but the history/prefix relation is a deliberate replacement. This divergence is bounded by the same 6-confirmation finality directive ([spec §3.9](/specification#39-finality-and-reorg-handling)): history disagreements can only arise within the ≤5-block replay window (handled identically by every node) or beyond finality (outside v1's guarantee), and the deviation is registered in the [paper-deviation analysis](/paper-conformance-analysis).
+
+**Mitigation:** resolved as a deliberate, registered deviation ([issue #106](https://github.com/zk-coins/docs/issues/106), [Paper-Deviation Analysis D-16](/paper-conformance-analysis)): the spec now names the SMT-submap relation an explicit replacement for the paper's ToS accumulator — not an exact paper port — with its own argument, and bounds the divergence with the 6-confirmation finality directive ([spec §3.9](/specification#39-finality-and-reorg-handling)).
+
 ## Data availability and recovery
 
 **Risk: Losing your coin data means losing the coins.**
