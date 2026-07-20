@@ -128,7 +128,7 @@ v1 issuance is bound to the creator's spend key but uncapped. Because coin amoun
 
 This anchoring closes the mint-fork: two mints advancing from the same prior state share the same `current_pubkey = Pkᵢ` and publish the same nullifier key. The global accumulator admits each `Pkᵢ` at most once by first-occurrence ([§3.6](/specification#36-chain-scanning)), so a creator cannot issue two conflicting coins against one state.
 
-**Mitigation:** Holders trust the creator as they would any single-issuer asset. Protocol-enforced, auditable supply is deferred to a future issuance schema (`IssuanceTerms_v2`), which would bound total emission with an in-circuit `cap_total` ([spec §6.5](/specification#65-issuance--versioned-schemas-v1-minimal)).
+**Mitigation:** Holders trust the creator as they would any single-issuer asset. Protocol-enforced, auditable supply is available in `IssuanceTerms_v2`, which bounds total emission with an in-circuit `cap_total` ([spec §6.5](/specification#65-issuance--versioned-schemas-v1-minimal)).
 
 ## Carrying real Bitcoin requires a bridge
 
