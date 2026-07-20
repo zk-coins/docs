@@ -463,16 +463,21 @@ job and private state durable and visibly pending until a secure reconnect is po
   [§3.9](/specification#39-finality-and-reorg-handling),
   [§3.10](/specification#310-transaction-states)
 - **Finding:** The reviewed design treated more than five blocks of reorganization as a protocol
-  failure even though Bitcoin has no consensus-level maximum reorg depth. V3 now requires
-  arbitrary-depth canonical replay, but the claimed conditional-NAV no-op is not defined as a
-  complete branch of `C` even though mint, send, and receive are otherwise the only state changes.
-- **Project-native fix:** Define the no-op branch byte-for-byte in the circuit relation: branch
-  selector, public inputs, previous and next state, consumed/rotated key behavior, nullifier behavior,
-  balance/history effects, and interaction with a V3 nullifier that survives or loses the reorg.
-- **Acceptance criteria:** Model and E2E tests cover depths 1, 2, 5, 6, and arbitrary deep
-  replacement; competing nullifiers; already-consumed descendants; crashes during rewind; repeated
-  reorgs; and both execute/no-op branches. Restored nodes converge byte-for-byte without inventing a
-  host-side state transition outside `C`.
+  failure even though Bitcoin has no consensus-level maximum reorg depth. **Resolved for v1 by
+  [#107](https://github.com/zk-coins/docs/pull/107):** the current target adopts a hard
+  **6-confirmation finality bound** — reorgs of ≤5 blocks are absorbed by canonical replay, and a
+  reorg of ≥6 blocks is an **accepted break** with no recovery path. The conditional-NAV no-op is
+  **deliberately not built** ([§3.9](/specification#39-finality-and-reorg-handling),
+  [Paper-Deviation Analysis D-16](/paper-conformance-analysis)); the original demand to define a
+  no-op branch is retired under this register's own carry-forward rule.
+- **Project-native fix:** No no-op branch is defined. The accepted v1 reorg model is documented in
+  [§3.9](/specification#39-finality-and-reorg-handling): the single **execute** branch of `C`,
+  canonical replay for reorgs of ≤5 blocks, and an accepted break for reorgs of ≥6 blocks.
+- **Acceptance criteria:** Model and E2E tests cover reorg depths 1, 2, and 5 (tolerated, absorbed
+  by canonical replay); competing nullifiers; already-consumed descendants; crashes during rewind;
+  and repeated reorgs; plus confirmation that a reorg of ≥6 blocks is surfaced as the accepted
+  break boundary rather than silently mis-handled. Restored nodes converge byte-for-byte via the
+  single execute branch of `C`, with no host-side state transition outside `C`.
 
 ### RB-P0-08 — Strict proof decoding and authoritative circuit identity are absent
 
@@ -1129,8 +1134,8 @@ its stated deployment or claim condition is met.
 **RESEARCH ONLY — NOT REGTEST-PROTOTYPE-READY, NOT SIGNET/TESTNET-READY, AND NOT MAINNET-READY.**
 
 The V3 cutover supersedes the original public-data admission split and three related baseline
-mechanisms. It defines arbitrary-depth replay but not yet the complete circuit-level no-op relation,
-and its current text contradicts itself on mandatory receive publication. It does not close complete
+mechanisms. It bounds finality at 6 confirmations (a reorg of ≥6 blocks is an accepted break, with
+no conditional-NAV no-op relation), and its current text contradicts itself on mandatory receive publication. It does not close complete
 wallet intent authorization, private bearer recovery, byte-exact Bitcoin transaction construction,
 S2C algebra, circuit identity/decoding, successor-key validity, crash atomicity, formal cryptographic
 composition, resolver-independent established-session liveness, or the operational and launch
