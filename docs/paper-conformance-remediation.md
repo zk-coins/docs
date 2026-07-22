@@ -77,7 +77,7 @@ m_state = ASCII("zkCoins/v1/StateUpdate")   # the fixed signed message (§1.4, �
 )
 ```
 
-In the shipped spec `TransitionEssenceV3` is realized as `ProofData` (§1.4): it binds the new account-state hash, output-coins root, input-nullifiers root, coin-history root and the conditional-NAV commitment, with the rotated next key bound through `new_account_state_hash`. `H(ProofData)` over its fixed 160-byte serialization is the single normative essence hash the nonce commits (§3.2); no JSON or implementation serialization may enter it.
+In the shipped spec `TransitionEssenceV3` is realized as `ProofData` (§1.4): it binds the new account-state hash, output-coins root, input-nullifiers root, coin-history root, the conditional-NAV commitment, and the rotated-key commitment `npk_commit = H("zkCoins/v1/NpkCommit" ‖ next_pubkey ‖ npk_rand)` — the sixth field that makes the rotated key wallet-verifiable, rather than bound only through `new_account_state_hash` (spec §1.4, §2.1 clause 2). `H(ProofData)` over its fixed **192 bytes** of `serialize(ProofData)` across these **six** fields is the single normative essence hash the nonce commits (§3.2); no JSON or implementation serialization may enter it.
 
 **Updated 2026-07-23:** `serialize(ProofData)` is now **192 bytes** (six fields; the sixth, `npk_commit`, makes the rotated key wallet-verifiable, [spec §2.1 clause 2](/specification#21-the-compliance-predicate)), and the nullifier accumulator is an RFC-6962 append-only Merkle log (not a leaf-preserving SMT), [spec §1.7.6](/specification#176-nullifier-accumulator-append-only-merkle-log).
 
@@ -160,7 +160,7 @@ A reorg of ≥6 blocks can displace a **final** nullifier and MAY break zkCoins 
 
 Each `TransitionEssenceV3` commits to a conditional NAV covering all chain dependencies of its previous account state and input coins. The recursive predicate proves the single **execute** branch: the conditional NAV and every input object's NAV are prefixes of the live canonical NAV, and it applies the committed balance, spent-set, output and key-rotation transition. There is **no reorg no-op branch**.
 
-zkCoins v1 deliberately does **not** adopt the paper's conditional-NAV no-op (an exactly-one-of predicate with a `distinct-element` branch that lets an account continue after a dependency is orphaned). It fixes a hard **6-confirmation finality bound** instead ([spec §3.9](/specification#39-finality-and-reorg-handling)): reorgs of ≤5 blocks touch only non-final nullifiers and are absorbed by canonical replay; a reorg of ≥6 blocks MAY break zkCoins as an accepted v1 limitation. Accordingly the accumulator is a plain leaf-preserving SMT `prefix` relation and does **not** implement the paper's `distinct-element` no-op relation — a deliberate, registered deviation ([Paper-Deviation Analysis D-16](/paper-conformance-analysis), issues #105/#106). The union-membership, append-set and remove-set behaviours the execute branch and chain scan rely on remain provided by the SMT. (superseded 2026-07-23: the accumulator is now an RFC-6962 append-only Merkle log; `prefix` is a constant-size log-consistency proof — [spec §3.7](/specification#37-the-nullifier-accumulator), register D-05).
+zkCoins v1 deliberately does **not** adopt the paper's conditional-NAV no-op (an exactly-one-of predicate with a `distinct-element` branch that lets an account continue after a dependency is orphaned). It fixes a hard **6-confirmation finality bound** instead ([spec §3.9](/specification#39-finality-and-reorg-handling)): reorgs of ≤5 blocks touch only non-final nullifiers and are absorbed by canonical replay; a reorg of ≥6 blocks MAY break zkCoins as an accepted v1 limitation. Accordingly the accumulator is an **RFC-6962 append-only Merkle log**; `prefix` is a **constant-size log-consistency** proof, and membership is an **inclusion proof at a position-bound leaf** ([spec §1.7.6](/specification#176-nullifier-accumulator-append-only-merkle-log), [§3.7](/specification#37-the-nullifier-accumulator); register [D-05](/paper-conformance-analysis)) — and does **not** implement the paper's `distinct-element` no-op relation — a deliberate, registered deviation ([Paper-Deviation Analysis D-16](/paper-conformance-analysis), issues #105/#106).
 
 Required tests include one-to-five-block reorgs, arbitrary removed suffixes within the tolerated window, duplicate-first-occurrence reversal, dependent receives/spends, equality with clean replay, and confirmation that a ≥6-block reorg is surfaced as the accepted break boundary ([spec §3.9](/specification#39-finality-and-reorg-handling)) rather than silently mis-handled.
 
@@ -256,7 +256,7 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 
 ### Gate A — specification completeness
 
-**Closed by [PR #97](https://github.com/zk-coins/docs/pull/97)** — the criteria below hold in the current `specification.md`; the only residual item is generating and pinning the canonical vectors under Gate B.
+**Closed by [PR #97](https://github.com/zk-coins/docs/pull/97)** — the criteria below hold in the current `specification.md`; the only residual item is generating and pinning the canonical vectors under Gate B — re-verified after the 2026-07-23 append-only-log (D-05) and npk_commit (D-21) changes.
 
 - one normative version contains no mixed v2 root-chain/v3 first-occurrence path;
 - NISSHAC, transition essence, opening, NAV operations, carrier and rejection rules are byte-exact;
@@ -276,6 +276,7 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 ### Gate C — assurance
 
 - the specification's soundness summary ([spec §2.4](/specification#24-soundness-summary)) and security-properties summary ([spec §6.7](/specification#67-security-properties-summary)) exist, every clause reference they cite resolves, every Requirement 1–10 has a row, and D-17–D-19 appear in the [§6.7 precise privacy statement](/specification#67-security-properties-summary), D-16 is stated in [spec §3.9](/specification#39-finality-and-reorg-handling), and D-20 has its row in the [Risks](/risks) verdict table (machine-checkable link/row checks);
+- **D-05** passes its release gate: the **V.11 differential-test** of the in-circuit RFC-6962 log-consistency/inclusion arithmetization against an independent reference ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1), V.11), alongside the existing D-16/D-17–D-20 checks above;
 - the [Risks](/risks) verdict table has no open and no broken row;
 - the reference instantiation and backend are final and frozen for v1 ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1), [§1.7.9](/specification#179-proof-system-parameters-normative));
 - a vulnerability disclosure process is published ([SECURITY.md](https://github.com/zk-coins/docs/blob/develop/SECURITY.md)).
