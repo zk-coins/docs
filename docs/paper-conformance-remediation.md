@@ -96,7 +96,7 @@ offset  size  field
 
 This is the paper's `Aggregate Nullifier := (Nullifier Public Keys, Aggregate Signature)` with explicit version/format/anchor framing. A one-entry payload (`count = 1`) is valid, so self-publication never depends on finding another participant. The inscription carries **no** on-chain fee field, accumulator root, or transition message: the publisher fee is an ordinary output coin claimed off-chain ([spec §3.8](/specification#38-fees-and-economics)), and network separation is by verifier-data domain, not an on-chain byte.
 
-The normative specification MUST import or reproduce the complete NISSHAC algorithms and security definition from Shielded CSV. Ordinary BIP-340 batch verification is not a substitute: the commitment-opening relation and half-aggregate equation are protocol-critical.
+The normative specification reproduces the complete NISSHAC algorithms, completeness argument, and encoding rules (spec §1.7.10); the paper's formal security definition is referenced as the source work and is a non-gating Workstream-2 write-up ([Assurance Roadmap](/assurance)). Ordinary BIP-340 batch verification is not a substitute: the commitment-opening relation and half-aggregate equation are protocol-critical.
 
 ### 1.2 Exact encoding constraints
 

@@ -55,7 +55,11 @@ docs/
 │   ├── protocol.md               # Shielded CSV protocol reference
 │   ├── comparisons.md            # vs RGB, Lightning, Zcash, etc.
 │   ├── risks.md                  # Known risks and limitations
-│   └── assurance.md              # Assurance roadmap (incentive analysis, verification staircase, gates)
+│   ├── assurance.md              # Assurance roadmap (incentive analysis, verification staircase, gates)
+│   ├── paper-conformance-analysis.md    # Living deviation register + pinned audit snapshot
+│   ├── paper-conformance-remediation.md # Gates A–C
+│   ├── lightning-bridge.md       # Off-by-default operator extension (Lightning)
+│   └── mail-bridge.md            # Off-by-default operator extension (mail)
 ├── src/css/custom.css            # Theme overrides (Bitcoin orange)
 ├── static/img/                   # Favicon, logos
 ├── docusaurus.config.js          # Site config
