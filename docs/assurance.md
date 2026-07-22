@@ -48,7 +48,7 @@ A security proof establishes that the *specified* protocol is sound. That the *r
 
 | Gate | What must hold |
 |---|---|
-| **Public testnet** | Paper-conformance remediation Gate A (specification completeness) is closed; specification deep-review complete; conformance vectors generated and pinned; the A-to-Z suite passes across node, SDK, and app. |
+| **Public testnet** | Paper-conformance remediation Gate A (specification completeness) is closed; specification deep-review complete; conformance vectors generated and pinned; the A-to-Z suite passes across node, SDK, and app. Steps 1–7 of the [implementation-mandate runbook](/implementation-mandate) are the executable form of this gate. |
 | **Real value (mainnet)** | Paper-conformance remediation Gates A–B are closed; every incentive verdict recorded in [Risks](/risks) is **holds**, **holds under stated assumptions**, or **accepted v1 boundary** — none open, none **broken** (Workstream 1); the specification's soundness summary ([spec §2.4](/specification#24-soundness-summary)) and security-properties summary ([spec §6.7](/specification#67-security-properties-summary)) are complete and internally consistent, and the Gate-B negative-control vectors pass; the reference instantiation is final for v1 ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1)); a vulnerability disclosure process is published ([SECURITY.md](https://github.com/zk-coins/docs/blob/develop/SECURITY.md)). |
 
-These gates are ordered stations, not aspirations: a release that has not passed its gate does not ship.
+These gates are ordered stations, not aspirations: a release that has not passed its gate does not ship. Their executable form — ordered steps with hard pass predicates and no human-gated stop — is the [Path to mainnet runbook](/implementation-mandate).

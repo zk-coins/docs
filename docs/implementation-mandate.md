@@ -85,3 +85,22 @@ These are the decisions made to close the open implementation questions, recorde
 | D16 | **Spec wording aligned to the thin-client rule**: Requirement 4's verifier is "the receiver, or its node on its behalf"; §6.2/§6.3 attribute verification to the wallet's own node; foreign-node-only wallets get fail-closed discrepancy detection, not client-side proof verification. | §6.2, §6.3, §6.7 | The old §6.2/§6.3 text ("the wallet MUST verify against Bitcoin") contradicted this hard project rule (see "Thin-client rule" above and every repo's CONTRIBUTING.md). |
 
 If any of these is contradicted by a hard implementation constraint, change it **in the spec first**, regenerate affected vectors, then implement (a change to a frozen element is a version bump, [spec §1.7.8](./specification.md)).
+
+## Path to mainnet (normative runbook)
+
+The ordered, machine-followable sequence from first build to mainnet activation. Each step names its inputs, outputs, and a hard pass predicate; a step starts only when every earlier step's predicate holds. There is no human-gated step (project decision 2026-07-22; [Assurance Roadmap](./assurance.md)) — "PR merged" steps are repository mechanics, not review gates.
+
+| # | Step | Inputs | Outputs | Pass predicate |
+|---|---|---|---|---|
+| 1 | Implement §1.7 primitives + §1.7.9 circuit build (node) | spec §1.7, §2 | node builds `C` and `C_balance` deterministically for `regtest`/`testnet`/`mainnet` tags | two clean-checkout builds of the same commit produce identical `circuit_digest(C)` and `circuit_digest(C_balance)` per network tag |
+| 2 | Generate every `<REGEN>` value + the V.8 byte checks | step 1 binary | the filled V.2–V.6/V.8 values | node reproduces every already-pinned SHA-256/Bech32m/V.8 byte exactly; all Poseidon `<REGEN>` cells produced; a second run reproduces them bit-for-bit |
+| 3 | Vectors-pin PR to `docs` | step 2 values | spec with zero `<REGEN>` placeholders; F-08 status matrix filled with commit links | CI green; diff touches only vector cells + status matrix; digests in the PR equal step 1's |
+| 4 | SDK primitive parity | pinned spec | `sdk/test/cross-rust/` suite | every V.7-parity-matrix "byte-equal" row reproduced bit-for-bit by the SDK; V.5/V.6/V.8 verification rows pass |
+| 5 | Negative controls | pinned spec | V.9 suite in node (+SDK where in scope) | every V.9 case rejects with the named reason; zero accepts |
+| 6 | A-to-Z suite on regtest | steps 1–5 | the §3 machine pass predicate | every numbered assertion of the §3 A-to-Z suite holds, including the reorg (N-09), restore (Req 6), and portability (Req 10) controls |
+| 7 | Public testnet | steps 1–6 green | testnet deployment (network tag `zkCoins/v1/testnet`) | [Assurance gate "Public testnet"](./assurance.md) — all listed criteria hold; the A-to-Z journey passes against public testnet infrastructure |
+| 8 | Mainnet gate check | steps 1–7 | gate checklist run | [Assurance gate "Real value (mainnet)"](./assurance.md) — every criterion holds; remediation Gates A–C all closed ([Paper-Conformance Remediation](./paper-conformance-remediation.md)) |
+| 9 | Genesis + deployment | step 8 | mainnet node config: pinned digests for tag `zkCoins/v1/mainnet`, `bitcoin_network = mainnet`, SECURITY.md contact live in repo | `GET /v1/info` on the deployed node returns `network = mainnet`, the pinned digests, `finality_confirmations = 6`, and `/health/ready` is `200` with `scanner_lag = 0` after initial sync |
+| 10 | Mainnet activation | step 9 | first real-value issuance/transition | the first mainnet transition completes the full §3 journey (mint → send → receive → confirmation link) with every §3.10 state reaching `completed`; from this point the v1 freeze ([spec §1.7.8](./specification.md)) is in force |
+
+Activation is deliberately unceremonial: mainnet "activation" is nothing more than the first real transition against the mainnet network tag after step 9 — there is no switch to flip and no coordinator. Rollback before step 10 is free (nothing carries value); after step 10 the v1 freeze applies and any change is a version bump.
