@@ -2506,8 +2506,8 @@ A node MUST verify `chan_bind` and `chal` for these two endpoints exactly as [§
 | `GetCoinProof` | unary | one `CoinProof` within a valid [pull session](#pull-session-normative) ([§5.1](#51-capability-gated-pull)) | `GET /v1/proof/<coin_id>` |
 | `SubscribeReceipts` | server-stream | verified-receipt events for a subject as coins are credited — the §4.9 push source | `GET /v1/receipts/stream` (§7.5); the §4.9 push source |
 | `Publish` | unary | hand a nullifier `(Pkᵢ, Rᵢ, sᵢ, R')` + fee `CoinProof` to the publisher role, if enabled | `POST /v1/publish/spendrecord` (§7.6) |
-| `EntrustOperationalBundle` | unary | verify an ownership proof and store the wallet's operational bundle `{ivk, ovk, op, nk, op_secret}` (§7.7) | `POST /v1/bootstrap/entrust` |
-| `RevokeOperationalBundle` | unary | verify an ownership proof and irrecoverably erase the stored operational bundle (fail-closed revocation, §7.7) | `POST /v1/bootstrap/revoke` |
+| `EntrustOperationalBundle` | unary | store the §7.7 operational bundle for an already-authorised subject (the API layer runs the §5.1 gate) | `POST /v1/bootstrap/entrust` |
+| `RevokeOperationalBundle` | unary | fail-closed revocation + erasure for an already-authorised subject | `POST /v1/bootstrap/revoke` |
 | `AttestBalance` | unary | start a `C_balance` proving job for a balance attestation | `POST /v1/attest/balance` |
 | `IssueViewGrant` | unary | sign a [§5.2](#52-view-grant) grant with the account's `op` key | `POST /v1/grants` |
 
@@ -2655,22 +2655,6 @@ message Receipt {
   uint64 credited_at = 5;
 }
 
-message OwnershipProof {                    // §5.1(a) struct, verbatim
-  string subject = 1; bytes public_key = 2; bytes nk_commit = 3; bytes signature = 4;
-}
-message EntrustRequest {
-  bytes challenge = 1;                      // §7.7 nonce from the "entrust"-domain Challenge
-  OwnershipProof ownership_proof = 2;
-  bytes bundle = 3;                         // serialize(OperationalBundle), §7.7
-}
-message EntrustResult { bool accepted = 1; }
-
-message RevokeRequest {
-  bytes challenge = 1;                      // §7.7 nonce from the "revoke"-domain Challenge
-  OwnershipProof ownership_proof = 2;
-}
-message RevokeResult { bool revoked = 1; }  // §7.7 fail-closed revocation: irrecoverably erase {ivk, ovk, op, nk, op_secret}
-
 message BlockAnchor { bytes block_hash = 1; uint32 height = 2; }    // hash internal order (§1.7.7); height matches the on-chain u32 (§1.7.3)
 message PublishRequest {
   bytes public_key = 1; bytes r = 2; bytes s = 3; bytes r_prime = 4;
@@ -2681,7 +2665,7 @@ message PublishResult { bool accepted = 1; string reason = 2; uint64 batch_eta =
 message EntrustRequest { bytes nonce = 1; string subject = 2; bytes bundle = 3; bytes chan_bind = 4; }   // bundle = the 161-byte §7.7 serialization
 message EntrustResult { bool accepted = 1; }
 message RevokeRequest { bytes nonce = 1; string subject = 2; bytes chan_bind = 3; }
-message RevokeResult { bool revoked = 1; }
+message RevokeResult { bool revoked = 1; }  // §7.7 fail-closed revocation: irrecoverably erase {ivk, ovk, op, nk, op_secret}
 message AttestRequest { string subject = 1; bytes asset_id = 2; bytes nav_ceiling = 3; }
 message GrantRequest { string subject = 1; bytes grantee_pk = 2; Scope scope = 3; uint64 expiry = 4; }
 message GrantResult { string grant = 1; }
