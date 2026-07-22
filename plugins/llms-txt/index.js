@@ -26,7 +26,7 @@ module.exports = function llmsTxtPlugin(context) {
 
     async postBuild({ outDir }) {
       const docsDir = path.join(siteDir, 'docs');
-      // Canonical site origin, e.g. "https://docs.zkcoins.app" (no trailing slash).
+      // Canonical site origin, e.g. "https://docs.zkcoins.com" (no trailing slash).
       const origin = (siteConfig.url + siteConfig.baseUrl).replace(/\/+$/, '');
 
       // --- helpers -----------------------------------------------------------
