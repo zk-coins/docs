@@ -2,7 +2,7 @@
 
 export async function onRequest(context) {
   const url = new URL(context.request.url);
-  const host = url.host;
+  const host = url.hostname;
 
   if (host === "docs.zkcoins.app") {
     return new Response(null, {
