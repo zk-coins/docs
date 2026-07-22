@@ -16,7 +16,7 @@ From public on-chain data alone, no observer can determine a payment's amount, a
 
 ### 3. Trustless
 
-The integrity of funds is enforced by cryptography and Bitcoin alone. No party — a node operator, a public node, any setup procedure, trusted hardware, or a federation — can steal, forge (create coins it is not entitled to), double-spend, or freeze coins it does not own.
+The integrity of funds is enforced by cryptography and Bitcoin alone. No party — a node operator, a public node, any setup procedure, trusted hardware, or a federation — can steal, forge (create coins it is not entitled to), double-spend, or freeze coins it does not own. One boundary is the holder's **own delegation choice**: the prover a holder itself selects to build a proof can, within that one cooperatively-signed transition, misdirect or destroy the outputs it was asked to produce — it can never forge, double-spend, rotate the account's keys, or act without the holder's signature. This is a documented, registered limit ([D-17](/paper-conformance-analysis)) whose trustless path is self-hosting, exactly parallel to Requirement 4's own-node model.
 
 ### 4. Client-side validation
 

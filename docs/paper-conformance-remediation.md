@@ -273,7 +273,7 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 
 ### Gate C — assurance
 
-- the specification's soundness summary ([spec §2.4](/specification#24-soundness-summary)) and security-properties summary ([spec §6.7](/specification#67-security-properties-summary)) exist, every clause reference they cite resolves, every Requirement 1–10 has a row, and D-16–D-20 appear in the [§6.7 precise privacy statement](/specification#67-security-properties-summary) (machine-checkable link/row checks);
+- the specification's soundness summary ([spec §2.4](/specification#24-soundness-summary)) and security-properties summary ([spec §6.7](/specification#67-security-properties-summary)) exist, every clause reference they cite resolves, every Requirement 1–10 has a row, and D-17–D-19 appear in the [§6.7 precise privacy statement](/specification#67-security-properties-summary), D-16 is stated in [spec §3.9](/specification#39-finality-and-reorg-handling), and D-20 has its row in the [Risks](/risks) verdict table (machine-checkable link/row checks);
 - the [Risks](/risks) verdict table has no open and no broken row;
 - the reference instantiation and backend are final and frozen for v1 ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1), [§1.7.9](/specification#179-proof-system-parameters-normative));
 - a vulnerability disclosure process is published ([SECURITY.md](https://github.com/zk-coins/docs/blob/develop/SECURITY.md)).

@@ -21,7 +21,7 @@ Every incentive/residual verdict for v1, closed per the [Assurance Roadmap](/ass
 | Data availability and recovery | **holds under stated assumptions** | k ≥ 3 replication + store-everything + holder self-interest in own bearer data |
 | Node storage growth | **holds** | linear operator cost, no adversarial lever; sparse-storage rules pinned |
 | Proving cost and latency | **holds under stated assumptions** | measured in the build report; impracticality resolves as a version bump, never silently |
-| Node plaintext visibility | **accepted v1 boundary** (D-17 scope) | operational bundle only to the account's own node |
+| Node plaintext visibility | **holds under stated assumptions** (own-node trust model, [spec §6.6](/specification#66-threat-model-and-trust-configurations); not a register deviation — register D-17 is the hosted-prover redirect/burn) | operational bundle only to the account's own node |
 | Send-output redirection or change-drop (burn) by a dishonest prover | **accepted v1 boundary** (D-17) | thin-client rule; self-host/vet mitigations |
 | Wallet key custody | **holds** | SPEND branch never leaves the wallet; seed custody is the user's, as in Bitcoin |
 | Coin creation time leak / co-output visibility | **accepted v1 boundary** (D-18) | bounded to one transition's co-holders (+ output-count bucket) |
@@ -30,7 +30,7 @@ Every incentive/residual verdict for v1, closed per the [Assurance Roadmap](/ass
 | Publisher censorship and delay | **holds** | permissionless, contention-free publishing + self-publish escape; fee atomicity via shared `ocr` (covers D-09: spender-picks-publisher — a mispriced or lazy publisher only forfeits its own fee, a censored spender re-picks or self-publishes) |
 | Fee-asset / cost-currency mismatch | **holds under stated assumptions** (D-20) | market-priced, never correctness-relevant |
 | Interactive receive | **holds under stated assumptions** | the receiver's own 24/7 node stands in; liveness-only, never safety |
-| Unobservable total supply (token standard 1) | **accepted v1 boundary** | documented issuer-trust; token standard 2 provides the auditable cap |
+| Unobservable total supply (token standard 1) | **accepted v1 boundary** | documented issuer-trust (register D-13); token standard 2 provides the auditable cap |
 | Carrying real Bitcoin requires a bridge | **holds** (out of core scope) | bridges are explicit, off-by-default operator extensions |
 | No smart contracts | **holds** (by scope) | deliberate non-goal of v1 |
 | Regulatory uncertainty | **n/a — not a protocol mechanism** | environment risk, catalogued for operators |
