@@ -282,7 +282,7 @@ Per output coin:
 - `K_tx` and `K_out` instantiate the [§1.1](#11-cryptographic-primitives) `HKDF(tag, material)` parameter mapping (`IKM = material` — here `ss ‖ epk` or `ovk ‖ epk` — `salt` = 32 zero bytes, `info = tag`, `L = 32`).
 - The coin plaintext — `serialize(Coin)` ([§1.5](#15-core-data-structures), the coin's `{identifier, recipient, amount, asset_id}`) — is encrypted under `K_tx` (NIP-44 v2) as `ciphertext = NIP44_v2(K_tx, serialize(Coin))`; this is the `CoinProof.ciphertext` field ([§1.5](#15-core-data-structures)). It is **distinct** from the bundle-level ZBE output the whole serialised `CoinProof` is wrapped in for transport and content-addressing ([§4.2](#42-bundle-delivery) steps 1–2, [§4.2.1](#421-bundle-blob-encryption-zbe-normative)) — the two are different byte strings under different schemes that happen to share the informal name "ciphertext"; only the bundle-level one is ever hashed for `blob_id`. Only a holder of `ivk` (the recipient, or its node) can re-derive `K_tx` and decrypt either.
 - `detect_tag` lets a recipient/node find its own coins **without trial-decrypting every event**. The **sender** computes it from the shared secret `ss = ECDH(esk, IVPK)`; the **recipient**, holding `ivk`, recomputes `ss = ECDH(ivk, epk)` for each candidate's published `epk`, then `Hc("zkCoins/v1/DetectTag", ss ‖ epk)`, and matches against the published `detect_tag` — one ECDH plus one Poseidon hash per scanned event, replacing the full AEAD trial-decryption **and** the (≈100 KB) blob fetch for every non-matching event. Because every coin uses a fresh `epk`, each recipient's events carry **all-distinct** tags: a tag does **not** link two of one recipient's coins, and a relay that holds neither `ivk` nor the sender's `esk` can **neither** pre-filter for the recipient **nor** correlate the recipient's events. Detection does not reduce the *count* of candidates the recipient pulls. `ivk` is **seed-derivable**, so detection doubles as the recovery scan key ([Requirement 6](/requirements)).
-- **Why the shared secret, not a recipient-only key (normative rationale).** The tag **MUST** derive from `ss` — not from a value bound to the recipient's secret `ivk` alone — because the **sender** sets the tag at send time and holds only the recipient's public `IVPK`. It can compute `ss = ECDH(esk, IVPK)`, but **cannot** compute any function of the recipient's secret key. A recipient-only detection key (e.g. `HKDF(ivk)`) would shrink the recipient's per-event check to a single hash, but is **unsatisfiable for an open, no-prior-interaction address**: a per-coin tag that is simultaneously (i) sender-computable from a static public key and (ii) unlinkable to outsiders must carry its per-coin entropy through a Diffie–Hellman with the fresh `epk`, so the recipient's check is inherently one ECDH per candidate, never a bare hash. The bandwidth lever is the optional Fuzzy message detection below, not a cheaper tag derivation.
+- **Why the shared secret, not a recipient-only key (normative rationale).** The tag **MUST** derive from `ss` — not from a value bound to the recipient's secret `ivk` alone — because the **sender** sets the tag at send time and holds only the recipient's public `IVPK`. It can compute `ss = ECDH(esk, IVPK)`, but **cannot** compute any function of the recipient's secret key. A recipient-only detection key (e.g. `HKDF(ivk)`) would shrink the recipient's per-event check to a single hash, but is **unsatisfiable for an open, no-prior-interaction address**: a per-coin tag that is simultaneously (i) sender-computable from a static public key and (ii) unlinkable to outsiders must carry its per-coin entropy through a Diffie–Hellman with the fresh `epk`, so the recipient's check is inherently one ECDH per candidate, never a bare hash. The bandwidth lever would be the future-version (not in v1) Fuzzy message detection below, not a cheaper tag derivation.
 - **Key-reuse safety (normative).** The same shared secret `ss` feeds both the **secret** note key `K_tx = HKDF("zkCoins/v1/NoteKey", ss ‖ epk)` and the **public** `detect_tag = Hc("zkCoins/v1/DetectTag", ss ‖ epk)`. The two are domain-separated outputs of `ss ‖ epk` under distinct context strings **and** distinct primitives (HKDF-SHA-256 vs Poseidon); modelling each primitive as an independent random oracle, neither value reveals the other. In particular the on-the-wire `detect_tag` does **not** leak `ss` (Poseidon preimage resistance, [§1.7.1](#171-poseidon-instance-and-digest-encoding)), so publishing the tag does **not** weaken `K_tx` or the coin's confidentiality.
 - **Fuzzy message detection (NOT part of v1).** A relay-side probabilistic pre-filter (tunable false-positive rate) reduces the candidate count the recipient downloads, at no linkability cost. It would change only the tag computation and is a possible **future-version** scan-efficiency upgrade — v1 nodes and wallets **MUST** use exactly the detect-tag computation of this section, and no FMD algorithm is specified or permitted in v1 — not a fix for a linkability the deterministic scheme does not have.
 - **Outgoing recovery (`out_ciphertext`, normative).** For every outgoing coin the sender **MUST** derive `K_out = HKDF("zkCoins/v1/OutKey", ovk ‖ epk)` from its **own** `ovk` and produce `out_ciphertext` — the NIP-44 v2 payload encryption of `K_tx` under `K_out` as the conversation key. The pair `{epk, out_ciphertext}` accompanies the sender's retained and self-delivered record of the coin ([§4.2](#42-bundle-delivery) self-delivery). A holder of the sender's `ovk` re-derives `K_out` from the stored `epk`, opens `out_ciphertext` to recover `K_tx`, and decrypts the outgoing coin's `ciphertext` — this is the concrete mechanism behind every "recover outgoing-coin plaintext" capability (§1.2, [§5.8](#58-address-view-full-history)). `ivk` alone therefore yields the incoming-only view; `ivk ‖ ovk` yields the full view.
@@ -2190,7 +2190,7 @@ How this architecture maps to the [Requirements](/requirements) at a glance:
 
 Two encodings are used, each for a fixed purpose:
 
-- **Canonical binary** — for every object that is hashed, signed, content-addressed, or fed in-circuit: `serialize(AccountState)` ([§1.7.4](#174-serializeaccountstate)), the 96-byte `SpendRecord` (`Pkᵢ (32B) ‖ signature (64B)`, [§1.4](#14-identifiers-and-hashes)), the on-chain **nullifier inscription** payload (`format 0x00` raw / `0x01` half-aggregated, [§3.5](#35-inscription-format)), and proofs (`ProofWithPublicInputs::to_bytes()`, [§1.7.9](#179-proof-system-parameters-normative)). These layouts are byte-exact and **MUST NOT** be re-encoded as JSON when hashed. A `CoinProof` bundle is serialised as the **length-prefixed concatenation** of its fields in declaration order ([§1.5](#15-core-data-structures)): each variable-length field (`proof`, `inclusion_proof`, `asset_terms.name`, `ciphertext`) is prefixed with a `u32-be` byte length; each fixed field uses its §1.7.3 width. The **optional** `asset_terms?` field contributes exactly one **presence byte** — `0x00` = absent, `0x01` = present — followed by its encoding only when present; any other presence value makes the bundle malformed and **MUST** be rejected. A present `asset_terms` is encoded as `creator_pubkey` (32 bytes) ‖ `decimals` (1 byte, u8) ‖ `issuance_version` (1 byte, u8) ‖ `u32-be len(name)` ‖ `name` (a raw byte string, UTF-8 validity is display-only per [§1.5](#15-core-data-structures); at most **255 bytes** per [§1.5](#15-core-data-structures) — a longer `name` is likewise malformed); when `issuance_version == 2` the `name` field is followed by `cap_total` (16 bytes, `u128` big-endian) ‖ `terms_salt` (32 bytes), and these two trailing fields **MUST** be absent for `issuance_version == 1` (a bundle that includes or omits them against its version is malformed and **MUST** be rejected); an `asset_terms` whose `issuance_version` byte is neither `0x01` nor `0x02` is malformed and **MUST** be rejected. These rules fix exactly one byte string per bundle, preserving the `blob_id` determinism of §4.2.1. This is the byte string ZBE encrypts (§4.2.1) and Blossom content-addresses. The half-aggregated nullifier body is the `(Pkⱼ, Rⱼ)` pairs plus one shared `s_agg` of [§3.5](#35-inscription-format) `format 0x01`; a raw single nullifier is `Pkᵢ ‖ Rᵢ ‖ sᵢ` (`format 0x00`).
+- **Canonical binary** — for every object that is hashed, signed, content-addressed, or fed in-circuit: `serialize(AccountState)` ([§1.7.4](#174-serializeaccountstate)), the 96-byte `SpendRecord` (`Pkᵢ (32B) ‖ signature (64B)`, [§1.4](#14-identifiers-and-hashes)), the on-chain **nullifier inscription** payload (`format 0x00` raw / `0x01` half-aggregated, [§3.5](#35-inscription-format)), and proofs (`ProofWithPublicInputs::to_bytes()`, [§1.7.9](#179-proof-system-parameters-normative)). These layouts are byte-exact and **MUST NOT** be re-encoded as JSON when hashed. A `CoinProof` bundle is serialised as the **length-prefixed concatenation** of its fields in declaration order ([§1.5](#15-core-data-structures)): each variable-length field (`proof`, `inclusion_proof`, `asset_terms.name`, `ciphertext`) is prefixed with a `u32-be` byte length; each fixed field uses its §1.7.3 width. The **optional** `asset_terms?` field contributes exactly one **presence byte** — `0x00` = absent, `0x01` = present — followed by its encoding only when present; any other presence value makes the bundle malformed and **MUST** be rejected. A present `asset_terms` is encoded as `creator_pubkey` (32 bytes) ‖ `decimals` (1 byte, u8) ‖ `issuance_version` (1 byte, u8) ‖ `u32-be len(name)` ‖ `name` (a raw byte string, UTF-8 validity is display-only per [§1.5](#15-core-data-structures); at most **255 bytes** per [§1.5](#15-core-data-structures) — a longer `name` is likewise malformed); when `issuance_version == 2` the `name` field is followed by `cap_total` (16 bytes, `u128` big-endian) ‖ `terms_salt` (32 bytes), and these two trailing fields **MUST** be absent for `issuance_version == 1` (a bundle that includes or omits them against its version is malformed and **MUST** be rejected); an `asset_terms` whose `issuance_version` byte is neither `0x01` nor `0x02` is malformed and **MUST** be rejected. The nested fixed-width fields serialize in declaration order with no extra framing: `creating_nullifier` as `Pk_create (32B) ‖ R_create (32B) ‖ R'_create (32B)` and `nav_opening` as `nav (32B) ‖ nav_rand (32B)` ([§1.5](#15-core-data-structures)). A bundle is **malformed** — and **MUST** be rejected without further processing — if any fixed-width field has the wrong length, any `u32-be` length prefix exceeds the remaining bytes, the presence byte is not `0x00`/`0x01`, the `asset_terms` version/trailing-field rules above are violated, or decoding leaves trailing bytes. These rules fix exactly one byte string per bundle, preserving the `blob_id` determinism of §4.2.1. This is the byte string ZBE encrypts (§4.2.1) and Blossom content-addresses. The half-aggregated nullifier body is the `(Pkⱼ, Rⱼ)` pairs plus one shared `s_agg` of [§3.5](#35-inscription-format) `format 0x01`; a raw single nullifier is `Pkᵢ ‖ Rᵢ ‖ sᵢ` (`format 0x00`).
 - **JSON (UTF-8)** — for REST control payloads only (requests, job status, info, challenges). Binary values inside JSON are **lowercase hex** unless a field is explicitly Bech32m (addresses, grants, view caps, link locators per [§1.7.7](#177-bech32m-and-bitcoin-conventions)). JSON objects are parsed in **strict** mode: unknown fields are ignored on read but a conforming producer emits exactly the fields specified; missing required fields are a hard error. Numeric amounts that may exceed 2⁵³ (`u64`/`u128`) are encoded as **decimal strings**, never JSON numbers, to avoid float coercion.
 
 ### 7.2 Transport map (normative)
@@ -2234,8 +2234,16 @@ Bundle blobs — ZBE-encrypted `CoinProof` blobs ([§4.2.1](#421-bundle-blob-enc
 |---|---|---|---|
 | `GET` | `/blossom/<sha256>` | fetch a blob by its lowercase-hex SHA-256 (`= blob_id`) | none (a `CoinProof` blob is already encrypted) |
 | `HEAD` | `/blossom/<sha256>` | existence / size probe (used to confirm `k`-replication, §4.6) | none |
-| `PUT` | `/blossom/upload` | store a blob; the server computes `blob_id = H(body)` and returns it | NIP-98-style signed event (`op`) so only known peers fill storage |
-| `DELETE` | `/blossom/<sha256>` | request deletion (subject to the §4.6 retention rules) | signed event by the original uploader |
+| `PUT` | `/blossom/upload` | store a blob; the server computes `blob_id = H(body)` and returns it | authorization event (below) so only known peers fill storage |
+| `DELETE` | `/blossom/<sha256>` | request deletion (subject to the §4.6 retention rules) | authorization event (below) by the original uploader |
+
+**Authorization event (normative).** `PUT /blossom/upload` and `DELETE /blossom/<blob_id>` carry the header `Authorization: Nostr <base64(event JSON)>` with a Nostr event of **kind `24242`** signed by the account's `op` key ([§1.2](#12-key-hierarchy)):
+
+- `kind`: `24242`; `pubkey`: the `op` x-only key (hex).
+- tags: `["t", "upload"]` for PUT, `["t", "delete"]` for DELETE; `["x", <lowercase-hex SHA-256 of the exact request body bytes>]` (PUT — this equals the resulting `blob_id`) or `["x", <blob_id hex>]` (DELETE); `["expiration", <unix seconds, decimal string>]`.
+- `created_at` ≤ now; `content` empty.
+
+The server **MUST** reject (`401`) an event whose signature, `kind`, `t` tag (mismatched method), or `x` tag (mismatching the body hash / target blob) fails; reject (`401`) an expired or future-dated event (`expiration` past, or `created_at` in the future beyond 60 s skew); reject (`403`) a PUT whose `op` key is not the paired account's or a configured replication peer's ([§4.6](#46-data-availability--replication-factor-k)); reject (`403`) a DELETE whose `op` key is not the blob's original uploader; and reject (`413`) a body over the advertised size limit. A successful PUT returns `200 { "blob_id": <hex32> }` where `blob_id = H(body)` — the content address of [§4.2.1](#421-bundle-blob-encryption-zbe-normative); uploading bytes already present is idempotent and returns the same `blob_id`. `GET /blossom/<blob_id>` returns the raw bytes and is unauthenticated (ciphertext is self-protecting, §4.2.1).
 
 `GET /blossom/<sha256>` MUST return the exact bytes whose SHA-256 equals `<sha256>` or `404`; a client MUST verify `H(body) == <sha256>` on receipt (content-addressed self-check) and reject a mismatch. Replication (§4.6) is performed by `PUT`-ing the same blob to ≥ `k` independent nodes' `/blossom/upload`; the `blob_locators` in a delivery event (§4.2) are base URLs of nodes expected to hold the blob.
 
@@ -2266,6 +2274,44 @@ All paths are relative to the node base URL and MUST be served over TLS 1.3/1.2 
 | `GET` | `/v1/jobs/<job_id>/stream` | Server-Sent Events: one `phase` event per phase change, a terminal `complete`/`error` event |
 | `POST` | `/v1/jobs/<job_id>/sign` | body = `{ signature, s2c_nonce }` — the wallet returns the BIP-340 transition signature over the **fixed** message `m_state = "zkCoins/v1/StateUpdate"` (with the sign-to-contract tweak binding the witness-determined `H(ProofData)` in its nonce) and `s2c_nonce = R'`, the pre-tweak sign-to-contract nonce point — a **non-secret** curve point the node forwards to the publisher for the fee-`ocr` check ([§3.8](#38-fees-and-economics), [§7.6](#76-publisher-interface-normative)). The wallet signs only after the node surfaces `H(ProofData)` in the `awaiting_signature` phase; it never blind-signs a node-supplied message — the message is the fixed constant, and the SPEND key never leaves the wallet ([§2.3](#23-state-transitions)) |
 | `POST` | `/v1/jobs/<job_id>/cancel` | cancels a not-yet-published job |
+
+**`TransitionRequest` (normative).** The `POST /v1/tx` body is exactly this JSON object (encodings per [§7.1](#71-serialization-conventions-normative): 32-byte values lowercase hex, addresses Bech32m, `u128` amounts decimal strings):
+
+```
+TransitionRequest = {
+  kind             : "mint" | "send" | "receive",   // required; any other value is malformed
+  subject          : <zk-address, Bech32m>,          // required; the account — the node MUST hold its
+                                                     //   operational bundle (§7.7), else reject
+  next_pubkey      : <hex32, x-only>,                // required; the rotated spend key Pkᵢ₊₁ (§1.2)
+  input_coins      : [ <hex32 coin.identifier> ],    // kind == "send": required, 1..max_tx_inputs;
+                                                     //   MUST be absent otherwise
+  output_templates : [ OutputTemplate ],             // kind ∈ {"send","mint"}: required,
+                                                     //   1..max_tx_outputs (incl. change + fee coin);
+                                                     //   MUST be absent for kind == "receive"
+  publisher_pubkey : <hex32>,                        // optional; absent ⇒ self-publish (§3.4)
+  fee_address      : <zk-address>,                   // present iff publisher_pubkey is present; MUST
+                                                     //   equal the recipient of exactly one
+                                                     //   output_template — the publisher-fee coin (§3.8)
+  fold_coin_ids    : [ <hex32 coin.identifier> ],    // kind == "receive": required, 1..max_rx_coins
+                                                     //   (§2.1 clause 10); MUST be absent otherwise
+  issuance         : {                               // kind == "mint": required; MUST be absent otherwise
+    name             : <UTF-8 string, ≤ 255 bytes>,  //   (§1.5; name_hash = H(name), §1.4)
+    decimals         : <u8>,
+    issuance_version : 1 | 2,                        //   any other value is malformed (§2.1 clause 3)
+    amount           : <decimal-string u128>,
+    cap_total        : <decimal-string u128>,        //   present iff issuance_version == 2 (§6.5)
+    terms_salt       : <hex32>                       //   present iff issuance_version == 2
+  }
+}
+
+OutputTemplate = {
+  recipient : <zk-address>,
+  asset_id  : <hex32>,
+  amount    : <decimal-string u128>                  // range-checked to [0, 2^128 − 1] (§1.7.3)
+}
+```
+
+A request violating any presence rule above (a field present for the wrong `kind`, a missing required field, a count outside its bound, `fee_address` matching zero or more than one template) is **malformed**: the node **MUST** reject it with `400 malformed_request` and MUST NOT start a job. A `kind == "receive"` transition produces no outputs ([§2.3.3](#233-receive)) and therefore carries no fee coin: its nullifier is **self-published** by default, or handed to a publisher that accepts fee-less hand-offs by its own policy ([§7.6](#76-publisher-interface-normative) — fee policy is not consensus, [§3.8](#38-fees-and-economics)); the same applies to a mint whose creator pays no publisher.
 
 The **proving handshake** keeps custody in the wallet: the wallet posts the transition intent (input coin references, output `CoinTemplate`s including the publisher-fee coin, the chosen publisher's `fee_address`, and the rotated `next_pubkey`); the node (prover) builds the witness — from which the five `ProofData` fields, hence `H(ProofData)`, are fully determined before any proving — folds `next_pubkey` into `new_account_state_hash`, transitions the job to `awaiting_signature`, and exposes the five `ProofData` fields plus `H(ProofData)` (the `awaiting_signature` shape below, [§1.4](#14-identifiers-and-hashes)); the wallet signs the **fixed** message `m_state = "zkCoins/v1/StateUpdate"` with `skᵢ`, applying the sign-to-contract tweak that binds the witness-determined `H(ProofData)` into the nonce `R = R' + H(bytes(R') ‖ H(ProofData))·G` ([§2.1 clause 2](#21-the-compliance-predicate), [§3.2](#32-transition-signing-bip-340--sign-to-contract)), and `POST`s `{ signature, s2c_nonce }` (where `s2c_nonce` carries `R'`, x-only hex) to `/sign` (the node needs `R'` — the non-secret pre-tweak nonce — to forward to a publisher for the fee-`ocr` check); the node then finalises the recursive proof (which verifies `txn_sig` over `m_state` in-circuit and opens the S2C tweak against this `H(ProofData)`, and because `new_account_state.current_pubkey = next_pubkey` is folded into `H(ProofData)`, the custody signature authorises the rotation `Pkᵢ → Pkᵢ₊₁` on **every** transition, [§2.1 clause 2](#21-the-compliance-predicate)); it finalises the `SpendRecord` + `CoinProof`s, delivers recipient `CoinProof`s over Nostr (§4.2), hands the nullifier `(Pkᵢ, Rᵢ, sᵢ, R')` + fee `CoinProof` to the chosen publisher (§7.6), and self-delivers change/state (§4.2). A pure mint ([§2.3.1](#231-mint--issuance)) and a receive transition ([§2.3.3 step 7](#233-receive)) follow the **same** flow — including publication: each is a state-advancing transition, so its nullifier `(Pkᵢ, Rᵢ, sᵢ, R')` is handed to a publisher or self-published by the wallet's own node (§3.3–§3.4, §7.6) just like a send, and its `next_pubkey` is authorised by the same in-circuit signature check.
 
@@ -2308,7 +2354,7 @@ error = { error: machine_code, message: string }   // the §7.5 generic error-bo
 
 **Wallet-side recomputation (normative, fail-closed).** The five surfaced fields are the complete `ProofData` ([§1.4](#14-identifiers-and-hashes)). Before signing, the wallet **MUST** rebuild the 160-byte `serialize(ProofData)` from them (the §1.4 field order), recompute `H(ProofData) = SHA-256(serialize(ProofData))` itself — SHA-256 is wallet-native; no Poseidon is involved — and verify it equals the surfaced `proof_data_hash`. On any mismatch the wallet **MUST** refuse to sign. The wallet therefore never signs a hash it did not recompute from field values it has seen.
 
-`machine_code` for this endpoint family (`/v1/tx`, `/v1/jobs/*`) — not exhaustive; a node MAY use additional codes for conditions not listed here, in the same `{error, message}` shape:
+`machine_code` is a **closed** enumeration (normative): a node **MUST** use exactly the codes below for the conditions below, and `internal_error` for any condition not listed — it **MUST NOT** invent additional codes (clients dispatch on them). For the `/v1/tx` and `/v1/jobs/*` family:
 
 | `machine_code` | Meaning |
 |---|---|
@@ -2324,14 +2370,30 @@ error = { error: machine_code, message: string }   // the §7.5 generic error-bo
 | `publish_rejected` | the chosen publisher rejected the finalised `SpendRecord` ([§7.6](#76-publisher-interface-normative)); `message` carries the publisher's `reason` |
 | `circuit_digest_mismatch` | the node's own build does not match the `circuit_digests` it advertises at `/v1/info` ([§1.7.9](#179-proof-system-parameters-normative)) |
 
+Additional codes (closing the enumeration across §7.4–§7.7 surfaces):
+
+| `machine_code` | HTTP | Meaning |
+|---|---|---|
+| `malformed_request` | 400 | body violates a normative shape of this section (`TransitionRequest` presence rules, §7.1 JSON rules, wrong-HRP Bech32m, non-hex where hex is required) |
+| `unauthorized` | 401 | §5.1 capability invalid (bad signature/`chal`/grant), Blossom auth-event rejected, or missing/invalid pull-session bearer token |
+| `scope_exceeded` | 403 | §5.1 resolved-scope violation, foreign-uploader DELETE, non-peer replication PUT |
+| `challenge_expired` | 410 | pull/bootstrap `nonce` expired, already consumed, or unknown |
+| `session_expired` | 410 | pull-session token expired, unknown, or presented over a channel whose `chan_bind` does not match |
+| `not_found` | 404 | unknown `blob_id`, `coin_id` outside the session's scope-visible set, unknown job (`job_not_found` stays canonical for the jobs family) |
+| `payload_too_large` | 413 | Blossom body over the advertised limit |
+| `rate_limited` | 429 | API-layer rate limit (operator policy, [§7.8](#78-kernel-rpc--the-internal-interface-normative)) |
+| `internal_error` | 500 | any condition not covered by a listed code |
+
+HTTP status for the earlier jobs-family table: `invalid_input_coin`, `insufficient_balance`, `bounds_exceeded`, `unknown_publisher` → `400` (rejected at submit) or, when detected only during proving, they appear as the terminal job `error`; `stale_message`, `invalid_signature`, `wrong_phase` → `409`; `job_not_found` → `404`; `proving_failed`, `publish_rejected` → terminal job `error` objects (the job poll itself returns `200`); `circuit_digest_mismatch` → `503`. `202` is the only success status for `POST /v1/tx`; `200` for every other success.
+
 The `GET /v1/jobs/<job_id>/stream` `complete`/`error` frames (above) carry the same `result`/`error` objects; the `phase` frame carries `awaiting_signature` inline in its `data` once `phase == "awaiting_signature"`.
 
 **Capability-gated pull — the [§5.1](#51-capability-gated-pull) challenge–response, made concrete:**
 
 | Method | Path | Body / Returns |
 |---|---|---|
-| `POST` | `/v1/pull/challenge` | body = `{ subject: <address>, scope }` → `{ nonce, expiry, domain: "zkCoins/v1/PullChallenge" }` |
-| `POST` | `/v1/pull` | body = `{ challenge, proof }` where `proof` is an `OwnershipProof` or a `GrantProof` ([§5.1](#51-capability-gated-pull)) → `{ records, session }` — the Private records within `scope` (a list of `CoinProof` references + `blob_locators`) plus an opaque **pull-session** bearer token ([§5.1 pull session](#pull-session-normative)) bound to this proof's `chan_bind`, `subject`, and resolved `scope`; or `401`/`403`/`410` on capability-invalid / scope-exceeded / challenge-expired |
+| `POST` | `/v1/pull/challenge` | body = `{ subject: <zk-address>, scope?: { asset_ids: [<hex32>] \| "*", not_before?: <u64>, not_after?: <u64> } }` ([§5.1](#51-capability-gated-pull) shape; omitted scope = `"*"`/unbounded) → `{ nonce: <hex32>, expiry: <u64>, domain: "zkCoins/v1/PullChallenge" }`. The node stores `(nonce → subject, requested scope, expiry)`; the later proof is bound to exactly that tuple |
+| `POST` | `/v1/pull` | body = `{ nonce: <hex32>, proof: OwnershipProofJson \| GrantProofJson }` where `OwnershipProofJson = { type: "ownership", subject: <zk-address>, public_key: <hex32>, nk_commit: <hex32>, signature: <hex64> }` and `GrantProofJson = { type: "grant", grant: <Bech32m zkgrant string>, grantee_pk: <hex32>, signature: <hex64> }` — the [§5.1(a)/(b)](#a-ownership-proof) objects verbatim; `signature` covers `chal = H(domain ‖ nonce ‖ chan_bind ‖ subject ‖ expiry)` ([§5.1](#51-capability-gated-pull)) → `{ records: [ { coin_id: <hex32>, blob_id: <hex32> } ], session: <opaque string>, session_expiry: <u64> }` — `blob_id = H(ciphertext)` of the coin's ZBE blob ([§4.2.1](#421-bundle-blob-encryption-zbe-normative)); or `401`/`403`/`410` on capability-invalid / scope-exceeded / challenge-expired |
 | `GET` | `/v1/proof/<coin_id>` | the `CoinProof` for `coin_id`, served **only** within a still-valid [pull session](#pull-session-normative) (presented as `Authorization: Bearer <token>`) for an authorised subject and within its resolved `scope`; binary (canonical §7.1); `410` on an expired/foreign-channel token |
 
 The node computes `chan_bind` from **its own** authoritative hostname/onion key and accepts a proof only if the requester's `chan_bind` matches ([§5.1](#51-capability-gated-pull)); it MUST compare `chal` in constant time, reject a reused or expired `nonce`, and never broaden disclosure beyond `scope`. Bearer view secrets (`zkview`, `zkavk`) and balance attestations are **not** sent to this API — they are applied client-side to blobs fetched from Blossom ([§5.1](#51-capability-gated-pull), [§6.4](#64-external-interfaces-abstract)).
@@ -2342,9 +2404,9 @@ A publisher exposes one additional endpoint so spenders can hand it nullifiers t
 
 | Method | Path | Body / Returns |
 |---|---|---|
-| `POST` | `/v1/publish/spendrecord` | body = `{ public_key, r, s, r_prime, fee_coinproof, block_anchor }` → `{ accepted: bool, reason?, batch_eta? }` — the transition's on-chain nullifier `(public_key = Pkᵢ, r = Rᵢ)` and its BIP-340 scalar `s = sᵢ`, plus `r_prime = R'`, the spender's **non-secret** pre-tweak sign-to-contract nonce point (symmetric to the `/sign` body of [§7.5](#75-node-rest-api-normative)) that opens the S2C tweak `Rᵢ = R' + H(bytes(R') ‖ H(ProofData))·G`, the fee `CoinProof`, and the freshness `block_anchor`. The publisher receives **only** these — never any coin plaintext, spend key, or the account's rotation edge (the rotated `next_pubkey` lives only inside the off-chain, hashed account state, [§1.4](#14-identifiers-and-hashes)) |
+| `POST` | `/v1/publish/spendrecord` | body = `{ public_key: <hex32 x-only>, r: <hex32 x-only>, s: <hex32 scalar>, r_prime: <hex32 x-only>, fee_coinproof?: <hex — the §7.1 canonical CoinProof bundle bytes>, block_anchor: { block_hash: <hex32, internal order §1.7.7>, height: <u64> } }` → `{ accepted: bool, reason?, batch_eta? }` — the transition's on-chain nullifier `(public_key = Pkᵢ, r = Rᵢ)` and its BIP-340 scalar `s = sᵢ`, plus `r_prime = R'`, the spender's **non-secret** pre-tweak sign-to-contract nonce point (symmetric to the `/sign` body of [§7.5](#75-node-rest-api-normative)) that opens the S2C tweak `Rᵢ = R' + H(bytes(R') ‖ H(ProofData))·G`, the fee `CoinProof`, and the freshness `block_anchor`. The publisher receives **only** these — never any coin plaintext, spend key, or the account's rotation edge (the rotated `next_pubkey` lives only inside the off-chain, hashed account state, [§1.4](#14-identifiers-and-hashes)) |
 
-The publisher MUST verify, before accepting: the nullifier's BIP-340 signature `(Rᵢ, sᵢ)` over the **fixed** message `m_state` under `Pkᵢ` ([§3.2](#32-transition-signing-bip-340--sign-to-contract)); that the supplied `r_prime = R'` satisfies the sign-to-contract binding `Rᵢ = R' + t·G` with `t = H(bytes(R') ‖ H(ProofData))` ([§3.2](#32-transition-signing-bip-340--sign-to-contract)) — which proves the nullifier commits the fee coin's own transition, so a nullifier whose `R'` does not open the S2C tweak MUST be rejected; that `fee_coinproof` is a valid `CoinProof` addressed to the publisher's `fee_address`, of `fee_asset_id`, meeting the quoted `fee`, and an output under the **same `ocr`** the nullifier's `R'` opens ([§3.8](#38-fees-and-economics)); and that `block_anchor` is within the §3.5 bound (a strict ancestor of the intended inclusion block within the gap rule, [§3.5](#35-inscription-format)). It then **half-aggregates** the nullifier's signature with others it has collected ([§3.3](#33-half-aggregation)) — no recursive proof, no secret keys — and inscribes the resulting **`AggregateStateNullifierV3`** ([§3.3](#33-half-aggregation), [§3.5](#35-inscription-format)) on Bitcoin; every node then folds each `Pkⱼ` into the accumulator by first-occurrence ([§3.6](#36-chain-scanning)). A publisher is permissionless and contention-free: any node MAY run this endpoint, and a wallet MAY point at its own node as publisher (self-publish, §3.4).
+The publisher MUST verify, before accepting: the nullifier's BIP-340 signature `(Rᵢ, sᵢ)` over the **fixed** message `m_state` under `Pkᵢ` ([§3.2](#32-transition-signing-bip-340--sign-to-contract)); that the supplied `r_prime = R'` satisfies the sign-to-contract binding `Rᵢ = R' + t·G` with `t = H(bytes(R') ‖ H(ProofData))` ([§3.2](#32-transition-signing-bip-340--sign-to-contract)) — which proves the nullifier commits the fee coin's own transition, so a nullifier whose `R'` does not open the S2C tweak MUST be rejected; that `fee_coinproof` is a valid `CoinProof` addressed to the publisher's `fee_address`, of `fee_asset_id`, meeting the quoted `fee`, and an output under the **same `ocr`** the nullifier's `R'` opens ([§3.8](#38-fees-and-economics)); and that `block_anchor` is within the §3.5 bound (a strict ancestor of the intended inclusion block within the gap rule, [§3.5](#35-inscription-format)). When `fee_coinproof` is **absent**, the fee checks above do not apply and the publisher accepts or declines the fee-less hand-off purely by its own policy (fee policy is not consensus, [§3.8](#38-fees-and-economics)) — the signature, sign-to-contract, and `block_anchor` checks remain mandatory; this is the hand-off shape of a pure receive or an unpaid mint ([§7.5 `TransitionRequest`](#75-node-rest-api-normative)), and self-publish ([§3.4](#34-the-publisher)) needs no fee at all. `H(ProofData)` for the S2C check is recomputed by the publisher from the fee `CoinProof`'s embedded proof public inputs when present; for a fee-less hand-off the submitting node supplies nothing beyond the four points/scalars and the publisher checks only signature validity and anchor freshness (the S2C opening is then verified downstream by receivers, [§2.3.3 step 4](#233-receive)). It then **half-aggregates** the nullifier's signature with others it has collected ([§3.3](#33-half-aggregation)) — no recursive proof, no secret keys — and inscribes the resulting **`AggregateStateNullifierV3`** ([§3.3](#33-half-aggregation), [§3.5](#35-inscription-format)) on Bitcoin; every node then folds each `Pkⱼ` into the accumulator by first-occurrence ([§3.6](#36-chain-scanning)). A publisher is permissionless and contention-free: any node MAY run this endpoint, and a wallet MAY point at its own node as publisher (self-publish, §3.4).
 
 ### 7.7 Wallet ↔ node bootstrapping (normative)
 
@@ -2380,7 +2442,7 @@ A node MUST verify `chan_bind` and `chal` for these two endpoints exactly as [§
 
 **Who enforces the capability gate.** The "a node **MUST** reject a request without a valid ownership proof or view grant" rule of [§5.1](#51-capability-gated-pull)/[§6.4](#64-external-interfaces-abstract) binds to whichever component **terminates the public endpoint** — the API layer in a split deployment, the node itself in the monolith. That component performs the §5.1 challenge–response, **including the `chan_bind` host/onion-key binding, which MUST be computed from the public host it authoritatively serves and MUST NOT be re-derived by the kernel from forwarded request metadata** (a forwarded `Host` header is attacker-influenceable, the §5.1 footgun). It then invokes the `OpenPullChallenge`/`Pull`/`GetCoinProof` procedures only for an **already-authorised** caller; the kernel's pull procedures release records to that caller and do not re-run the capability gate (in the monolith the same code path runs both).
 
-**Procedures.** `service Kernel` (package `kernel.v1`); each procedure backs the §7.5/§7.6 REST endpoint in the last column (in the monolith, the REST handler is a thin wrapper over the procedure):
+**Procedures.** `service Kernel` (package `kernel.v1`); each procedure backs the §7.5/§7.6 REST endpoint in the last column (in the monolith, the REST handler is a thin wrapper over the procedure). The complete normative contract follows the table.
 
 | Procedure | Kind | Purpose | Backs |
 |---|---|---|---|
@@ -2398,6 +2460,151 @@ A node MUST verify `chan_bind` and `chal` for these two endpoints exactly as [§
 | `GetCoinProof` | unary | one `CoinProof` within a valid [pull session](#pull-session-normative) ([§5.1](#51-capability-gated-pull)) | `GET /v1/proof/<coin_id>` |
 | `SubscribeReceipts` | server-stream | verified-receipt events for a subject as coins are credited — the §4.9 push source | drives the SSE/WS receipt push ([§4.9](#49-real-time-push-delivery)) |
 | `Publish` | unary | hand a nullifier `(Pkᵢ, Rᵢ, sᵢ, R')` + fee `CoinProof` to the publisher role, if enabled | `POST /v1/publish/spendrecord` (§7.6) |
+
+**`kernel.v1` message contract (normative).** The following Protocol-Buffers definition is the complete, normative `kernel.v1` contract. Conventions: every 32-byte protocol value is `bytes` and its length **MUST** be exactly 32 (a violation is `INVALID_ARGUMENT`); `u128` amounts are decimal strings (mirroring [§7.1](#71-serialization-conventions-normative)); timestamps are `uint64` Unix seconds; enumerated states use the literal §7.5 strings. The API layer performs the entire §5.1 capability gate ([§7.8 *Who enforces the capability gate*](#78-kernel-rpc--the-internal-interface-normative)); the kernel receives `chan_bind` only as an **opaque 32-byte equality token** to bind sessions — it never derives or interprets it.
+
+```proto
+syntax = "proto3";
+package kernel.v1;
+
+service Kernel {
+  rpc GetInfo(GetInfoRequest) returns (Info);
+  rpc GetAccumulator(GetAccumulatorRequest) returns (AccumulatorTip);
+  rpc ListInscriptions(ListInscriptionsRequest) returns (stream Inscription);
+  rpc GetNullifierPath(NullifierPathRequest) returns (NullifierPath);
+  rpc SubmitTransition(TransitionRequest) returns (JobHandle);
+  rpc GetJob(JobRequest) returns (Job);
+  rpc StreamJob(JobRequest) returns (stream JobEvent);
+  rpc SignTransition(SignRequest) returns (Job);
+  rpc CancelJob(JobRequest) returns (Job);
+  rpc OpenPullChallenge(PullChallengeRequest) returns (Challenge);
+  rpc Pull(PullRequest) returns (PullResult);
+  rpc GetCoinProof(CoinProofRequest) returns (CoinProofBlob);
+  rpc SubscribeReceipts(SubscribeReceiptsRequest) returns (stream Receipt);
+  rpc Publish(PublishRequest) returns (PublishResult);
+}
+
+message GetInfoRequest {}
+message Info {
+  string network = 1;                      // the §2.2 network tag: "mainnet" | "testnet" | "regtest"
+  string bitcoin_network = 2;
+  string protocol_version = 3;             // "v1"
+  map<string, bytes> circuit_digests = 4;  // {"C": 32B, "C_balance": 32B} (§1.7.9)
+  string relay_url = 5;
+  string blossom_url = 6;
+  uint32 finality_confirmations = 7;       // 6 (§3.9)
+  uint32 max_tx_inputs = 8;                // §2.5 bounds
+  uint32 max_tx_outputs = 9;
+  uint32 max_rx_coins = 10;
+  uint32 max_account_assets = 11;
+  bool ready = 12;                         // backs /health/ready
+  uint64 bitcoin_tip_height = 13;
+  bytes accumulator_root = 14;
+  uint64 scanner_lag = 15;
+}
+
+message GetAccumulatorRequest {}
+message AccumulatorTip { bytes root = 1; bytes tip_block_hash = 2; uint64 tip_height = 3; }
+
+message ListInscriptionsRequest { uint64 from_height = 1; uint32 limit = 2; }
+message Nullifier { bytes pubkey = 1; bytes r = 2; }               // (Pkⱼ, Rⱼ), §3.1
+message Inscription {
+  bytes txid = 1;                          // internal byte order (§1.7.7)
+  uint64 height = 2;
+  uint32 count = 3;
+  uint32 format = 4;                       // 0x00 raw | 0x01 half-aggregated (§3.5)
+  repeated Nullifier nullifiers = 5;
+  string state = 6;                        // §3.10: "completed" | "pending" | "failed"
+}
+
+message NullifierPathRequest { bytes pubkey = 1; }
+message NullifierPath {
+  bytes root = 1; uint64 tip_height = 2; bool present = 3;
+  bytes leaf = 4;                          // Rᵢ when present, else empty
+  repeated bytes siblings = 5;             // exactly 256 x 32B (§1.7.6)
+}
+
+message OutputTemplate { string recipient = 1; bytes asset_id = 2; string amount = 3; }
+message Issuance {
+  string name = 1; uint32 decimals = 2; uint32 issuance_version = 3;
+  string amount = 4;
+  string cap_total = 5;                    // set iff issuance_version == 2
+  bytes terms_salt = 6;                    // set iff issuance_version == 2
+}
+message TransitionRequest {
+  string kind = 1;                         // "mint" | "send" | "receive"
+  string subject = 2;                      // zk-address (Bech32m string)
+  bytes next_pubkey = 3;
+  repeated bytes input_coins = 4;
+  repeated OutputTemplate output_templates = 5;
+  bytes publisher_pubkey = 6;              // empty ⇒ self-publish
+  string fee_address = 7;
+  repeated bytes fold_coin_ids = 8;
+  Issuance issuance = 9;
+  string idempotency_key = 10;             // §7.5 Idempotency-Key pass-through
+}
+
+message JobHandle { string job_id = 1; string status = 2; }
+message JobRequest { string job_id = 1; }
+message AwaitingSignature {
+  bytes new_account_state_hash = 1; bytes output_coins_root = 2;
+  bytes input_nullifiers_root = 3; bytes coin_history_root = 4;
+  bytes nav_commitment = 5; bytes proof_data_hash = 6;    // §7.5 awaiting_signature shape
+}
+message JobResult {
+  bytes new_account_state_hash = 1; bytes output_coins_root = 2;
+  bytes input_nullifiers_root = 3; repeated bytes output_coin_ids = 4;
+  bytes publisher_pubkey = 5;
+}
+message JobError { string error = 1; string message = 2; }          // §7.5 machine_code shape
+message Job {
+  string job_id = 1; string kind = 2; string status = 3; string phase = 4;
+  float progress = 5;
+  AwaitingSignature awaiting_signature = 6;   // set only while status == "awaiting_signature"
+  JobResult result = 7;                       // set only once status == "completed"
+  JobError error = 8;                         // set only once status ∈ {"failed","cancelled"}
+}
+message JobEvent { string event = 1; Job job = 2; }                 // event: "phase"|"complete"|"error"
+message SignRequest { string job_id = 1; bytes signature = 2; bytes s2c_nonce = 3; }
+
+message Scope {                              // §5.1 scope; all_assets=true ⇔ asset_ids "*"
+  repeated bytes asset_ids = 1; bool all_assets = 2;
+  uint64 not_before = 3; uint64 not_after = 4;
+}
+message PullChallengeRequest {
+  string subject = 1; Scope requested_scope = 2;
+  string action = 3;                        // "" (pull) | "entrust" | "revoke" (§7.7 domains)
+}
+message Challenge { bytes nonce = 1; uint64 expiry = 2; string domain = 3; }
+message PullRequest {
+  bytes nonce = 1;                          // consumes the §5.1 challenge (single use)
+  string subject = 2;                       // the subject the API layer authenticated
+  Scope resolved_scope = 3;                 // the already-intersected scope (§5.1) — the kernel
+                                            //   trusts the API layer for ACCESS, never widens
+  bytes chan_bind = 4;                      // opaque 32B equality token for session binding (§5.1)
+}
+message RecordRef { bytes coin_id = 1; bytes blob_id = 2; }         // blob_id = H(ciphertext), §4.2.1
+message PullResult { repeated RecordRef records = 1; string session = 2; uint64 session_expiry = 3; }
+message CoinProofRequest { bytes coin_id = 1; string session = 2; bytes chan_bind = 3; }
+message CoinProofBlob { bytes canonical = 1; }                      // the §7.1 canonical bundle bytes
+
+message SubscribeReceiptsRequest { string subject = 1; }
+message Receipt {
+  bytes coin_id = 1; bytes asset_id = 2; string amount = 3;
+  string state = 4;                         // §3.10 state at emission
+  uint64 credited_at = 5;
+}
+
+message BlockAnchor { bytes block_hash = 1; uint64 height = 2; }    // hash internal order (§1.7.7)
+message PublishRequest {
+  bytes public_key = 1; bytes r = 2; bytes s = 3; bytes r_prime = 4;
+  bytes fee_coinproof = 5;                  // §7.1 canonical CoinProof bytes; empty ⇒ fee-less (§7.6)
+  BlockAnchor block_anchor = 6;
+}
+message PublishResult { bool accepted = 1; string reason = 2; uint64 batch_eta = 3; }
+```
+
+A breaking change to any message or procedure is a new package (`kernel.v2`), never an in-place edit ([§1.7.8 v1 freeze](#178-reference-instantiation-status-final-for-v1)).
 
 **Proving handshake across the boundary.** Proving is kernel-side — it needs the accumulator state and the proving stack ([§6.1](#61-components-and-responsibilities)). The API layer **forwards** the wallet's transition intent to `SubmitTransition` and the wallet's signature to `SignTransition`; the witness is built and the recursive proof produced **inside the kernel**; the SPEND signature is produced **only** in the wallet and passes through the API layer and the kernel RPC verbatim (§7.5 proving handshake, [§2.3](#23-state-transitions)). The kernel RPC therefore never carries a SPEND-branch secret — only a finished BIP-340 signature over the **fixed** message `m_state` (with the sign-to-contract tweak binding the witness-determined `H(ProofData)`) and the non-secret pre-tweak S2C nonce point `R'` the kernel forwards to the publisher for the fee-`ocr` check ([§3.8](#38-fees-and-economics), [§7.6](#76-publisher-interface-normative)). (`nk` and `op_secret` are part of the operational bundle, [§1.2](#12-key-hierarchy)/[§6.2](#62-wallet--node), and live kernel-side for witness construction — `nk` for nullifiers, `op_secret` for the `nav_rand` derivation — but neither can spend.) Proof construction and chain scanning are **internal** kernel work driven by `SubmitTransition` and the chain scanner ([§3.6](#36-chain-scanning)) — not separately-callable procedures (the illustrative `prove`/`scanChain` verbs of [§6.1](#61-components-and-responsibilities) are these internal steps, not RPC entry points).
 
