@@ -17,7 +17,7 @@ Every incentive/residual verdict for v1, closed per the [Assurance Roadmap](/ass
 | Section | Verdict | Basis |
 |---|---|---|
 | Reorg finality bounded at 6 confirmations | **accepted v1 boundary** (D-16) | hard project directive; canonical replay ≤5, fail-stop ≥6 |
-| Accumulator history relation vs ToS | **accepted v1 boundary** (D-16) | SMT prefix port, no-op branch deliberately not built |
+| Accumulator history relation vs ToS | **accepted v1 boundary** (D-16) | RFC-6962 Merkle-log consistency port — prefix succinctness/soundness fixed; the paper's DistinctElement no-op branch is still deliberately not built (D-16, bounded finality) |
 | Data availability and recovery | **holds under stated assumptions** | k ≥ 3 replication + store-everything + holder self-interest in own bearer data |
 | Node storage growth | **holds** | linear operator cost, no adversarial lever; sparse-storage rules pinned |
 | Proving cost and latency | **holds under stated assumptions** | measured in the build report; impracticality resolves as a version bump, never silently |
@@ -43,11 +43,15 @@ Every incentive/residual verdict for v1, closed per the [Assurance Roadmap](/ass
 
 ## Accumulator history relation deviates from the paper's ToS accumulator
 
-**Risk: the accumulator's history relation is presented as the paper model but is a different relation.**
+**Risk: the accumulator's history relation is a deliberate CT-consistency port, not the paper's ToS IsPrefix; the paper's DistinctElement no-op branch remains unbuilt (bounded finality).**
 
-*Shielded CSV* uses a tuple-of-sets (ToS) accumulator whose history relations are an ordered `IsPrefix` and a `DistinctElement` at the same tuple position (paper §3.2, §3.6). The spec's [§3.7](/specification#37-the-nullifier-accumulator) `prefix(a, b)` is instead an **unordered, leaf-preserving SMT submap**, and the spec has no `DistinctElement` relation. The two disagree on valid reorg histories — e.g. regrouping the same nullifiers across blocks, or an orphan at an early position. The narrow consumed-key `ToSAccVVerifyUnionMembership` port ([§2.1](/specification#21-the-compliance-predicate)) is faithful, but the history/prefix relation is a deliberate replacement. This divergence is bounded by the same 6-confirmation finality directive ([spec §3.9](/specification#39-finality-and-reorg-handling)): history disagreements can only arise within the ≤5-block replay window (handled identically by every node) or beyond finality (outside v1's guarantee), and the deviation is registered in the [paper-deviation analysis](/paper-conformance-analysis).
+*Shielded CSV* uses a tuple-of-sets (ToS) accumulator whose history relations are an ordered `IsPrefix` and a `DistinctElement` at the same tuple position (paper §3.2, §3.6). The **prefix-succinctness defect** of the earlier design — an SMT leaf-preserving submap proof was linear in the intervening foreign insertions and could not be made constant-size in the circuit — is **fixed**: [spec §1.7.6](/specification#176-nullifier-accumulator-append-only-merkle-log) replaces the SMT with an append-only Merkle log and [spec §3.7](/specification#37-the-nullifier-accumulator) makes `prefix` an RFC 6962 / RFC 9162 **log-consistency** proof — constant size, independent of the gap, closing the buried-fork-loser the SMT-submap weakening left open.
 
-**Mitigation:** resolved as a deliberate, registered deviation ([issue #106](https://github.com/zk-coins/docs/issues/106), [Paper-Deviation Analysis D-16](/paper-conformance-analysis)): the spec now names the SMT-submap relation an explicit replacement for the paper's ToS accumulator — not an exact paper port — with its own argument, and bounds the divergence with the 6-confirmation finality directive ([spec §3.9](/specification#39-finality-and-reorg-handling)).
+**Two honest caveats:** (1) an ordered Merkle log is **more** reorg-order-sensitive than the order-independent SMT (reordering the same nullifier set changes the log root), so a not-yet-final `nav` may need rebuilding after a ≤5-block reshuffle — a **liveness** cost only, bounded by the [spec §3.9](/specification#39-finality-and-reorg-handling) 6-confirmation finality gate (`size ≤ size_final`), never a double-spend lever; (2) this is a **CT-consistency (ordered-sequence) port**, not the paper's tuple-of-**sets** `IsPrefix` — both peer-reviewed, different relations. The narrow consumed-key `ToSAccVVerifyUnionMembership` port ([§2.1](/specification#21-the-compliance-predicate)) remains faithful.
+
+**Unchanged:** the hard 6-confirmation finality (D-16) still stands and its rationale is unchanged — it comes from the absence of a satisfiable `DistinctElement` no-op branch ([issue #105](https://github.com/zk-coins/docs/issues/105)), which this construction still omits by design. Fixing prefix succinctness does **not** change D-16. The **succinctness/soundness** part of the deviation is now **resolved**; the (unchanged) bounded finality remains an **accepted v1 boundary**, registered in the [paper-deviation analysis](/paper-conformance-analysis).
+
+**Mitigation:** registered as a deliberate deviation ([issue #106](https://github.com/zk-coins/docs/issues/106), [Paper-Deviation Analysis D-05 / D-16](/paper-conformance-analysis)): prefix is now the RFC-6962 log-consistency relation (succinctness/soundness fixed); the paper's `DistinctElement` no-op remains deliberately unbuilt and is bounded by the 6-confirmation finality directive ([spec §3.9](/specification#39-finality-and-reorg-handling)).
 
 ## Data availability and recovery
 
