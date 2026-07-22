@@ -517,6 +517,8 @@ This section pins one concrete, implementable convention for everything otherwis
 
 **v1 freeze (normative).** The v1 protocol surface is **frozen**: the circuit shape of `C` and `C_balance` (public-input layout, the [§2.5](#25-circuit-dimensioning-normative) bounds, the [§2.6](#26-in-circuit-non-native-cryptography-normative) relations), the §1.7 encodings and serializations, and the [§7](#7--wire-formats--node-interfaces) wire formats. `IssuanceTerms_v2` ([§6.5](#65-issuance--token-standards), [§2.1 clause 3](#21-the-compliance-predicate)) is part of the **initial** v1 circuit build, not a later addition. Once the reference implementation generates and pins `circuit_digest(C)` and `circuit_digest(C_balance)` ([§1.7.9](#179-proof-system-parameters-normative), [V.4](#v4-poseidon-derived-values--regen-table)), any change to any frozen element defines a **new protocol version** with new digests and new lineages; v1 artefacts are never edited in place.
 
+**Residual review target (normative note).** v1 ships without an external audit ([Assurance Roadmap](/assurance)). Of the v1 construction, the one element for which independent cryptographic review is explicitly recommended before mainnet is the **in-circuit arithmetization of the RFC-6962 log-consistency verifier** ([§3.7](#37-the-nullifier-accumulator)): its data-dependent recursion (split points driven by the bits of the two log sizes) is unrolled to `≤ 2·H_MAX` slots with select gates, and a subtly wrong split-point or peak-bagging would let it accept a **non-prefix**, collapsing the transitive-anchoring soundness ([§2.1 clause 1](#21-the-compliance-predicate)). The reference implementation **MUST** differential-test the gadget against an independent RFC-6962 reference at the `2ᵏ−1`, `2ᵏ`, `2ᵏ+1` size boundaries ([V.11](#v11-nullifier-accumulator-log-vectors) negative/boundary vectors). The abstract relation is peer-reviewed (RFC 6962 / RFC 9162 log consistency); only its Poseidon-over-Goldilocks in-circuit realisation is v1-new.
+
 #### 1.7.9 Proof-system parameters (normative)
 
 §1.1 names the proof system abstractly (a FRI-based PCD scheme over Goldilocks with Poseidon). This section fixes the **one concrete, conforming parameter set** for protocol version v1. Any two conforming implementations that follow it — including the pinned digests, hence the reference circuit shape ([§2.6](#26-in-circuit-non-native-cryptography-normative)) — produce proofs that verify against each other's verifier data (the project itself deliberately maintains a single protocol implementation — the node; conformance is proven by the node↔SDK primitive parity suite and the executable conformance harness — the [test vectors](#test-vectors-conformance-harness) and the A-to-Z suite of the [Implementation Mandate](/implementation-mandate)). Like the rest of §1.7 it is normative-for-v1 and final for v1 ([§1.7.8](#178-reference-instantiation-status-final-for-v1)).
@@ -1779,7 +1781,8 @@ BalanceAttestation:
     { AccountState S,
       pi,                                             // the account's recursive validity proof for S
       nav_opening = { nav, nav_rand },                // opens pi.ProofData.nav_commitment
-      nav_prefix,                                     // prefix(nav, nav_ceiling)
+      nav_consistency,                                // RFC-6962 consistency proof prefix(nav ⊑ nav_ceiling) (§3.7)
+      size, size_ceiling,                             // u64 sizes of the attested nav and the disclosed nav_ceiling
       spend_record,                                   // the account's transition authorization
                                                      //   {Pk_anchor, signature} for this state (§1.4)
       R_prime }                                       // sign-to-contract opening of spend_record.signature
@@ -1796,16 +1799,18 @@ BalanceAttestation:
        key binding is REQUIRED: without it a malicious subject could attest a fork-loser or
        never-anchored balance by pointing at a fresh-key naked nullifier whose R_anchor S2C-opens
        H(pi.ProofData) (permissionless, §3.3/§3.4) — see §5.6 step 3
-    6. pi.ProofData.nav_commitment == Hc("NavCommit", nav_root ‖ nav_rand)
-       AND prefix(nav, nav_ceiling)                  (the attested state's hidden conditional NAV is a
-                                                      prefix of the disclosed global ceiling — proving
-                                                      its whole lineage is anchored, WITHOUT revealing
-                                                      the subject's own nav)
+    6. pi.ProofData.nav_commitment == Hc("NavCommit", nav_root ‖ nav_rand),
+       nav_root == Hc("NfLog/Root", size ‖ mth),
+       AND prefix(nav ⊑ nav_ceiling) via nav_consistency, size ≤ size_ceiling
+                                                     (the RFC-6962 log-consistency relation of §3.7:
+                                                      the attested state's hidden nav is a prefix of the
+                                                      disclosed global ceiling — proving its whole lineage
+                                                      is anchored, WITHOUT revealing the subject's own nav)
 ```
 
 **Host-side anchor checks (normative, outside the circuit).** The circuit cannot prove Bitcoin inclusion. The verifier **MUST** itself check, against its own scan: that `(Pk_anchor, R_anchor)` is inscribed at the disclosed `(txid, block_hash, height)`; that it is the **first occurrence** of `Pk_anchor` ([§3.6](#36-chain-scanning)); and that its state is `completed` ([§3.10](#310-transaction-states)). These are verifier-side preconditions of accepting the attestation, exactly like the `nav_ceiling` canonicality check.
 
-The verifier checks the proof, that `nav_ceiling` is a **canonical** nullifier-accumulator value per its **own** scan ([§3.7](#37-the-nullifier-accumulator), [§3.9](#39-finality-and-reorg-handling) — since the subject's own `nav` is proven a prefix of it, every dependency folded into the attested state is anchored), and that the on-chain nullifier `(Pk_anchor, R_anchor)` at `anchor` (`txid`) is the **first occurrence** of `Pk_anchor` in the accumulator it rebuilt from Bitcoin — i.e. state `completed` ([On-chain §3.6](#36-chain-scanning), [§3.10](#310-transaction-states)) at `{block_hash, height}`. No node, relay, or explorer is trusted. Because `nav_ceiling` is a **global** accumulator value shared by every account, it discloses nothing account-specific; the subject **MUST** set it to a recent global value chosen independently of its own view — RECOMMENDED the network tip at attestation time — and **MUST NOT** set it to (or derive it from) its own `nav`, which would leak the subject's prefix length. A verifier that wants a freshness bound **MAY** prescribe the `nav_ceiling` it will accept (e.g. its own current tip); the subject then proves `prefix(nav, that ceiling)`, and the verifier learns only that the state is no fresher than a value it already holds. Because the anchor is the account's most-recent **anchored transition** (the transition whose nullifier is on Bitcoin), the attestation binds the balance **as of that transition**. Since **every** state-advancing transition now anchors — a receive included ([§2.1 clause 1](#21-the-compliance-predicate), [§3.10](#310-transaction-states)) — a receive that credits new coins is itself an anchored transition, so the attestation can bind the newer balance as soon as that receive reaches `completed`, with no need to wait for a subsequent spend.
+The verifier checks the proof, that `nav_ceiling` is a **canonical** nullifier-accumulator value per its **own** scan ([§3.7](#37-the-nullifier-accumulator), [§3.9](#39-finality-and-reorg-handling), with `nav_ceiling.size ≤ size_final` so every authenticated position is in the ≥6-confirmation-final prefix (§3.9) — since the subject's own `nav` is proven a prefix of it, every dependency folded into the attested state is anchored), and that the on-chain nullifier `(Pk_anchor, R_anchor)` at `anchor` (`txid`) is the **first occurrence** of `Pk_anchor` in the accumulator it rebuilt from Bitcoin — i.e. state `completed` ([On-chain §3.6](#36-chain-scanning), [§3.10](#310-transaction-states)) at `{block_hash, height}`. No node, relay, or explorer is trusted. Because `nav_ceiling` is a **global** accumulator value shared by every account, it discloses nothing account-specific; the subject **MUST** set it to a recent global value chosen independently of its own view — RECOMMENDED the network tip at attestation time — and **MUST NOT** set it to (or derive it from) its own `nav`, which would leak the subject's prefix length. A verifier that wants a freshness bound **MAY** prescribe the `nav_ceiling` it will accept (e.g. its own current tip); the subject then proves `prefix(nav, that ceiling)`, and the verifier learns only that the state is no fresher than a value it already holds. Because the anchor is the account's most-recent **anchored transition** (the transition whose nullifier is on Bitcoin), the attestation binds the balance **as of that transition**. Since **every** state-advancing transition now anchors — a receive included ([§2.1 clause 1](#21-the-compliance-predicate), [§3.10](#310-transaction-states)) — a receive that credits new coins is itself an anchored transition, so the attestation can bind the newer balance as soon as that receive reaches `completed`, with no need to wait for a subsequent spend.
 
 **Reference link** (any self-hostable instance is equivalent):
 
@@ -2909,7 +2914,7 @@ Sizes:
 
 The conformance harness MUST construct the byte string in exactly this order and re-derive `ash = Hc("AccountState", <these bytes as a byte-string input>)` per [§1.7.2](#172-field-encoding-e-of-hc-inputs) and [§1.7.4](#174-serializeaccountstate).
 
-`coin_history_root` for an empty account equals **`E'₂₅₆`**, the empty-tree root of the per-account coin-history SMT (distinct from the nullifier accumulator's `E₂₅₆` because the coin-history SMT uses different domain tags `CoinHist/Leaf`, `CoinHist/Node`; see [§1.7.6](#176-nullifier-accumulator-append-only-merkle-log)). Both values are Poseidon-dependent and listed in V.4 as `<REGEN>`.
+`coin_history_root` for an empty account equals **`E'₂₅₆`**, the empty-tree root of the per-account coin-history SMT (distinct from the nullifier-accumulator log's empty root `nflog_empty = Hc("NfLog/Empty", 0)` (§1.7.6) because the coin-history SMT uses different domain tags `CoinHist/Leaf`, `CoinHist/Node`; see [§1.7.6](#176-nullifier-accumulator-append-only-merkle-log)). Both values are Poseidon-dependent and listed in V.4 as `<REGEN>`.
 
 ### V.4 Poseidon-derived values — `<REGEN>` table
 
@@ -2917,7 +2922,7 @@ For each value below, the formula is fixed; the bytes MUST be produced by the re
 
 | Symbol | Formula | Bytes (`<REGEN>`) |
 |---|---|---|
-| `E₂₅₆` (nullifier-accumulator empty root) | recursion from `E₀ = Hc("NfAcc/Leaf", 0)` and `Eᵢ = Hc("NfAcc/Node", i, E_{i-1}, E_{i-1})`; the empty root is `E₂₅₆ = Hc("NfAcc/Node", 256, E₂₅₅, E₂₅₅)` — [§1.7.6](#176-nullifier-accumulator-append-only-merkle-log) | `<REGEN>` |
+| `nflog_empty` (nullifier-accumulator empty-log root) | `Hc("NfLog/Empty", 0)` — the empty append-only Merkle log ([§1.7.6](#176-nullifier-accumulator-append-only-merkle-log)); the retired 256-bit-SMT empty root `E₂₅₆` no longer exists | `<REGEN>` |
 | `E'₂₅₆` (coin-history-SMT empty root) | same structure with the per-account tags: `E'₀ = Hc("CoinHist/Leaf", 0)` and `E'ᵢ = Hc("CoinHist/Node", i, E'_{i-1}, E'_{i-1})`; empty root `E'₂₅₆ = Hc("CoinHist/Node", 256, E'₂₅₅, E'₂₅₅)` — [§1.7.6](#176-nullifier-accumulator-append-only-merkle-log) | `<REGEN>` |
 | `asset_id` | `Hc("AssetId", "zkCoins/v1/genesis" ‖ Pk₀_sample ‖ H("USD-Demo") ‖ decimals=0x02 ‖ issuance_version=0x01)` | `<REGEN>` |
 | `nk_commit_sample` | `Hc("NkCommit", nk_sample)` — the account nullifier-key commitment ([§2.1 clause 4](#21-the-compliance-predicate)), a fixed field of `serialize(AccountState)` (V.3) | `<REGEN>` |
@@ -3108,4 +3113,29 @@ This fixture pins the [§1.3](#13-per-coin-keys-note-encryption--detection) note
 | `kb` | `HKDF("zkCoins/v1/BlobKey", K_tx)` ([§4.2.1](#421-bundle-blob-encryption-zbe-normative)) | `fe0533b9cf0eb97a5aa20b080bf70b9be33bed4cb4bf11f58d96718ed659cd86` |
 
 **Acceptance:** reproduce every row bit-for-bit, **and** confirm the receiver side derives the identical `ss` from (`ivk`, `epk`) — `x(ivk·lift_x(epk))` equals the pinned `ss` (the x-only lift's sign ambiguity cancels, §1.1).
+
+### V.11 Nullifier-accumulator log vectors
+
+Conformance vectors for the [§1.7.6](#176-nullifier-accumulator-append-only-merkle-log) append-only Merkle log and the [§3.7](#37-the-nullifier-accumulator) inclusion / consistency proofs. All values are Poseidon-over-Goldilocks (`<REGEN>`, produced by the reference implementation — never hand-authored); the **structure** (split point `k` = largest power of two `< n`, the `MTH` / `PATH` / `SUBPROOF` recursions of [§1.7.6](#176-nullifier-accumulator-append-only-merkle-log) / [§3.7](#37-the-nullifier-accumulator)) is fixed here and was differential-tested against an independent RFC-6962 reference implementation (two independent implementations, byte-structure identical, all boundaries and negative controls passing) before pinning.
+
+**Positive (formulas pinned; bytes `<REGEN>`).**
+
+| Value | Formula |
+|---|---|
+| `nflog_empty` | `Hc("NfLog/Empty", 0)` |
+| `mth@n` for `n ∈ {1,2,3,4,5,7,8,9}` | the [§1.7.6](#176-nullifier-accumulator-append-only-merkle-log) `MTH(D[0:n])` over the V.1-derived sample leaves `Hc("NfLog/Leaf", p ‖ Pkₚ ‖ Rₚ)` |
+| `inclusion@(p,n)` for `p < n`, `n ∈ {2ᵏ−1, 2ᵏ, 2ᵏ+1}` | the RFC-6962 audit path `PATH(p, D[0:n])` recomputing `mth@n` |
+| `consistency@(m,n)` for `(m,n) ∈ {(1,2),(3,4),(5,8),(7,8),(8,9)}` | the RFC-6962 `PROOF(m, D[0:n])` recomputing both `mth@m` and `mth@n` |
+
+**Negative controls (normative — each MUST be rejected).**
+
+| # | Case | Expected |
+|---|---|---|
+| NL-1 | a consistency proof between `(m, mth_a)` and `(n, mth_b)` where `mth_a` is **not** the head of the first `m` leaves of `mth_b` (some leaf `< m` differs) | consistency verification fails |
+| NL-2 | an inclusion proof for `(Pk, R')` at position `p` whose canonical content is `(Pk, R) ≠` | inclusion fails |
+| NL-3 | an inclusion proof replayed at a position `p' ≠ p` | fails (position is bound in the leaf) |
+| NL-4 | a claimed `size' > size` with a fabricated tail | consistency to the canonical root fails |
+| NL-5 | an inclusion at `p ≥ size` | rejected |
+| NL-6 | a fork-loser `(Pk, R_loser)` (`Pk` first-occurs at position `q` with winner `R_winner ≠ R_loser`) authenticated at any position + lifted to canonical | unsatisfiable (no canonical position holds `(Pk, R_loser)`) |
+| NL-7 | a `nav` authenticating a position `≥ size_final` (a not-yet-final entry) | rejected by the [§3.9](#39-finality-and-reorg-handling) finality gate |
 
