@@ -39,4 +39,4 @@ Allow: /
 User-agent: meta-externalagent
 Allow: /
 
-Sitemap: https://docs.zkcoins.app/sitemap.xml
+Sitemap: https://docs.zkcoins.com/sitemap.xml

@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 // The Cloudflare Pages production branch. Builds of this branch serve the
-// canonical site (docs.zkcoins.app) and are left fully crawlable. Every other
+// canonical site (docs.zkcoins.com) and are left fully crawlable. Every other
 // branch is a preview deployment (e.g. develop -> dev-docs.zkcoins.app).
 const PROD_BRANCH = process.env.PROD_PAGES_BRANCH || 'main';
 
@@ -26,7 +26,7 @@ const NAMED_AGENTS = [
  * AI indexes, while leaving the production site fully open via static/robots.txt.
  *
  * The single static/robots.txt is copied verbatim into every build, so it
- * cannot distinguish the production host (docs.zkcoins.app, built from `main`)
+ * cannot distinguish the production host (docs.zkcoins.com, built from `main`)
  * from a preview host (dev-docs.zkcoins.app, built from `develop`). This plugin
  * resolves that at build time: on a Cloudflare Pages build whose branch is not
  * the production branch, it overwrites the build output's robots.txt with a
@@ -51,7 +51,7 @@ module.exports = function noindexPreviewPlugin() {
       const robots = [
         '# Preview deployment — NOT the canonical site.',
         `# Built from branch "${branch || 'unknown'}" (production branch is "${PROD_BRANCH}").`,
-        '# The canonical, crawler-open site is https://docs.zkcoins.app.',
+        '# The canonical, crawler-open site is https://docs.zkcoins.com.',
         '# Preview builds are excluded from search and AI indexes to avoid',
         '# duplicate-content indexing and crawling of unreleased drafts.',
         '',
