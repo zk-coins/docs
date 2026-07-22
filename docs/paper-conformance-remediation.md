@@ -52,7 +52,7 @@ A later coordinator lane may offer optional constant-size batching only if the d
 | F-05 | high | Plonky2 is deprecated upstream. | **Resolved by project decision (2026-07-22):** v1 pins the immutable crates.io release `plonky2 = "1.1.0"` ([spec §1.7.9](/specification#179-proof-system-parameters-normative)); upstream deprecation is a maintenance risk, not a correctness gate — the pinned artefact is deterministic and sufficient for v1, and migration to a maintained system is a future **version bump**. | closed |
 | F-06 | high | `k = 3` retention cannot guarantee public-ledger DA or operator independence. | Put every state nullifier on Bitcoin; use replication only for private proof recovery. | clean sync |
 | F-07 | high when cited | The formal certificate targets an older specification. | **Superseded for v1:** the certificate is not cited as evidence for the current model; the executable Gate-B negative-control vectors stand in. Re-modelling remains welcome but is not a release gate (project decision: no human-gated mainnet step). | closed for v1 |
-| F-08 | medium | Paper, target and implementation status are conflated. | Publish a commit-pinned three-column status matrix. | every release |
+| F-08 | medium | Paper, target and implementation status are conflated. | Publish a commit-pinned three-column status matrix. | filled at the vectors-pin PR; re-affirmed every release |
 
 ## 1. Version-3 aggregate state nullifier
 
@@ -264,7 +264,7 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 
 ### Gate B — executable conformance
 
-- independent implementations reproduce canonical vectors;
+- the node reproduces the canonical vectors and the SDK's primitive-level re-implementation reproduces the byte-equal subset (the spec V.7 parity matrix);
 - one-entry self-publish and multi-entry aggregation work on regtest and public testnet;
 - a clean node reconstructs state from Bitcoin without Nostr, Blossom or a zkCoins index;
 - mutation, duplicate, malformed-encoding, wrong-network and proof-substitution vectors fail;

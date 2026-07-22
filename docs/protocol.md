@@ -36,7 +36,7 @@ Each coin carries a proof of its entire history, compressed into a constant-size
 
 ### 2. Compact nullifiers — 64 bytes on Bitcoin
 
-A combination of the account model, Sign-to-Contract, and Schnorr Half-Aggregation compresses the on-chain footprint from a full Bitcoin transaction to a **~64-byte half-aggregated nullifier per transition** — the pair `(Pkᵢ, Rᵢ)` of the transition's account-state nullifier public key and a sign-to-contract nonce that commits its off-chain validity proof. zkCoins v1 writes that nullifier **to Bitcoin exactly as the paper does**, so the chain itself guarantees the availability of the data every verifier needs for its double-spend checks — there is no off-chain data-availability assumption for the accumulator (an earlier framing that presented off-chain nullifiers as going "further" than the paper was corrected in PR #94 following the paper authors' feedback; the design now literally *is* the paper model). See [spec §3.5](/specification#35-inscription-format) for the inscription format and [spec §3.7](/specification#37-the-nullifier-accumulator) for the full accumulator design.
+A combination of the account model, Sign-to-Contract, and Schnorr Half-Aggregation compresses the on-chain footprint from a full Bitcoin transaction to a **~64-byte half-aggregated nullifier per transition** — the pair `(Pkᵢ, Rᵢ)` of the transition's account-state nullifier public key and a sign-to-contract nonce that commits its off-chain validity proof. zkCoins v1 writes that nullifier **to Bitcoin exactly as the paper does**, so the chain itself guarantees the availability of the data every verifier needs for its double-spend checks — there is no off-chain data-availability assumption for the accumulator (an earlier framing that presented off-chain nullifiers as going "further" than the paper was corrected in PR #94 following the paper authors' feedback; the design now follows the paper's on-chain nullifier construction (the registered v1 deviations — bounded finality D-16 and the fee model D-09 — are catalogued in the [Paper-Deviation Analysis](/paper-conformance-analysis))). See [spec §3.5](/specification#35-inscription-format) for the inscription format and [spec §3.7](/specification#37-the-nullifier-accumulator) for the full accumulator design.
 
 The per-coin `CoinProof` bundle — the recipient's custody of a coin's value and history — still travels off-chain, replicated to `k = 3` independent holders ([spec §4.6](/specification#46-data-availability--replication-factor-k)); that is a different object from the on-chain nullifier and its data-availability story is unchanged.
 
@@ -46,9 +46,9 @@ The ZK proofs hide all transaction details — amounts, assets, sender, receiver
 
 ## Performance
 
-The table below contrasts a regular Bitcoin transaction with **zkCoins v1**, which is the **Shielded CSV paper model**.
+The table below contrasts a regular Bitcoin transaction with **zkCoins v1**, which implements the **Shielded CSV paper's on-chain nullifier model** (registered deviations: [Paper-Deviation Analysis](/paper-conformance-analysis)).
 
-| Metric | Bitcoin (regular) | zkCoins v1 = Shielded CSV |
+| Metric | Bitcoin (regular) | zkCoins v1 (Shielded CSV model) |
 |---|---|---|
 | On-chain data | full transaction (~140 vBytes typical) | ~64-byte half-aggregated nullifier per transition, independent of how many coins it spends |
 | Per-spend cost | ~140 vBytes | ~64 bytes of witness data (≈ 16 vB) per transition ([spec §3.8](/specification#38-fees-and-economics)) |

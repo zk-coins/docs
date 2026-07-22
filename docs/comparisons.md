@@ -13,7 +13,7 @@ zkCoins is the first real-world **implementation** of two whitepapers:
 - the **Shielded CSV** construction by Jonas Nick (Blockstream), Liam Eagen (Alpen Labs), and Robin Linus (ZeroSync) — [eprint 2025/068](https://eprint.iacr.org/2025/068);
 - the original **zkCoins** concept, prototyped as [ZeroSync/ZKCoins](https://github.com/ZeroSync/ZKCoins).
 
-The project at **zkcoins.app does not compete with these papers — it realizes them.** It claims no invention of the underlying scheme; its contribution is bringing the design to a running node, wallet, and the off-chain transport/recovery layer needed to operate it. Where this page says "zkCoins", read "the Shielded CSV scheme as realized by zkCoins".
+The project at **zkcoins.app does not compete with these papers — it realizes them**, with every load-bearing deviation registered in the [Paper-Deviation Analysis](/paper-conformance-analysis). It claims no invention of the underlying scheme; its contribution is bringing the design to a running node, wallet, and the off-chain transport/recovery layer needed to operate it. Where this page says "zkCoins", read "the Shielded CSV scheme as realized by zkCoins v1, registered deviations included".
 
 ## The differentiator is a combination, not a single property
 

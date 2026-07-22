@@ -13,7 +13,7 @@ zkCoins lets you send value on Bitcoin without anyone seeing the amount, the ass
 :::
 
 :::info What this is — and what it isn't
-This is **one** concrete realization, not the only one possible: wherever the source papers leave a choice open, this specification takes the established, Bitcoin-consistent option and defines it exactly. It builds faithfully on the whitepapers' core and carries their philosophy into every layer they did not formalize — delivery, recovery, access, and operation. It describes the **target design** and is intentionally independent of any current implementation.
+This is **one** concrete realization, not the only one possible: wherever the source papers leave a choice open, this specification takes the established, Bitcoin-consistent option and defines it exactly. It follows the whitepapers' construction — registering every load-bearing deviation in the [Paper-Deviation Analysis](/paper-conformance-analysis) ([relationship section](#relationship-to-the-source-papers)) — and carries their philosophy into every layer they did not formalize — delivery, recovery, access, and operation. It describes the **target design** and is intentionally independent of any current implementation.
 :::
 
 ## One principle, carried all the way
@@ -149,8 +149,8 @@ Where each requirement is satisfied:
 |---|---|
 | **1 · Bitcoin-only base** | §1 (no native token; secp256k1/BIP-340), §3 (a per-transition ~64-byte nullifier `(Pkᵢ, Rᵢ)`, half-aggregated and inscribed by a publisher; no chain/consensus change) |
 | **2 · Private** | §1.3 (per-coin encryption), §1.4 (the on-chain nullifier `(Pkᵢ, Rᵢ)` carries only a rotating key and a sign-to-contract nonce — no amounts, parties, per-coin nullifiers, or account link on chain), §2 (ZK proof hides amounts/parties/graph) |
-| **3 · Trustless** | §2 (proof soundness ⇒ no forgery), §3 (nullifier accumulator ⇒ no double-spend), §1.2 (no key a node holds can spend), §6 (threat model) |
-| **4 · Client-side validation** | §2 (receiver re-verifies the full recursive proof), §4 (receive flow) |
+| **3 · Trustless** | §2 (proof soundness ⇒ no forgery), §3 (nullifier accumulator ⇒ no double-spend), §1.2 (no key a node holds can spend), §6 (threat model); §3.4 + §6.3 (permissionless publish and node portability — freeze resistance) |
+| **4 · Client-side validation** | §2 (the receiver — its own node on its behalf, thin-client rule — re-verifies the full recursive proof), §4 (receive flow) |
 | **5 · Custody only in wallet** | §1.2 (SPEND branch is wallet-only; hardened separation) |
 | **6 · Recovery** | §1.3 (seed-derived detection/scan keys), §4 (seed reconstruction, replication, data availability) |
 | **7 · Self-hostable** | §6 (one `docker compose` stack — node · bitcoind · nostr-relay · PostgreSQL · explorer — each a pluggable, own-or-external building block, no operator-specific dependencies), §4 (paired Nostr relay) |
@@ -2619,6 +2619,10 @@ A breaking change to any message or procedure is a new package (`kernel.v2`), ne
 **Stores and transport planes.** The value-bearing store ([§4.8](#48-durability--the-store-everything-invariant)) and the Blossom blob store (§7.4) are owned by the kernel; the API layer reaches blobs through the kernel or the public `/blossom` path (§7.4), **never** by touching the kernel's database directly ([§6.1](#61-components-and-responsibilities)). The Nostr relay plane (§7.3) is the paired `nostr-relay` ([§4.1](#41-roles-and-transport)), driven by the kernel with the account's `op` key. Any API-layer-only state — handle/aliasing (`user@domain`), rate-limits, push-subscription registrations — lives in the API layer's **own** database ([§6.1](#61-components-and-responsibilities)), never in the kernel store.
 
 
+
+## Relationship to the source papers
+
+zkCoins v1 implements the *Shielded CSV* construction — on-chain half-aggregated account-state nullifiers, NISSHAC commitments ([§1.7.10](#1710-half-aggregation-with-commitments-nisshac-normative)), Bitcoin first-occurrence arbitration ([§3.6](#36-chain-scanning)), and the conditional NAV ([§3.7](#37-the-nullifier-accumulator), [§2.1](#21-the-compliance-predicate)) — with every load-bearing deviation **registered**, per the project's [contribution rule](https://github.com/zk-coins/docs/blob/develop/CONTRIBUTING.md), in the [Paper-Deviation Analysis](/paper-conformance-analysis). The load-bearing v1 deviations are: **D-16** bounded 6-confirmation finality in place of the paper's arbitrary-depth conditional-NAV no-op ([§3.9](#39-finality-and-reorg-handling)); **D-09** the spender-picks-publisher fee coin, deferring the paper's first-to-publish-wins design ([§3.8](#38-fees-and-economics)); **D-13** the multi-asset token-standard layer ([§6.5](#65-issuance--token-standards)); and the accepted privacy boundaries **D-17–D-20** ([§6.7](#67-security-properties-summary)). The delivery, recovery, access, and operations layers ([§4](#4--transport--recovery)–[§7](#7--wire-formats--node-interfaces)) formalize what the papers leave open and are extensions, not deviations.
 
 ## Glossary
 
