@@ -2853,6 +2853,8 @@ The sample keys are **illustrative**, not derived from a real BIP-32 path. Real 
 | `Pk₀_sample` | `H("zkCoins/v1/test-vector/Pk0")` | `5dcffebb708081e3cc78b22f54d260467022c095a67da835f50713a36ee40746` |
 | `Pk₁_sample` | `H("zkCoins/v1/test-vector/Pk1")` | `fba3ea150382de6f39a07348d327b1efa8c120da1ee599148ff6fed7803465fb` |
 | `nk_sample` | `H("zkCoins/v1/test-vector/nk")` | `2dc00b27c0d2991514b1b997af97b0e12c5da159b5726481124032c1578115b2` |
+| `npk_rand@0` | `H("zkCoins/v1/test-vector/npk_rand")` (fixture blind for `npk_commit@0`, §2.1 clause 2) | `a04b10a7ac57db9e12b2cac644653f97ffdfc4911935f21f027936f60c543b98` |
+| `npk_commit@0` | `H("zkCoins/v1/NpkCommit" ‖ Pk₁_sample ‖ npk_rand@0)` (SHA-256; the sixth ProofData field, §1.4) | `7d014dfd4b58080f7a68124ef28936c8da039135a8b7e0b25ce14e287e6d7026` |
 
 Asset definition:
 
@@ -3027,7 +3029,7 @@ This fixture pins the **signing and aggregation layer in isolation** — [§3.2]
 
 **Signer 1.** `sk_sig_1 = int(H("zkCoins/v1/test-vector/sk_sig1")) mod n` = `22f508c0a93b29fa87ca8d9abcec996f01620656cd7a7e4ab5418b2e76beccf4`; BIP-340-normalised key `d_1` = `22f508c0a93b29fa87ca8d9abcec996f01620656cd7a7e4ab5418b2e76beccf4`; `Pk_1` = `e7f2a98e7b45e9424e3e0cb1d937a1698ebd339c6d8344906db979642cf20474`.
 
-Synthetic `ProofData_1` — the five fields are `H` of the five **short labels** `zkCoins/v1/test-vector/pd1/ash`, `…/pd1/ocr`, `…/pd1/inr`, `…/pd1/chr`, `…/pd1/navc`, mapping in that order to the §1.4 `ProofData` fields:
+Synthetic `ProofData_1` — the six fields are `H` of the six **short labels** `zkCoins/v1/test-vector/pd1/ash`, `…/pd1/ocr`, `…/pd1/inr`, `…/pd1/chr`, `…/pd1/navc`, `…/pd1/npkc`, mapping in that order to the §1.4 `ProofData` fields:
 
 | Field | Hex |
 |---|---|
@@ -3036,21 +3038,22 @@ Synthetic `ProofData_1` — the five fields are `H` of the five **short labels**
 | `input_nullifiers_root` | `25af2581385ea1e3688958c7e915c2b46b426daf62536945caaeecc8e3c3a6c6` |
 | `coin_history_root` | `7014c090cbf7eeb37519e4ff815a747384f46943a2b0cc3f4a0094e62cdfaaba` |
 | `nav_commitment` | `4dcf2ab90710006a8fe0c9fb0363e5465100858fc0d69155f69db53468e6af7c` |
-| `m_SC = H(serialize(ProofData_1))` | `f5c6243fe2361637fb3b5c33acf340d851482aa7b8c364d598e8fea726983767` |
+| `npk_commit` | `23461051f1c23cf0660eab775049d51ea90bd08c31dabe5cc3d1a0e4767fe259` |
+| `m_SC = H(serialize(ProofData_1))` | `bf50cc59a665bcdc2b5f0754dd754a73e37552a6b1b69eb9e42c07ddd1ae73e2` |
 
 Signature per [§3.2](#32-transition-signing-bip-340--sign-to-contract) (deterministic fixture nonce, `ctr = 0`):
 
 | Value | Hex |
 |---|---|
 | `R'_1` (pre-tweak nonce, x-only) | `4ed3bf332ee8f6b2cd5fd2e51608ab7894210a2647cb65b78641f135effba1e6` |
-| `t_1` (tweak, `< n`) | `71ffeaba0407e822893ecdb375cb21772793175078625a1e3146b7c26163e1f8` |
-| `R_1` (committed nonce, x-only) | `c13d5556d92bd1f5d6588787d4fff114ec9f5a599faf95da88622d6640084167` |
-| `e_1` (BIP-340 challenge) | `3a6d9400138f15c30072b5611342c1eb6040f00181c5b111b08f70fbf812e3b0` |
-| `s_1` | `67dc7698d15b17c6558ded77169849a48047803bf15562038064613db18d3440` |
+| `t_1` (tweak, `< n`) | `b03be0eb2d06c5bf79d22357ff40817467370828d3fa159a0b3e85ae372f73d4` |
+| `R_1` (committed nonce, x-only) | `80714f0c6d5b0457bf065e19d3c1de15066f91289f64686e8ff042d99fece38b` |
+| `e_1` (BIP-340 challenge) | `bb4f537c95b5b186a780d78ca9b936812d963d4c80b397cea1b6dafad9fb7d07` |
+| `s_1` | `2f4949a1dd6cf5270b60913d3efa0d5b5f40e1f396eabc5234b78d64c4382324` |
 
 **Signer 2.** `sk_sig_2 = int(H("zkCoins/v1/test-vector/sk_sig2")) mod n` = `86b75c297fd9a0af472d06fbf889f7e4667c9e42b7d7efc8b1ca7e66b95462c0`; BIP-340-normalised key `d_2` = `7948a3d680265f50b8d2f9040776081a54323ea3f770b0730e07e02616e1de81` (negated — odd-y key, exercising the normalisation branch); `Pk_2` = `21799353e64a65ee4b1f414998c44878c56270cf8a81046cb3636e5ec31a3341`.
 
-Synthetic `ProofData_2` — the five fields are `H` of the five **short labels** `zkCoins/v1/test-vector/pd2/ash`, `…/pd2/ocr`, `…/pd2/inr`, `…/pd2/chr`, `…/pd2/navc`, mapping in that order to the §1.4 `ProofData` fields:
+Synthetic `ProofData_2` — the six fields are `H` of the six **short labels** `zkCoins/v1/test-vector/pd2/ash`, `…/pd2/ocr`, `…/pd2/inr`, `…/pd2/chr`, `…/pd2/navc`, `…/pd2/npkc`, mapping in that order to the §1.4 `ProofData` fields:
 
 | Field | Hex |
 |---|---|
@@ -3059,26 +3062,27 @@ Synthetic `ProofData_2` — the five fields are `H` of the five **short labels**
 | `input_nullifiers_root` | `8fa4a67faf24c981a64328ec227207a06a066e9ac0444621f5d3066b8f405bca` |
 | `coin_history_root` | `23027099bb0e04dadb0ae9cb76208e377270c6d4dd761962b98c9db793e109be` |
 | `nav_commitment` | `69266372d1705851901e48dd1e40e6cde4bda048fb04e622b97cf4346f90632f` |
-| `m_SC = H(serialize(ProofData_2))` | `68133ae34a4f0264ca68d55c6d2ae70866a2f37e8b949a557a7962d50b515825` |
+| `npk_commit` | `bdae5bcf45668f6f6b2670bdce70882c3211334c78248cdf9d4aa5639074d154` |
+| `m_SC = H(serialize(ProofData_2))` | `85d06ebe2f0f5173af9ff8bdd2d4d594303a640d7b2f1c8819d5a48abfa4773d` |
 
 Signature per [§3.2](#32-transition-signing-bip-340--sign-to-contract) (deterministic fixture nonce, `ctr = 0`):
 
 | Value | Hex |
 |---|---|
 | `R'_2` (pre-tweak nonce, x-only) | `77693723775f599cfb75f4aeea14b87ba16ba246f865247febb95db72cc1a023` |
-| `t_2` (tweak, `< n`) | `7cb2c16c4aa43d9d2328f2d739b62d3fcbe686692542e522dbd0a677a32a2d39` |
-| `R_2` (committed nonce, x-only) | `4e9b28c25b259f0943094b73da798a7262363fbe71d2078745c6efdbc43ccbc1` |
-| `e_2` (BIP-340 challenge) | `31347aa878df60c3cfdd8243fde5558c063364b29977a6ffcdeeff182c443d24` |
-| `s_2` | `af403b63e760117d3d7e34dc45700b99bea663fdbe48ba376dac723f03f57975` |
+| `t_2` (tweak, `< n`) | `50acb7d4e2bdc8eb90c99d10fc2a2075ff1935c5f3c5343b672da8b5052330a5` |
+| `R_2` (committed nonce, x-only) | `02540223883cced1d918e227904c2f0b85ed8bfd4867bf0f5dd2f618946eb328` |
+| `e_2` (BIP-340 challenge) | `7144d1fe1dbdb815f17fad949bc64c7df2ff0292457e8343f71cc0b5db21df56` |
+| `s_2` | `e4fcc0c4d3c95ab8c65d8dbec1da664e7e3f4b6b5cea350532b1dcb4b9dcd0b4` |
 
 **Half-aggregation (`k = 2`,** [§1.7.10](#1710-half-aggregation-with-commitments-nisshac-normative)**):**
 
 | Value | Hex |
 |---|---|
-| `z = H("zkCoins/v1/HalfAgg" ‖ R₁ ‖ Pk₁ ‖ R₂ ‖ Pk₂)` | `e0f4ac4ff1212bf1e4a576fa631f63fdc24a5c09538c10893dbd8f75f650d921` |
-| `a₁ = int(H(z ‖ u32-be(1))) mod n` | `3854d614f107dacbf6ff8b9f01b96fdc82e36916fd9d36ac3dd6fb0393037933` |
-| `a₂ = int(H(z ‖ u32-be(2))) mod n` | `0d65f6c02591d67c8783bd6e36dd1fba771c0231839b3055704b7d9da17931b0` |
-| `s_agg = (a₁·s₁ + a₂·s₂) mod n` | `73fc9b72343f0f94abdc08ca8b95ddae790e539692c94b8bdac2c3772dd86722` |
+| `z = H("zkCoins/v1/HalfAgg" ‖ R₁ ‖ Pk₁ ‖ R₂ ‖ Pk₂)` | `f3301704ec6912aedebaec2816fffbf36d0940c456da3296d376556e75880d20` |
+| `a₁ = int(H(z ‖ u32-be(1))) mod n` | `c66e673694653322400a65d5046dba7a47b519257428ceebf0060319648e50b8` |
+| `a₂ = int(H(z ‖ u32-be(2))) mod n` | `29a24fbf77c6bf7b1d70f20d727898d19170ac62696d887cbd63753e1a3911e8` |
+| `s_agg = (a₁·s₁ + a₂·s₂) mod n` | `f8b50d28ff2b3b390aeff5a827bde403fab09eeb61e53cd0fb4d33510c6b2104` |
 
 **Acceptance:** an implementation passes V.8 iff it reproduces every table above bit-for-bit **and** its own `Verify`, `CommVerify` (both signers), and `AggregateVerify` ([§1.7.10](#1710-half-aggregation-with-commitments-nisshac-normative)) accept the pinned values.
 
