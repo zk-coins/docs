@@ -61,7 +61,7 @@ The table below contrasts a regular Bitcoin transaction with **zkCoins v1**, whi
 - **Not a sidechain** — it uses Bitcoin L1 directly
 - **Not a rollup** — no sequencer, no coordinator; validity proofs move peer-to-peer between sender and receiver, while the per-transition nullifiers anchor to Bitcoin L1, so the chain carries everything a verifier needs for its double-spend checks
 - **Not a mixer** — privacy is structural, not obfuscation
-- **Not a token** — no native protocol token to bootstrap; value lives in client-side-validated coins (multi-asset by issuance, [spec §6.5](/specification#65-issuance--versioned-schemas-v1-minimal))
+- **Not a token** — no native protocol token to bootstrap; value lives in client-side-validated coins (multi-asset by issuance, [spec §6.5](/specification#65-issuance--token-standards))
 - **Not a soft fork** — works on Bitcoin as it exists today
 
 ## Cryptographic primitives
