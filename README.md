@@ -2,11 +2,11 @@
 
 **Private Bitcoin payments via Shielded CSV** — no new chain, no token, no consensus change, no trusted operator. Only Bitcoin, zero-knowledge proofs, and the user's own keys.
 
-This is the **documentation repository** and the single place that describes the whole system end to end. New here? Start with the **[Specification](https://docs.zkcoins.app/specification)** (the full A-to-Z technical design) or the **[Requirements](https://docs.zkcoins.app/requirements)**.
+This is the **documentation repository** and the single place that describes the whole system end to end. New here? Start with the **[Specification](https://docs.zkcoins.com/specification)** (the full A-to-Z technical design) or the **[Requirements](https://docs.zkcoins.com/requirements)**.
 
 | | Production | Dev |
 |---|---|---|
-| **Docs** | [docs.zkcoins.app](https://docs.zkcoins.app) | [dev-docs.zkcoins.app](https://dev-docs.zkcoins.app) |
+| **Docs** | [docs.zkcoins.com](https://docs.zkcoins.com) | [dev-docs.zkcoins.app](https://dev-docs.zkcoins.app) |
 | **Wallet app** | [zkcoins.app](https://zkcoins.app) | [dev.zkcoins.app](https://dev.zkcoins.app) |
 | **Bitcoin network** | mainnet | Mutinynet (signet) |
 
