@@ -73,4 +73,4 @@ The table below contrasts a regular Bitcoin transaction with **zkCoins v1**, whi
 | Schnorr Half-Aggregation | Compress the per-transition nullifier signatures published on-chain into one inscription |
 | Proof-Carrying Data | Recursive ZK proofs of transaction validity |
 | Recursive zkSNARK (Plonky2, cyclic recursion + FRI) | PCD instantiation |
-| Sparse Merkle Trees | Nullifier accumulator, membership + non-membership proofs (zkCoins v1: 256-bit-depth SMT, [spec §1.7.6](/specification#176-nullifier-accumulator-sparse-merkle-tree)) |
+| Merkle trees (CT log + SMT) | Nullifier accumulator as an RFC-6962 append-only Merkle log with inclusion + consistency proofs ([spec §1.7.6](/specification#176-nullifier-accumulator-append-only-merkle-log)); per-account coin-history as a 256-bit-depth sparse Merkle tree |
