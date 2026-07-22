@@ -28,9 +28,9 @@ Method — for each mechanism:
 1. **Actor model.** Who participates, what they can do, what it costs them, what they earn.
 2. **Adversary budget.** What a rational attacker spends versus what the attack yields — including griefing, where the attacker pays to impose losses on others.
 3. **Equilibrium argument.** Show in writing, with assumptions stated, that following the protocol is each actor's best strategy. Where a closed-form argument is not available, simulate.
-4. **Verdict.** Each mechanism ends in exactly one of: **holds**, **holds under stated assumptions**, or **broken → spec change**.
+4. **Verdict.** Each mechanism ends in exactly one of: **holds**, **holds under stated assumptions**, **accepted v1 boundary** (a residual accepted as final for v1 and registered in the [Paper-Deviation Analysis](/paper-conformance-analysis)), or **broken → spec change**.
 
-Output: one analysis document per mechanism, linked from [Risks](/risks). Resulting protocol changes go into the [Specification](/specification) as PRs. No mechanism ships to mainnet with an open verdict.
+Output: the closed verdict table at the top of [Risks](/risks) — one row per mechanism, no row open. For v1 this table is **complete** (project decision 2026-07-22); a future mechanism change reopens only its own row. No mechanism ships to mainnet with an open verdict.
 
 ## Workstream 2 — Verification staircase
 
@@ -48,7 +48,7 @@ A security proof establishes that the *specified* protocol is sound. That the *r
 
 | Gate | What must hold |
 |---|---|
-| **Public testnet** | Paper-conformance remediation Gate A (specification completeness) is closed; specification deep-review complete; conformance vectors generated and pinned; the A-to-Z suite passes across node, SDK, and app. Steps 1–7 of the [implementation-mandate runbook](/implementation-mandate) are the executable form of this gate. |
-| **Real value (mainnet)** | Paper-conformance remediation Gates A–B are closed; every incentive verdict recorded in [Risks](/risks) is **holds**, **holds under stated assumptions**, or **accepted v1 boundary** — none open, none **broken** (Workstream 1); the specification's soundness summary ([spec §2.4](/specification#24-soundness-summary)) and security-properties summary ([spec §6.7](/specification#67-security-properties-summary)) are complete and internally consistent, and the Gate-B negative-control vectors pass; the reference instantiation is final for v1 ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1)); a vulnerability disclosure process is published ([SECURITY.md](https://github.com/zk-coins/docs/blob/develop/SECURITY.md)). |
+| **Public testnet** | Paper-conformance remediation Gate A (specification completeness) is closed; zero `<REGEN>` placeholders outside the explicitly non-byte-pinned V.5/V.6 signature cells; zero open rows in the [Risks](/risks) verdict table; conformance vectors generated and pinned; the A-to-Z suite passes across node, SDK, and app. Steps 1–7 of the [implementation-mandate runbook](/implementation-mandate) are the executable form of this gate. |
+| **Real value (mainnet)** | Paper-conformance remediation Gates A–C are closed ([their definitions](/paper-conformance-remediation)); the [Risks](/risks) verdict table has no open and no **broken** row (Workstream 1); the specification's soundness summary ([spec §2.4](/specification#24-soundness-summary)) and security-properties summary ([spec §6.7](/specification#67-security-properties-summary)) are complete and internally consistent, and the Gate-B negative-control vectors pass; the reference instantiation is final for v1 ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1)); a vulnerability disclosure process is published ([SECURITY.md](https://github.com/zk-coins/docs/blob/develop/SECURITY.md)). |
 
 These gates are ordered stations, not aspirations: a release that has not passed its gate does not ship. Their executable form — ordered steps with hard pass predicates and no human-gated stop — is the [Path to mainnet runbook](/implementation-mandate).

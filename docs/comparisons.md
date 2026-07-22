@@ -52,7 +52,7 @@ Both use Client-Side Validation on Bitcoin, but serve different purposes.
 | | zkCoins (Shielded CSV) | RGB |
 |---|---|---|
 | **Focus** | Private payments | Smart contracts + tokens |
-| **Privacy** | Full (ZK proofs hide everything; global anonymity set) | Limited (history revealed to counterparty) |
+| **Privacy** | Full against the public-chain observer (global anonymity set); bounded counterparty residuals (D-17–D-19, [Risks](/risks)) | Limited (history revealed to counterparty) |
 | **Proof size** | Constant (independent of history) | Grows with transaction history |
 | **On-chain footprint** | ~64-byte half-aggregated nullifier per transition (~16 vB), constant in input count ([spec §3.8](/specification#38-fees-and-economics)) | Commitment in a host TX; off-chain consignment grows |
 | **Smart contracts** | No | Yes (zk-AluVM, Turing-complete) |

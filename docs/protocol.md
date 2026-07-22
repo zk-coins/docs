@@ -4,7 +4,7 @@ title: Protocol
 
 # Shielded CSV Protocol
 
-zkCoins implements the **Shielded CSV** protocol — "Private and Efficient Client-Side Validation." This page summarizes the protocol's key innovations. For the full specification, see the [ePrint paper](https://eprint.iacr.org/2025/068).
+zkCoins implements the **Shielded CSV** protocol — "Private and Efficient Client-Side Validation." This page summarizes the protocol's key innovations. For the full, normative specification see [the specification](/specification); the ePrint paper and the gist are the **source works** ([registered deviations](/paper-conformance-analysis)).
 
 ## Origin
 
@@ -42,7 +42,7 @@ The per-coin `CoinProof` bundle — the recipient's custody of a coin's value an
 
 ### 3. Privacy by construction
 
-The ZK proofs hide all transaction details — amounts, assets, sender, receiver, transaction graph. Because there is one on-chain nullifier per transition, the per-block **transaction count** becomes public — the chain reveals *how many* transitions occurred, but never who, what, or how much ([spec §3.5](/specification#35-inscription-format)). The only other leak is an approximate creation time disclosed to a coin's receiver.
+The ZK proofs hide all transaction details — amounts, assets, sender, receiver, transaction graph. Because there is one on-chain nullifier per transition, the per-block **transaction count** becomes public — the chain reveals *how many* transitions occurred, but never who, what, or how much ([spec §3.5](/specification#35-inscription-format)). The remaining counterparty-scope disclosures are bounded and final for v1 (D-17–D-20) — see the [precise privacy statement](/specification#67-security-properties-summary) and [Risks](/risks).
 
 ## Performance
 
@@ -52,7 +52,7 @@ The table below contrasts a regular Bitcoin transaction with **zkCoins v1**, whi
 |---|---|---|
 | On-chain data | full transaction (~140 vBytes typical) | ~64-byte half-aggregated nullifier per transition, independent of how many coins it spends |
 | Per-spend cost | ~140 vBytes | ~64 bytes of witness data (≈ 16 vB) per transition ([spec §3.8](/specification#38-fees-and-economics)) |
-| Privacy | None | Full (amounts, assets, parties, graph hidden; per-block transaction count public) |
+| Privacy | None | Full against the public chain (amounts, assets, parties, graph hidden; per-block transition count public); bounded counterparty residuals D-17–D-19 |
 | Verification | full script execution per TX | one Schnorr verification per nullifier + client-side recursive proof check |
 | Proof size | N/A | constant |
 

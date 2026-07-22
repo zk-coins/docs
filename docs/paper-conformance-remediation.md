@@ -142,7 +142,7 @@ There is no `prev_root`, `new_root`, `BatchBundle`, `bundle_locator`, public `Ag
 
 ### 3.1 Canonical-chain state
 
-`observed` means present on the current best chain. `accepted` means still present after the wallet's configured confirmation depth. Neither means absolute finality.
+`observed` means present on the current best chain. `accepted` means still present after the 6-confirmation finality floor ([spec §3.9](/specification#39-finality-and-reorg-handling); deployments MAY require more, never fewer). Neither means absolute finality.
 
 On a reorg within the tolerated window (≤5 blocks; the 6-confirmation finality bound, [spec §3.9](/specification#39-finality-and-reorg-handling)), a node MUST:
 
@@ -175,7 +175,7 @@ Consequences:
 - no separate synthetic issuance nullifier is needed under this selected paper model;
 - creator authorization, per-asset conservation and the explicitly unlimited v1 creator-supply policy remain separate in-circuit checks.
 
-PR #97 removed the unanchored `mint-verified` path: a recipient credits issuance only after the creating state nullifier reaches the configured confirmation policy and its transition commitment opens correctly.
+PR #97 removed the unanchored `mint-verified` path: a recipient credits issuance only after the creating state nullifier reaches the 6-confirmation finality floor ([spec §3.9](/specification#39-finality-and-reorg-handling); deployments MAY require more, never fewer) and its transition commitment opens correctly.
 
 ## 5. Fees and open publishing
 
@@ -189,7 +189,7 @@ The publisher role remains open and non-custodial:
 - no publisher signature, registry, sequencer, exclusive root lease or coordinator is required;
 - the paper's first-to-publish-wins gossip race, in which multiple publishers compete without being selected in advance, is deferred as a forward-compatible privacy upgrade because it requires a two-step payment structure that v1 does not fix.
 
-Publisher economics, front-running resistance and fee-claim privacy require an explicit proof and test suite. “Permissionless” does not by itself prove that the market remains decentralized.
+Publisher economics, front-running resistance and fee-claim privacy are closed by the [Risks](/risks) verdict table (publisher censorship/delay: holds; fee mismatch: holds under stated assumptions) plus the Gate-B fee-path tests. “Permissionless” does not by itself prove that the market remains decentralized.
 
 ## 6. Data availability and recovery boundary
 
@@ -205,7 +205,7 @@ Keys, commitments, aggregate signatures, order and publisher fee addresses are B
 
 **Decided (2026-07-22):** v1 stays on the immutable `plonky2 = "1.1.0"` release; exact verifier/circuit digests are frozen at the vectors-pin PR ([spec §1.7.8 v1 freeze](/specification#178-reference-instantiation-status-final-for-v1)). No fork audit and no migration are v1 gates; a migration to a maintained proof system is a future version bump with new digests and lineages.
 
-The final security package must separately establish:
+Desirable post-v1 cryptographic write-ups (a quality goal, **not** a v1 release gate — [Assurance Roadmap](/assurance) Workstream 2):
 
 - NISSHAC CK-AEUF-CC-CMA security and commitment hiding/binding for the instantiated curve/hash suite;
 - no double spend from first occurrence plus recursive state-key continuity;
@@ -214,7 +214,7 @@ The final security package must separately establish:
 - privacy under the now chain-visible transaction count, rotating keys and commitments;
 - correctness of the concrete recursive circuit and implementation.
 
-Model checking cannot replace primitive proofs; v1 ships without an implementation audit by project decision, with the executable harness as the stand-in ([Assurance Roadmap](/assurance)).
+Model checking cannot replace primitive proofs; v1 ships without an implementation audit or gating formal proofs by project decision — the executable harness (Gate B) and the in-spec arguments are the v1 assurance basis ([Assurance Roadmap](/assurance)).
 
 ## 8. Required negative controls
 
@@ -273,8 +273,8 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 
 ### Gate C — assurance
 
-- the specification's soundness summary ([spec §2.4](/specification#24-soundness-summary)) and security-properties summary ([spec §6.7](/specification#67-security-properties-summary)) are complete and internally consistent with every clause they cite;
-- every incentive verdict recorded in [Risks](/risks) is closed (**holds**, **holds under stated assumptions**, or **accepted v1 boundary** — none open, none broken);
+- the specification's soundness summary ([spec §2.4](/specification#24-soundness-summary)) and security-properties summary ([spec §6.7](/specification#67-security-properties-summary)) exist, every clause reference they cite resolves, every Requirement 1–10 has a row, and D-16–D-20 appear in the [§6.7 precise privacy statement](/specification#67-security-properties-summary) (machine-checkable link/row checks);
+- the [Risks](/risks) verdict table has no open and no broken row;
 - the reference instantiation and backend are final and frozen for v1 ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1), [§1.7.9](/specification#179-proof-system-parameters-normative));
 - a vulnerability disclosure process is published ([SECURITY.md](https://github.com/zk-coins/docs/blob/develop/SECURITY.md)).
 
@@ -290,7 +290,7 @@ Every release must distinguish:
 |---|---|---|---|---|
 | nullifier | rotating state key + NISSHAC commitment | v3 paper-model port | commit/link | vectors/proof |
 | ordering | Bitcoin first occurrence | canonical scan/reorg replay | commit/link | two-node test |
-| reorg finality | SMT prefix + 6-confirmation bound (no distinct-element no-op) | frozen v3 relation | commit/link | replay + bound test |
+| reorg finality | ToS accumulator, `IsPrefix`/`DistinctElement` exactly-one-of, arbitrary-depth conditional-NAV no-op (paper §3.2/§3.6/§4.2) | SMT leaf-preserving prefix + hard 6-confirmation finality, no `DistinctElement` no-op (D-16) | commit/link | replay + bound test |
 | recovery | private coin proof required | encrypted replicated bearer data | commit/link | restore test |
 | issuance | application-defined | creator-bound, unlimited, anchored | commit/link | issuance tests |
 | proof backend | abstract PCD | named frozen backend | commit/link | benchmarks (build report, [Implementation Mandate §4](/implementation-mandate)) |
