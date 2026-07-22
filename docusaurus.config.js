@@ -6,7 +6,7 @@ const config = {
   tagline: 'Private Bitcoin Transactions via Shielded CSV',
   favicon: 'img/favicon.svg',
 
-  url: 'https://docs.zkcoins.app',
+  url: 'https://docs.zkcoins.com',
   baseUrl: '/',
 
   organizationName: 'zk-coins',
