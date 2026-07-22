@@ -549,7 +549,7 @@ The on-chain nullifier objects of [§3.1](#31-the-on-chain-object) are half-aggr
 **Algorithms.**
 
 - **`KeyGen() → (sk, pk)`** — `sk ← [1, n)` uniformly; `pk = sk·G`, encoded x-only (BIP-340, 32 bytes). In zkCoins `sk = skᵢ`, `pk = Pkᵢ = current_pubkey` (§1.2), fresh per transition.
-- **`Sign(sk, m, m_SC) → (σ, r_SC)`** — a BIP-340 signature on the **fixed** message `m = m_state = "zkCoins/v1/StateUpdate"` that additionally commits the message `m_SC = H(ProofData)` by **sign-to-contract** (§3.2): draw `R' = k'·G` (`k'` a fresh BIP-340 nonce), set `t = H(bytes(R') ‖ m_SC)`, `R = R' + t·G`, `e = H_BIP340(bytes(R) ‖ bytes(pk) ‖ m)`, and `s = (k' + t + e·sk) mod n`; output `σ = (R, s)` and the opening randomness `r_SC = R'`. The pair `(pk, R)` is the transition's on-chain nullifier `(Pkᵢ, Rᵢ)` (§3.1).
+- **`Sign(sk, m, m_SC) → (σ, r_SC)`** — a BIP-340 signature on the **fixed** message `m = m_state = "zkCoins/v1/StateUpdate"` that additionally commits the message `m_SC = H(ProofData)` by **sign-to-contract** (§3.2): draw `R' = k'·G` (`k'` a fresh BIP-340 nonce; if `y(R')` is odd, set `k' ← n − k'`), set `t = H(bytes(R') ‖ m_SC)`, `R = R' + t·G` (if `int(t) ≥ n`, `R = ∞`, or `y(R)` is odd, redraw `k'` — [§3.2](#32-transition-signing-bip-340--sign-to-contract) steps 1b/3b), `e = H_BIP340(bytes(R) ‖ bytes(pk) ‖ m)`, and `s = (k' + t + e·sk) mod n`; output `σ = (R, s)` and the opening randomness `r_SC = R'`. The pair `(pk, R)` is the transition's on-chain nullifier `(Pkᵢ, Rᵢ)` (§3.1).
 - **`Verify(m, pk, σ) → bool`** — the ordinary BIP-340 check `s·G == R + e·pk` with `e = H_BIP340(bytes(R) ‖ bytes(pk) ‖ m)`. It attests the signature but **not** the commitment `m_SC`.
 - **`AggregateSig((m, pkⱼ, σⱼ)_{j=1..k}) → σ_agg`** — publisher-side, no secret keys: with `σⱼ = (Rⱼ, sⱼ)`, derive `z = H("zkCoins/v1/HalfAgg" ‖ bytes(R₁) ‖ Pk₁ ‖ … ‖ bytes(R_k) ‖ Pk_k)` and per-index coefficients `aⱼ = H(z ‖ u32-be(j)) mod n`, then `s_agg = Σⱼ aⱼ·sⱼ mod n`. The output `σ_agg = ((R₁,…,R_k), s_agg)` retains every `Rⱼ` (each `(Pkⱼ, Rⱼ)` pair is kept; only the `sⱼ` collapse into `s_agg`). This is exactly the derivation of [§3.3](#33-half-aggregation), and the object it produces is the **`AggregateStateNullifierV3`** ([§3.1](#31-the-on-chain-object)).
 - **`AggregateVerify(σ_agg, (m, pkⱼ)_{j=1..k}) → bool`** — recompute each `eⱼ = H_BIP340(bytes(Rⱼ) ‖ bytes(Pkⱼ) ‖ m)` and each `aⱼ` as above, then check the single multi-scalar relation `s_agg·G == Σⱼ aⱼ·(Rⱼ + eⱼ·Pkⱼ)`. Because `m` is the fixed constant `m_state`, a scanner recomputes every `eⱼ` from on-chain data alone (§3.6).
@@ -1042,13 +1042,19 @@ Every state-advancing transition is authorised by **one** BIP-340 Schnorr signat
 Let `H(ProofData) = SHA-256(serialize(ProofData))` be the 32-byte digest of the transition's **off-chain** validity-proof public inputs (`H` = SHA-256, [Foundations §1.1, §1.4](#14-identifiers-and-hashes)). Because `ProofData` is **not** on-chain, committing it in the nonce is a real, non-redundant binding. The signer MUST construct the nonce as:
 
 ```
-1. R'  = k'·G                          // k' a fresh, uniformly random 256-bit nonce scalar
-2. t   = H( bytes(R') ‖ H(ProofData) ) // sign-to-contract tweak, SHA-256, 32 bytes
-3. R   = R' + t·G                      // committed nonce point  (x-only, BIP-340 even-y)
+1. R'  = k'·G                          // k' a fresh BIP-340 nonce scalar
+1b. if y(R') is odd: k' ← n − k'       // normalise R' to even-y, so bytes(R') (x-only) lifts back
+                                       //   to the exact point the verifier reconstructs
+2. t   = H( bytes(R') ‖ H(ProofData) ) // sign-to-contract tweak, SHA-256, 32 bytes, big-endian int
+3. R   = R' + t·G                      // committed nonce point
+3b. if int(t) ≥ n, or R = ∞, or y(R) is odd:
+                                       //   discard k' and redraw a fresh nonce (restart at step 1)
 4. e   = H_BIP340( bytes(R) ‖ bytes(Pkᵢ) ‖ m_state )   // BIP-340 challenge over the FIXED message
-5. s   = (k' + t + e·skᵢ) mod n        // n = secp256k1 group order
+5. s   = (k' + t + e·skᵢ) mod n        // n = secp256k1 group order; skᵢ BIP-340-normalised (even-y key)
 6. signature = bytes(R) ‖ bytes(s)     // 64 bytes; the on-chain nullifier keeps only (Pkᵢ, R), §3.3
 ```
+
+**Why steps 1b/3b are required (normative).** BIP-340 verification and the `CommVerify` opening ([§1.7.10](#1710-half-aggregation-with-commitments-nisshac-normative)) reconstruct points from **x-only** encodings by lifting to the **even-y** candidate. Without step 1b, a signer whose `R'` has odd y would produce an `s` that no verifier can open (`lift_x(bytes(R'))` is a different point); without the step-3b redraw, roughly half of all signing attempts would yield an odd-y `R` whose signature fails plain BIP-340 verification. The redraw terminates in an expected ≤ 2 attempts. Nonce choice is signer-private and never consensus-relevant, so any fresh-nonce redraw strategy conforms; the [V.8](#v8-signing--half-aggregation-fixture-synthetic-fully-pinned) fixture pins one deterministic counter-based strategy solely so the vector is reproducible.
 
 The signature is an ordinary, standalone BIP-340 signature: any scanner checks `s·G == R + e·Pkᵢ` from the on-chain `(Pkᵢ, R)`, the shared aggregate scalar (§3.3), and the fixed `m_state` — with no knowledge of `t` and no off-chain data. A **receiver** who holds the `CoinProof` bundle — hence `ProofData` (so it can compute `H(ProofData)`) and the pre-tweak nonce `R'` — additionally recomputes `t = H(bytes(R') ‖ H(ProofData))` and confirms `R = R' + t·G`, proving the on-chain nullifier commits to **exactly that** off-chain transition ([§2.3.3 step 4](#233-receive)). The signer MUST follow BIP-340 nonce hygiene (deterministic-plus-auxiliary-randomness derivation of `k'`) and MUST NOT reuse a nonce across two distinct commitments. `Pkᵢ` MUST be the x-only `current_pubkey` under which the spend is authorised; reusing `Pk₀` for a non-initial spend is forbidden (keys rotate per transition, [Foundations §1.2](#12-key-hierarchy)).
 
@@ -2260,7 +2266,7 @@ All paths are relative to the node base URL and MUST be served over TLS 1.3/1.2 
 | `GET` | `/` | `{ name, version, endpoints }` |
 | `GET` | `/health` | `200 "ok"` once the process is up |
 | `GET` | `/health/ready` | `{ ready, bitcoin_tip_height, accumulator_root, scanner_lag }`; `503` until synced |
-| `GET` | `/v1/info` | `{ network, bitcoin_network, protocol_version: "v1", circuit_digests: { C }, relay_url, blossom_url, finality_confirmations: 6, max_tx_inputs: 8, max_tx_outputs: 8, max_rx_coins: 4, max_account_assets: 32 }` |
+| `GET` | `/v1/info` | `{ network, bitcoin_network, protocol_version: "v1", circuit_digests: { C, C_balance }, relay_url, blossom_url, finality_confirmations: 6, max_tx_inputs: 8, max_tx_outputs: 8, max_rx_coins: 4, max_account_assets: 32 }` |
 | `GET` | `/v1/chain/accumulator` | `{ root, tip_block_hash, tip_height }` — the current `NAV(tip)` ([§3.7](#37-the-nullifier-accumulator)) |
 | `GET` | `/v1/chain/inscriptions?from_height=&limit=` | list of zkCoins nullifier inscriptions (`{ txid, height, count, format, nullifiers: [{ pubkey, r }], state }`) — the half-aggregated `(Pkⱼ, Rⱼ)` set of each inscription ([§3.5](#35-inscription-format)), whose signatures the node has verified against Bitcoin; `state` is the inclusion block's confirmation state ([§3.10](#310-transaction-states)) |
 | `GET` | `/v1/chain/nullifier/<pubkey>` | a self-verifying SMT path for the account-state key `<pubkey> = Pkᵢ` against the current accumulator root (the Path-B service of [§3.7](#37-the-nullifier-accumulator)): `{ root, tip_height, present: bool, leaf?: <Rᵢ hex, when present>, siblings: [hex; 256] }` |
@@ -2770,6 +2776,25 @@ zk-bech32m            = <REGEN — Bech32m(HRP "zk", address)>
 
 A conforming implementation **MUST** produce, from the inputs above, exactly the `address` bytes that `H(Pk₀_sample ‖ nk_commit_sample)` yields and its Bech32m string; both are `<REGEN>` because `nk_commit_sample` is Poseidon-dependent (V.4). The address preimage is the **64-byte** concatenation `Pk₀_sample ‖ nk_commit_sample`. The Bech32m HRP is `zk`; the encoding is per [§1.7.7](#177-bech32m-and-bitcoin-conventions). The Bech32m checksum constant is the BIP-350 value `0x2BC830A3`.
 
+**V.2-ext — real derivation chain (pinned).** Unlike the illustrative V.1 samples, this chain exercises the real [§1.2](#12-key-hierarchy) derivation end to end (BIP-39 → BIP-32 all-hardened → HKDF). Mnemonic (the BIP-39 reference test mnemonic): `abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about`, passphrase empty; account index `0'`. All values SHA-256/HMAC/secp256k1-derived and therefore pinned ({node, SDK} byte-equal per the V.7 parity matrix):
+
+| Symbol | Path / formula | Hex (32B unless noted) |
+|---|---|---|
+| `seed64` | BIP-39 PBKDF2-HMAC-SHA512, 2048 iters (64B) | `5eb00bbddcf069084889a8ab9155568165f5c453ccb85e70811aaed6f6da5fc19a5ac40b389cd370d086206dec8aa6c43daea6690f20ad3d8d48b2d2ce9e38e4` |
+| `sk₀` | `m/1798'/0'/0'/0'` | `4a8e3a83404f1aa99e89af57179dcf033820b816c0d78ac94fcb322d6ee85649` |
+| `Pk₀` | x-only(`sk₀·G`) | `7c9cdde9b8cb1e33a48a5c2b6ab1fa6fd753fa1762f56c0b3e8169e4f2d54630` |
+| `sk₁` | `m/1798'/0'/0'/1'` | `c09b2a6301bdc0fef9adb1bd9de4ff77e5a30a28fb11a0dd7a76831708cea7ee` |
+| `Pk₁` | x-only(`sk₁·G`) | `3b471e208d280506b20476e64c1478741bc3a71244d4a3099501f639d54afa6c` |
+| `ivk` | `m/1798'/0'/1'/0'` | `ae3da9f4b07a7b6af81b549011126c39f0070a58fdedf60c5bd9591d096ba1f0` |
+| `ovk` | `m/1798'/0'/1'/1'` | `f5d3205dcb3ec239f396dd120f0c71d6551465b33f5cbdb92b1946c415665d5d` |
+| `op` | `m/1798'/0'/2'` | `6516c985b442d51f1e91760c9327a593ddcb7fe06b363aa5b2b8547cc61d7395` |
+| `nk` | `m/1798'/0'/3'` | `4b75d4ded533cdee8d4757811bd3de1f3400008dd22b0e541cbca81423fd9f74` |
+| `op_secret` | `m/1798'/0'/4'` | `4d00fd0017fe8b9741eb194b1ed393b6d5120de12ce11035f695705a9c06cd1e` |
+| `nav_rand@0` | `HKDF("zkCoins/v1/NavRand", op_secret ‖ u64-be(0))` ([§1.4](#14-identifiers-and-hashes) mapping) | `a6f0057caecb75293d7c40781e244576df63fbc0ddf553897775fd4d1a6de2e8` |
+| `nav_rand@1` | same, counter `1` | `93a8e7860a8b77c4b03d4b1c734489f7cf88b0ab62f26c7039d9b1f87748756d` |
+
+(BIP-32 hardened-only derivation: `I = HMAC-SHA512(c_par, 0x00 ‖ ser256(k_par) ‖ ser32(i + 2³¹))`, child `k = (int(I[:32]) + k_par) mod n`, chain `c = I[32:]`; the `nk_commit`, `address`, and every other Poseidon-dependent continuation of this chain remain `<REGEN>` in V.4.)
+
 ### V.3 `serialize(AccountState)` byte layout (pinned for the SHA-256 parts)
 
 A worked example: an account holding 1 000 000 000 base units of `USD-Demo` after one transition, with an empty coin history.
@@ -2818,6 +2843,7 @@ For each value below, the formula is fixed; the bytes MUST be produced by the re
 | `nav_commitment@0` | `Hc("NavCommit", nav_empty ‖ nav_rand@0)` (a first-transition mint commits the empty conditional NAV) | `<REGEN>` |
 | `H(ProofData@0)` | `SHA-256(serialize(ProofData@0))` = `SHA-256(ash@0 ‖ ocr@0 ‖ inr@0 ‖ coin_history_root@0 ‖ nav_commitment@0)` (canonical 160-byte `serialize(ProofData)`, [§1.4](#14-identifiers-and-hashes)) | derived from the five above |
 | `circuit_digest(C)` | the `verifier_only.circuit_digest` of the per-account circuit `C` built per [§1.7.9](#179-proof-system-parameters-normative) (`standard_recursion_zk_config`, network tag `"zkCoins/v1/mainnet"` / `"zkCoins/v1/testnet"`), encoded per [§1.7.1](#171-poseidon-instance-and-digest-encoding). One value per network tag; a pinned protocol constant ([§1.7.9](#179-proof-system-parameters-normative)) | `<REGEN>` (per network) |
+| `circuit_digest(C_balance)` | the [§2.2](#22-proof-types) balance-attestation circuit's `verifier_only.circuit_digest`, one per network tag, produced by the same deterministic §1.7.9 build discipline as `C` | `<REGEN>` |
 
 ### V.5 `SpendRecord` byte layout (pinned for the SHA-256 / structural parts)
 
@@ -2875,3 +2901,95 @@ Every constituent signature covers the **fixed** message `m_state = "zkCoins/v1/
 6. Submit the completed vectors back to the spec as a PR; the reference is locked once the SDK's independent primitive-level re-implementation reproduces the hash- and derivation-level values bit-for-bit — the `circuit_digest(C)` is locked by the node's deterministic §1.7.9 build alone, and the `signature` (V.5) and `s_agg` (V.6) values are locked by BIP-340 / half-aggregate verification including the sign-to-contract tweak check (per [§3.2](#32-transition-signing-bip-340--sign-to-contract), [§3.3](#33-half-aggregation)), not byte equality.
 
 Until V.4 is filled in by a reference implementation, no `<REGEN>` row should be treated as authoritative. **Do not invent Poseidon digests.** A wrong vector is worse than no vector: it would lead two implementations to validate against each other's mistakes.
+
+**Parity matrix (normative).** Who must produce which vector, and the acceptance criterion:
+
+| Vector group | node (Rust) | SDK (TypeScript) | Criterion |
+|---|---|---|---|
+| V.2 address / Bech32m, V.2-ext key chain & `nav_rand` | MUST produce | MUST reproduce | **byte-equal** |
+| V.3 `serialize(AccountState)` byte layout (SHA-256 parts) | MUST produce | MUST reproduce | **byte-equal** |
+| V.4 Poseidon values & `circuit_digest(C)` / `circuit_digest(C_balance)` | MUST produce (deterministic §1.7.9 build) | consumes only | node-only pin |
+| V.5 / V.6 structural layouts (protocol objects, Poseidon fields `<REGEN>`) | MUST produce | MUST **verify** (BIP-340 + S2C opening + `AggregateVerify`) | verification, not byte equality (production nonces are random) |
+| V.8 synthetic signing fixture | MUST reproduce | MUST reproduce | **byte-equal** (the fixture's nonce rule is deterministic) |
+| V.9 negative controls | MUST reject every case | MUST reject every case within its scope (signing/encoding cases) | each case rejects with the named reason |
+
+### V.8 Signing & half-aggregation fixture (synthetic, fully pinned)
+
+This fixture pins the **signing and aggregation layer in isolation** — [§3.2](#32-transition-signing-bip-340--sign-to-contract) transition signing (including the steps 1b/3b even-y rules), the sign-to-contract opening, and the [§1.7.10](#1710-half-aggregation-with-commitments-nisshac-normative) NISSHAC half-aggregation — using **synthetic** `ProofData` whose five fields are SHA-256 digests of fixed labels. The values are deliberately **not protocol-consistent** (no Poseidon value exists for them); they exercise only the SHA-256/secp256k1 layer, so every byte below is pinned (computed twice independently, byte-identical). A conforming implementation **MUST** reproduce every value bit-for-bit ({node, SDK} byte-equal, V.7 parity matrix).
+
+**Fixture nonce rule (test-vector only, not normative for production).** Production nonce choice is signer-private ([§3.2](#32-transition-signing-bip-340--sign-to-contract)); this fixture pins one deterministic rule so the vector is reproducible: `masked = d XOR int(tagged_hash("BIP0340/aux", 0x00×32))`, `rand_ctr = tagged_hash("BIP0340/nonce", masked ‖ Pk ‖ m_state ‖ u32-be(ctr))`, `k' = int(rand_ctr) mod n`, starting at `ctr = 0` and incrementing `ctr` on every [§3.2](#32-transition-signing-bip-340--sign-to-contract) step-3b redraw (and on `k' = 0`). The message is the fixed `m_state = "zkCoins/v1/StateUpdate"`.
+
+**Signer 1.** `sk_sig_1 = int(H("zkCoins/v1/test-vector/sk_sig1")) mod n` = `22f508c0a93b29fa87ca8d9abcec996f01620656cd7a7e4ab5418b2e76beccf4`; BIP-340-normalised key `d_1` = `22f508c0a93b29fa87ca8d9abcec996f01620656cd7a7e4ab5418b2e76beccf4`; `Pk_1` = `e7f2a98e7b45e9424e3e0cb1d937a1698ebd339c6d8344906db979642cf20474`.
+
+Synthetic `ProofData_1` (five fields, each `H("zkCoins/v1/test-vector/pd1/<field>")`):
+
+| Field | Hex |
+|---|---|
+| `new_account_state_hash` | `f882df3ef57d11032e01c2214525060766250b110b09586cd6cecbed8e3ed4f7` |
+| `output_coins_root` | `0852ae9e41b56cb6320977d06df0b11463919fda0364a5b1cfd3d22358211f24` |
+| `input_nullifiers_root` | `25af2581385ea1e3688958c7e915c2b46b426daf62536945caaeecc8e3c3a6c6` |
+| `coin_history_root` | `7014c090cbf7eeb37519e4ff815a747384f46943a2b0cc3f4a0094e62cdfaaba` |
+| `nav_commitment` | `4dcf2ab90710006a8fe0c9fb0363e5465100858fc0d69155f69db53468e6af7c` |
+| `m_SC = H(serialize(ProofData_1))` | `f5c6243fe2361637fb3b5c33acf340d851482aa7b8c364d598e8fea726983767` |
+
+Signature per [§3.2](#32-transition-signing-bip-340--sign-to-contract) (deterministic fixture nonce, `ctr = 0`):
+
+| Value | Hex |
+|---|---|
+| `R'_1` (pre-tweak nonce, x-only) | `4ed3bf332ee8f6b2cd5fd2e51608ab7894210a2647cb65b78641f135effba1e6` |
+| `t_1` (tweak, `< n`) | `71ffeaba0407e822893ecdb375cb21772793175078625a1e3146b7c26163e1f8` |
+| `R_1` (committed nonce, x-only) | `c13d5556d92bd1f5d6588787d4fff114ec9f5a599faf95da88622d6640084167` |
+| `e_1` (BIP-340 challenge) | `3a6d9400138f15c30072b5611342c1eb6040f00181c5b111b08f70fbf812e3b0` |
+| `s_1` | `67dc7698d15b17c6558ded77169849a48047803bf15562038064613db18d3440` |
+
+**Signer 2.** `sk_sig_2 = int(H("zkCoins/v1/test-vector/sk_sig2")) mod n` = `86b75c297fd9a0af472d06fbf889f7e4667c9e42b7d7efc8b1ca7e66b95462c0`; BIP-340-normalised key `d_2` = `7948a3d680265f50b8d2f9040776081a54323ea3f770b0730e07e02616e1de81` (negated — odd-y key, exercising the normalisation branch); `Pk_2` = `21799353e64a65ee4b1f414998c44878c56270cf8a81046cb3636e5ec31a3341`.
+
+Synthetic `ProofData_2` (five fields, each `H("zkCoins/v1/test-vector/pd2/<field>")`):
+
+| Field | Hex |
+|---|---|
+| `new_account_state_hash` | `1713c51edabaa2a6e64ef24d084d4f88e776e135514ae04ad3780c5cd154f660` |
+| `output_coins_root` | `7791a68e5387e0a22f90bc7c7347a5712fe42bc82f7559333d7c578b79fd0022` |
+| `input_nullifiers_root` | `8fa4a67faf24c981a64328ec227207a06a066e9ac0444621f5d3066b8f405bca` |
+| `coin_history_root` | `23027099bb0e04dadb0ae9cb76208e377270c6d4dd761962b98c9db793e109be` |
+| `nav_commitment` | `69266372d1705851901e48dd1e40e6cde4bda048fb04e622b97cf4346f90632f` |
+| `m_SC = H(serialize(ProofData_2))` | `68133ae34a4f0264ca68d55c6d2ae70866a2f37e8b949a557a7962d50b515825` |
+
+Signature per [§3.2](#32-transition-signing-bip-340--sign-to-contract) (deterministic fixture nonce, `ctr = 0`):
+
+| Value | Hex |
+|---|---|
+| `R'_2` (pre-tweak nonce, x-only) | `77693723775f599cfb75f4aeea14b87ba16ba246f865247febb95db72cc1a023` |
+| `t_2` (tweak, `< n`) | `7cb2c16c4aa43d9d2328f2d739b62d3fcbe686692542e522dbd0a677a32a2d39` |
+| `R_2` (committed nonce, x-only) | `4e9b28c25b259f0943094b73da798a7262363fbe71d2078745c6efdbc43ccbc1` |
+| `e_2` (BIP-340 challenge) | `31347aa878df60c3cfdd8243fde5558c063364b29977a6ffcdeeff182c443d24` |
+| `s_2` | `af403b63e760117d3d7e34dc45700b99bea663fdbe48ba376dac723f03f57975` |
+
+**Half-aggregation (`k = 2`,** [§1.7.10](#1710-half-aggregation-with-commitments-nisshac-normative)**):**
+
+| Value | Hex |
+|---|---|
+| `z = H("zkCoins/v1/HalfAgg" ‖ R₁ ‖ Pk₁ ‖ R₂ ‖ Pk₂)` | `e0f4ac4ff1212bf1e4a576fa631f63fdc24a5c09538c10893dbd8f75f650d921` |
+| `a₁ = int(H(z ‖ u32-be(1))) mod n` | `3854d614f107dacbf6ff8b9f01b96fdc82e36916fd9d36ac3dd6fb0393037933` |
+| `a₂ = int(H(z ‖ u32-be(2))) mod n` | `0d65f6c02591d67c8783bd6e36dd1fba771c0231839b3055704b7d9da17931b0` |
+| `s_agg = (a₁·s₁ + a₂·s₂) mod n` | `73fc9b72343f0f94abdc08ca8b95ddae790e539692c94b8bdac2c3772dd86722` |
+
+**Acceptance:** an implementation passes V.8 iff it reproduces every table above bit-for-bit **and** its own `Verify`, `CommVerify` (both signers), and `AggregateVerify` ([§1.7.10](#1710-half-aggregation-with-commitments-nisshac-normative)) accept the pinned values.
+
+### V.9 Negative controls (normative)
+
+A conforming implementation **MUST** reject every case below with the named outcome; a single accept is a conformance failure. Cases N-01–N-07 are executable immediately against the pinned V.8 values; N-08–N-10 become executable at the runbook steps that pin digests and stand up regtest ([Implementation Mandate](/implementation-mandate)).
+
+| # | Mutation | Expected outcome |
+|---|---|---|
+| N-01 | Flip any byte of signer 1's 160-byte synthetic `serialize(ProofData)` and re-run the opening | `CommVerify` returns false ([§1.7.10](#1710-half-aggregation-with-commitments-nisshac-normative)) |
+| N-02 | Swap `R₁` and `R₂` inside the V.8 aggregate (keys unchanged) | `AggregateVerify` returns false |
+| N-03 | Add `1` to `s_agg` (mod `n`) | `AggregateVerify` returns false |
+| N-04 | Present `(Pk₁, R₁)` twice in one scan sequence | second occurrence is the double-spend loser: **not** inserted, classified `failed` ([§3.6](#36-chain-scanning), [§3.10](#310-transaction-states)) |
+| N-05 | A `CoinProof` whose `asset_terms.issuance_version` byte is `0x03` | bundle malformed, rejected ([§7.1](#71-serialization-conventions-normative), [§2.3.3 step 6](#233-receive)) |
+| N-06 | A `CoinProof` whose `asset_terms` presence byte is `0x02` | bundle malformed, rejected ([§7.1](#71-serialization-conventions-normative)) |
+| N-07 | Truncate any fixed-width `CoinProof` field by one byte / leave one trailing byte | bundle malformed, rejected ([§7.1](#71-serialization-conventions-normative)) |
+| N-08 | Verify a proof built for network tag `zkCoins/v1/testnet` against the `zkCoins/v1/mainnet` pinned digests | rejected — `circuit_digest` mismatch ([§1.7.9](#179-proof-system-parameters-normative)) |
+| N-09 | Force a ≤5-block regtest reorg across a `pending` nullifier | canonical replay converges: accumulator root equals a fresh full rescan ([§3.9](#39-finality-and-reorg-handling)) |
+| N-10 | Force a ≥6-block regtest reorg displacing a `completed` nullifier | the break is **detected and reported** (accepted v1 limitation — the suite asserts detection, not recovery, [§3.9](#39-finality-and-reorg-handling)) |
+

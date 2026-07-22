@@ -34,6 +34,17 @@ A layer is done only when **all** of the following hold:
 
 - **Spec-conformant.** Every normative MUST/MUST NOT in `docs/specification.md` that applies to the layer is implemented. The conformance test vectors ([spec test-vector section](./specification.md#test-vectors-conformance-harness)) are generated and pinned (§4 below), and node and SDK each reproduce the values in their scope bit-for-bit (the SDK the hash- and derivation-level values; the `circuit_digest(C)` comes from the node's deterministic §1.7.9 build; the V.5/V.6 `signature` vectors validate by BIP-340 verification including the sign-to-contract tweak check, not byte equality).
 - **A-to-Z tested end to end.** Beyond unit coverage there is a full-journey test that exercises a real flow across all three layers running locally: create two accounts, mint, pay (with a real publisher half-aggregating the transition nullifiers and inscribing the `AggregateStateNullifierV3` against a local/regtest Bitcoin), the recipient discovers + verifies + credits the coin, and a confirmation link renders. No mocks on the protocol path — real proofs, real inscriptions, real Nostr/Blossom transport.
+  The A-to-Z suite is a **machine-evaluable pass predicate**, not a narrative. Fixtures (normative): Alice = the spec V.2-ext mnemonic at `account' = 0`, Bob = the same mnemonic at `account' = 1`; asset `USD-Demo`, `decimals = 2`, `issuance_version = 1`, supply `1_000_000_000` (the spec V.1/V.3 values); publisher fee `1_000` of the same asset; Bitcoin regtest with on-demand block mining; every confirmation wait is 6 mined blocks. Steps and assertions (each assertion is a hard pass/fail):
+  1. Boot both nodes; `GET /v1/info` on each **equals** the pinned `circuit_digests` (`C`, `C_balance`) and bounds.
+  2. Alice mints the asset (`kind: "mint"`); job reaches `completed`; the mint nullifier is inscribed on regtest and reaches §3.10 `completed` after 6 blocks; Alice's balance for the asset equals `1_000_000_000`.
+  3. Alice sends `250_000` to Bob (`kind: "send"`) via a real publisher whose fee coin (`1_000`) rides the same transition; the publisher half-aggregates and inscribes an `AggregateStateNullifierV3`; the wallet-side `awaiting_signature` recomputation (spec §7.5) passes.
+  4. Bob's node discovers, verifies, and credits the coin only after 6 confirmations; Bob's balance equals `250_000`; Alice's equals `748_999_000` = `1_000_000_000 − 250_000 − 1_000` **minus nothing else** (change accounting exact).
+  5. Bob runs the receive transition (`kind: "receive"`, fold), self-published; it reaches `completed`.
+  6. A confirmation link for the payment renders and reports the §3.10 state `completed`.
+  7. **Reorg control (V.9 N-09):** force a 3-block regtest reorg spanning a `pending` nullifier; after canonical replay both nodes' accumulator roots equal a fresh full rescan's root.
+  8. **Recovery control (Requirement 6):** destroy Bob's node state; restore from seed + regtest chain + replicated blobs; Bob's balance and coin set equal the pre-destruction state.
+  9. **Portability control (Requirement 10):** repoint Alice's wallet to a freshly synced second node by configuration only; balances and states identical; a send from the new node succeeds.
+  The suite passes iff **every** assertion above holds. No mocks on the protocol path — real proofs, real inscriptions, real Nostr/Blossom transport (unchanged rule above).
 
 ## 4. Conformance vectors come first
 
