@@ -134,7 +134,7 @@ Every verifier processes valid v3 aggregates in `(block height, transaction inde
 2. verify network, bounds, curve/scalar encodings and the NISSHAC half-aggregate signature;
 3. for each entry in encoded order, insert `(Pk_i -> R_i, Bitcoin location)` only if `Pk_i` is absent;
 4. ignore later valid entries with the same `Pk_i` for state-transition purposes;
-5. append the set of newly admitted entries to the paper-compatible nullifier accumulator and record its historical value for receiver checks.
+5. append the set of newly admitted entries to the nullifier accumulator — the registered **deviation D-05** (RFC-6962 append-only-log accumulator; the paper's ToS `IsPrefix`/`DistinctElement` relation is not ported), not paper-compatible — and record its historical value for receiver checks.
 
 First occurrence is determined solely by canonical Bitcoin order. Relay timing, private bundle availability and publisher identity cannot change it. A duplicate does not replace the earlier commitment.
 
@@ -158,7 +158,7 @@ A reorg of ≥6 blocks can displace a **final** nullifier and MAY break zkCoins 
 
 ### 3.2 Conditional execution rule
 
-Each `TransitionEssenceV3` commits to a conditional NAV covering all chain dependencies of its previous account state and input coins. The recursive predicate proves the single **execute** branch: the conditional NAV and every input object's NAV are prefixes of the live canonical NAV, and it applies the committed balance, spent-set, output and key-rotation transition. There is **no reorg no-op branch**.
+Each `TransitionEssenceV3` commits to a conditional NAV covering all chain dependencies of its previous account state and input coins. The recursive predicate proves the single **execute** branch: the conditional NAV is taken at the shared `size_final` prefix (the ≥6-confirmation-final prefix, not the live chain tip) — a verifier checks `nav` is canonical and `size ≤ size_final` on its own scan (spec §2.3.2 step 5, §3.7, §3.9) — and every input object's NAV is a prefix of it, and it applies the committed balance, spent-set, output and key-rotation transition. There is **no reorg no-op branch**.
 
 zkCoins v1 deliberately does **not** adopt the paper's conditional-NAV no-op (an exactly-one-of predicate with a `distinct-element` branch that lets an account continue after a dependency is orphaned). It fixes a hard **6-confirmation finality bound** instead ([spec §3.9](/specification#39-finality-and-reorg-handling)): reorgs of ≤5 blocks touch only non-final nullifiers and are absorbed by canonical replay; a reorg of ≥6 blocks MAY break zkCoins as an accepted v1 limitation. Accordingly the accumulator is an **RFC-6962 append-only Merkle log**; `prefix` is a **constant-size log-consistency** proof, and membership is an **inclusion proof at a position-bound leaf** ([spec §1.7.6](/specification#176-nullifier-accumulator-append-only-merkle-log), [§3.7](/specification#37-the-nullifier-accumulator); register [D-05](/paper-conformance-analysis)) — and does **not** implement the paper's `distinct-element` no-op relation — a deliberate, registered deviation ([Paper-Deviation Analysis D-16](/paper-conformance-analysis), issues #105/#106).
 
@@ -240,11 +240,11 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 | Specification area | Edit |
 |---|---|
 | §1.1/§1.7 | add v3 domains, NISSHAC primitives, encodings, verifier data and network binding |
-| §1.4–§1.6 | replace per-coin global nullifiers/root-chain objects with rotating account-state nullifiers and paper-compatible NAV history |
+| §1.4–§1.6 | replace per-coin global nullifiers/root-chain objects with rotating account-state nullifiers and append-only-log NAV history (registered deviation **D-05**; not paper-compatible) |
 | §2.1–§2.3 | bind transition essence/opening, first occurrence, state-key continuity and the single conditional-NAV execute branch (no reorg no-op branch, §3.2) |
 | §2.5–§2.6 | remove `C_batch`; dimension NISSHAC and conditional-NAV gadgets; freeze backend |
 | §3.1–§3.8 | replace `BatchInscription`/`BatchBundle` admission with `AggregateStateNullifierV3`, scanning, half-aggregation and paper-style fees |
-| §3.9–§3.10 | define canonical-tip-relative state, bounded ≤5-block canonical replay and the 6-confirmation finality bound (a ≥6-block reorg is an accepted break) |
+| §3.9–§3.10 | define `size_final` (the shared ≥6-confirmation-final log prefix, replacing tip-relative state), bounded ≤5-block canonical replay and the 6-confirmation finality bound (a ≥6-block reorg is an accepted break) |
 | §4 | separate private `CoinProof` recovery from public ledger reconstruction; remove batch-locator mapping |
 | §5 | remove `mint-verified`; make acceptance/opening/reorg checks explicit |
 | §6 | distinguish paper-derived target, implementation status and residual trust/economic claims |
