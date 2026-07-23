@@ -222,10 +222,12 @@ That is, `HKDF(tag, material) = HKDF-Expand(HKDF-Extract(salt = 0x00×32, IKM = 
 
 ### 1.2 Key hierarchy
 
-All key material descends deterministically from a single 256-bit **seed**. The seed is the only thing a user backs up ([Requirement 6](/requirements)).
+All key material descends deterministically from a single **seed** that roots the BIP-32 tree. The seed is the only thing a user backs up ([Requirement 6](/requirements)).
+
+**v1 seed derivation (normative).** In v1 the BIP-32 root seed is the **512-bit** BIP-39 seed (`seed64`), computed from the 12-word mnemonic by PBKDF2-HMAC-SHA512 (2048 iterations) with an **empty passphrase**. A v1 wallet **MUST NOT** apply a non-empty BIP-39 passphrase — the optional passphrase (BIP-39 "25th word") is a **v2** feature, not applicable in v1. The pinned end-to-end derivation is V.2-ext.
 
 ```
-seed  (256-bit; v1: BIP-39 12-word mnemonic only — Passkey PRF → HKDF is a v2 feature, not applicable in v1)
+seed  (v1: 512-bit BIP-39 seed64 from the 12-word mnemonic, empty passphrase — Passkey PRF → HKDF is a v2 feature, not applicable in v1)
   └─ BIP-32 ─▶ m  (master)
         └─ m / 1798' / account'                              = A   (per-account root; 1798' = zkCoins purpose)
               ├─ A / 0'        = SPEND branch   (wallet only)
