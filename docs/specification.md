@@ -3477,7 +3477,7 @@ A conforming implementation **MUST** produce, from the inputs above, exactly the
 
 ### V.2-passkey — Passkey PRF → seed fixture (pinned; v2 feature — NOT a v1 conformance target) {#v2-passkey--passkey-prf--seed-fixture-pinned}
 
-This vector is a **conformance target only from protocol v2 onward**; a **v1** implementation **MUST NOT** implement the passkey-derived-seed path and is therefore **exempt** from this fixture (consistent with the v1 **MUST NOT** in [§1.2](#12-key-hierarchy)). Deterministic exercise of [§1.2](#12-key-hierarchy) WebAuthn-PRF → seed — **SHA-256 / HKDF only**, no Poseidon, no live authenticator. The free fixture `prf_output` stands in for a 32-byte `eval.first` result; a conforming (v2) implementation **MUST** reproduce every derived row bit-for-bit (node + SDK byte-equal per the V.7 parity matrix).
+This vector is a **conformance target only from protocol v2 onward**; it is **not a v1 conformance target**. A **v1** wallet **MUST NOT** offer, select, or use the passkey-derived-seed path for a v1 account ([§1.2](#12-key-hierarchy)), so a v1 implementation is **exempt** from this fixture. Deterministic exercise of [§1.2](#12-key-hierarchy) WebAuthn-PRF → seed — **SHA-256 / HKDF only**, no Poseidon, no live authenticator. The free fixture `prf_output` stands in for a 32-byte `eval.first` result; a conforming (v2) implementation **MUST** reproduce every derived row bit-for-bit (node + SDK byte-equal per the V.7 parity matrix).
 
 | Symbol | Formula | Hex (32B) |
 |---|---|---|
@@ -3605,7 +3605,7 @@ Until V.4 is filled in by a reference implementation, no `<REGEN>` row should be
 | Vector group | node (Rust) | SDK (TypeScript) | Criterion |
 |---|---|---|---|
 | V.2 address / Bech32m, V.2-ext key chain & `nav_rand` | MUST produce | MUST reproduce | **byte-equal** |
-| V.2-passkey Passkey PRF → seed | MUST produce **(v2 only)** | MUST reproduce **(v2 only)** | **byte-equal** (SHA-256/HKDF only) — **v2 only; MUST NOT be implemented in v1** |
+| V.2-passkey Passkey PRF → seed | MUST produce **(v2 only)** | MUST reproduce **(v2 only)** | **byte-equal** (SHA-256/HKDF only) — **v2 only; not a v1 conformance target** |
 | V.3 `serialize(AccountState)` byte layout (SHA-256 parts) | MUST produce | MUST reproduce | **byte-equal** |
 | V.4 Poseidon values (`E'₂₅₆`, `nflog_empty`, `nk_commit`, `asset_id`, `ash`, `coin.identifier`, `nf`, roots, …) | MUST produce | MUST reproduce | **byte-equal** (SDK implements the §1.7.1 Poseidon primitive) |
 | V.1 `npk_commit@0` / V.4 `H(ProofData@0)` (wallet-native SHA-256 surfaces, §7.5 N-16/N-17) | MUST produce | MUST reproduce | **byte-equal** |
