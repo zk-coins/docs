@@ -17,7 +17,7 @@ Every incentive/residual verdict for v1, closed per the [Assurance Roadmap](/ass
 | Section | Verdict | Basis |
 |---|---|---|
 | Reorg finality bounded at 6 confirmations | **accepted v1 boundary** (D-16) | hard project directive; canonical replay ≤5, fail-stop ≥6 |
-| Accumulator history relation vs ToS | **accepted v1 boundary** (D-16) | RFC-6962 Merkle-log consistency port — prefix succinctness/soundness fixed; the paper's DistinctElement no-op branch is still deliberately not built (D-16, bounded finality) |
+| Accumulator history relation vs ToS | CT-log consistency port fixed (**D-05**); bounded finality remains a separate **accepted v1 boundary** (D-16) | RFC-6962 Merkle-log consistency port — prefix succinctness/soundness fixed (D-05); the paper's DistinctElement no-op branch is still deliberately not built (D-16, bounded finality) |
 | Data availability and recovery | **holds under stated assumptions** | k ≥ 3 replication + store-everything + holder self-interest in own bearer data |
 | Node storage growth | **holds** | linear operator cost, no adversarial lever; append-only-log storage (log or Merkle peaks + local `Pk → (pos, R)` index; no sparse key space, cannot prune by age) |
 | Proving cost and latency | **holds under stated assumptions** | measured in the build report; impracticality resolves as a version bump, never silently |
