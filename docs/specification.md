@@ -3504,7 +3504,7 @@ Until V.4 is filled in by a reference implementation, no `<REGEN>` row should be
 
 ### V.8 Signing & half-aggregation fixture (synthetic, fully pinned)
 
-This fixture pins the **signing and aggregation layer in isolation** — [§3.2](#32-transition-signing-bip-340--sign-to-contract) transition signing (including the steps 1b/3b even-y rules), the sign-to-contract opening, and the [§1.7.10](#1710-half-aggregation-with-commitments-nisshac-normative) NISSHAC half-aggregation — using **synthetic** `ProofData` whose six fields are SHA-256 digests of fixed labels. The values are deliberately **not protocol-consistent** (no Poseidon value exists for them); they exercise only the SHA-256/secp256k1 layer. The fixture pins **testnet** `m_state = "zkCoins/v1/StateUpdate/testnet"`; the network-independent keys and synthetic `ProofData` tables are byte-pinned below, while the signature/aggregate values that depend on that per-network `m_state` are `<REGEN>` until recomputed against it. A conforming implementation **MUST** recompute those values and reproduce them bit-for-bit (node + SDK byte-equal, V.7 parity matrix).
+This fixture pins the **signing and aggregation layer in isolation** — [§3.2](#32-transition-signing-bip-340--sign-to-contract) transition signing (including the steps 1b/3b even-y rules), the sign-to-contract opening, and the [§1.7.10](#1710-half-aggregation-with-commitments-nisshac-normative) NISSHAC half-aggregation — using **synthetic** `ProofData` whose six fields are SHA-256 digests of fixed labels. The values are deliberately **not protocol-consistent** (no Poseidon value exists for them); they exercise only the SHA-256/secp256k1 layer. The fixture pins **testnet** `m_state = "zkCoins/v1/StateUpdate/testnet"`; the network-independent keys and synthetic `ProofData` tables are byte-pinned below, while the signature/aggregate values that depend on that per-network `m_state` are **pinned for the testnet fixture**. A conforming implementation **MUST** recompute those values and reproduce them bit-for-bit (node + SDK byte-equal, V.7 parity matrix).
 
 **Fixture nonce rule (test-vector only, not normative for production).** Production nonce choice is signer-private ([§3.2](#32-transition-signing-bip-340--sign-to-contract)); this fixture pins one deterministic rule so the vector is reproducible: `masked = d XOR int(tagged_hash("BIP0340/aux", 0x00×32))`, `rand_ctr = tagged_hash("BIP0340/nonce", masked ‖ Pk ‖ m_state ‖ u32-be(ctr))`, `k' = int(rand_ctr) mod n`, starting at `ctr = 0` and incrementing `ctr` on every [§3.2](#32-transition-signing-bip-340--sign-to-contract) step-3b redraw (and on `k' = 0`). The message is the fixture's per-network fixed `m_state = "zkCoins/v1/StateUpdate/testnet"` (this fixture pins **testnet**).
 
@@ -3526,11 +3526,11 @@ Signature per [§3.2](#32-transition-signing-bip-340--sign-to-contract) (determi
 
 | Value | Hex |
 |---|---|
-| `R'_1` (pre-tweak nonce, x-only) | `<REGEN — recompute against the fixture's network (testnet) per-network m_state>` |
-| `t_1` (tweak, `< n`) | `<REGEN — recompute against the fixture's network (testnet) per-network m_state>` |
-| `R_1` (committed nonce, x-only) | `<REGEN — recompute against the fixture's network (testnet) per-network m_state>` |
-| `e_1` (BIP-340 challenge) | `<REGEN — recompute against the fixture's network (testnet) per-network m_state>` |
-| `s_1` | `<REGEN — recompute against the fixture's network (testnet) per-network m_state>` |
+| `R'_1` (pre-tweak nonce, x-only) | `5657f2e91dc3a2d248501a37dbe674d2cf8ed1a13c89b7710ca89aad3b9fe050` |
+| `t_1` (tweak, `< n`) | `423984fa39ce7b1a4d8eb164ab2a300d56b9de4f4ed3134339db5ead7ccc17c2` |
+| `R_1` (committed nonce, x-only) | `c41ff1a78f2006e5f5aa800efa84b2d2046d108dfa968909974ec37fcb87f6c4` |
+| `e_1` (BIP-340 challenge) | `88aa41dbac65bb97f235c7fe064ebd5b8882d2bc04f8792aebec2c8c4df7fd4f` |
+| `s_1` | `748ae8e2fded9df9830cbaa8893484e753fdfd141cccc8b35a27ab5a870a83d2` |
 
 **Signer 2.** `sk_sig_2 = int(H("zkCoins/v1/test-vector/sk_sig2")) mod n` = `86b75c297fd9a0af472d06fbf889f7e4667c9e42b7d7efc8b1ca7e66b95462c0`; BIP-340-normalised key `d_2` = `7948a3d680265f50b8d2f9040776081a54323ea3f770b0730e07e02616e1de81` (negated — odd-y key, exercising the normalisation branch); `Pk_2` = `21799353e64a65ee4b1f414998c44878c56270cf8a81046cb3636e5ec31a3341`.
 
@@ -3546,26 +3546,26 @@ Synthetic `ProofData_2` — the six fields are `H` of the six **short labels** `
 | `npk_commit` | `bdae5bcf45668f6f6b2670bdce70882c3211334c78248cdf9d4aa5639074d154` |
 | `m_SC = H(serialize(ProofData_2))` | `85d06ebe2f0f5173af9ff8bdd2d4d594303a640d7b2f1c8819d5a48abfa4773d` |
 
-Signature per [§3.2](#32-transition-signing-bip-340--sign-to-contract) (deterministic fixture nonce, `ctr = 0`; values depend on the testnet `m_state`):
+Signature per [§3.2](#32-transition-signing-bip-340--sign-to-contract) (deterministic fixture nonce, `ctr = 2`; values depend on the testnet `m_state`):
 
 | Value | Hex |
 |---|---|
-| `R'_2` (pre-tweak nonce, x-only) | `<REGEN — recompute against the fixture's network (testnet) per-network m_state>` |
-| `t_2` (tweak, `< n`) | `<REGEN — recompute against the fixture's network (testnet) per-network m_state>` |
-| `R_2` (committed nonce, x-only) | `<REGEN — recompute against the fixture's network (testnet) per-network m_state>` |
-| `e_2` (BIP-340 challenge) | `<REGEN — recompute against the fixture's network (testnet) per-network m_state>` |
-| `s_2` | `<REGEN — recompute against the fixture's network (testnet) per-network m_state>` |
+| `R'_2` (pre-tweak nonce, x-only) | `9c18a07c07be5225b688895f73daaffefdd62cbb49e1b854dd47f5aee1484193` |
+| `t_2` (tweak, `< n`) | `e21ed3e78e2d5abf9e227e8f0e3ba079010400c5103bd8a41187394b2e43527b` |
+| `R_2` (committed nonce, x-only) | `bd22b77069c75431ee3676bea7324a59e9b6466a62a9a3021f831e6ccf5d3220` |
+| `e_2` (BIP-340 challenge) | `3d57531ad9f5f4df812184559e0bda68c8695e2ba673546c1976732602d016b3` |
+| `s_2` | `caa0374d3cf77e1874298c98d3d3fe8b416f89d51823d6909c3e1cdbf91d3002` |
 
 **Half-aggregation (`k = 2`,** [§1.7.10](#1710-half-aggregation-with-commitments-nisshac-normative)**):**
 
 | Value | Hex |
 |---|---|
-| `z = H("zkCoins/v1/HalfAgg" ‖ R₁ ‖ Pk₁ ‖ R₂ ‖ Pk₂)` | `<REGEN — recompute against the fixture's network (testnet) per-network m_state>` |
-| `a₁ = int(H(z ‖ u32-be(1))) mod n` | `<REGEN — recompute against the fixture's network (testnet) per-network m_state>` |
-| `a₂ = int(H(z ‖ u32-be(2))) mod n` | `<REGEN — recompute against the fixture's network (testnet) per-network m_state>` |
-| `s_agg = (a₁·s₁ + a₂·s₂) mod n` | `<REGEN — recompute against the fixture's network (testnet) per-network m_state>` |
+| `z = H("zkCoins/v1/HalfAgg" ‖ R₁ ‖ Pk₁ ‖ R₂ ‖ Pk₂)` | `5aca3de396d19dc1e0e2d69b4aed8816d1de535e3c180819f32037beeb49049a` |
+| `a₁ = int(H(z ‖ u32-be(1))) mod n` | `ebc0ffd7fabac87c4114b82c11031482af6210be3cbdfd224a3152a41ef8f738` |
+| `a₂ = int(H(z ‖ u32-be(2))) mod n` | `d37756039310968a42ab8c386a6bbdcf4211d02b8a8f7bc91257c0aa7f2d70a0` |
+| `s_agg = (a₁·s₁ + a₂·s₂) mod n` | `cfb0c36a8399589b5580ba41cafaf66b7d707443a202e4113f3635872ca58b78` |
 
-**Acceptance:** an implementation passes V.8 iff it recomputes every `<REGEN>` signature/aggregate value above against `m_state = "zkCoins/v1/StateUpdate/testnet"` bit-for-bit **and** its own `Verify`, `CommVerify` (both signers), and `AggregateVerify` ([§1.7.10](#1710-half-aggregation-with-commitments-nisshac-normative)) accept those values; the network-independent `sk_sig_j`/`d_j`/`Pk_j` and synthetic `ProofData` tables remain pinned.
+**Acceptance:** an implementation passes V.8 iff it recomputes every signature/aggregate value above (pinned for the testnet fixture) against `m_state = "zkCoins/v1/StateUpdate/testnet"` bit-for-bit **and** its own `Verify`, `CommVerify` (both signers), and `AggregateVerify` ([§1.7.10](#1710-half-aggregation-with-commitments-nisshac-normative)) accept those values; the network-independent `sk_sig_j`/`d_j`/`Pk_j` and synthetic `ProofData` tables remain pinned.
 
 ### V.9 Negative controls (normative)
 
