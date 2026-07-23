@@ -241,11 +241,11 @@ seed  (256-bit; v1: BIP-39 12-word mnemonic only — Passkey PRF → HKDF is a v
 
 `1798'` is the chosen BIP-43 purpose index for zkCoins (hardened). All branch separations are **hardened**: the VIEW, `op`, `nk`, and `op_secret` branches are hardened children of `A`, so a party holding them **cannot** derive the SPEND branch. `op_secret` (`A/4'`) is a dedicated 256-bit secret — separate from `op` so the conditional-NAV randomness derivation never shares key material with the Nostr signature — that keys the deterministic `nav_rand` HKDF (§1.4); like `nk` it is part of the operational bundle the wallet entrusts to its own node.
 
-**Passkey seed source (v2 feature — NOT applicable in v1).** A v1 wallet derives the seed **exclusively** from the BIP-39 12-word mnemonic (V.2-ext below) and **MUST NOT** implement the passkey-derived-seed path; the specification below is **normative for a later protocol version (v2)** and documented here for continuity.
+**Passkey seed source (v2 feature — NOT applicable in v1).** A v1 wallet derives the seed **exclusively** from the BIP-39 12-word mnemonic (V.2-ext below); for a v1 account it **MUST NOT** offer, select, or use the passkey-derived-seed path. The specification below is **normative for a later protocol version (v2)** and documented here for continuity.
 
 **Passkey seed source (normative for v2) — a custody trade-off ([Requirement 5](/requirements)).** When (under the v2 feature above) the seed is taken from a **Passkey PRF** rather than a BIP-39 mnemonic, the wallet **MUST** derive it exactly as follows. Custody of the seed inherits the passkey's storage model. A **platform-synchronised** passkey (e.g. iCloud Keychain or Google Password Manager) replicates the credential material from which the seed is derived to the provider's servers, so whoever controls that account can reconstruct the seed. For strict custody a wallet **SHOULD** back the seed with a **device-bound** (non-syncable) passkey or a BIP-39 mnemonic. This is a deployment trade-off about *where the seed lives*, not a break in the protocol's custody model — the SPEND branch still never leaves the wallet in use ([Requirement 5](/requirements)).
 
-**WebAuthn PRF → seed (normative, fail-closed).**
+**WebAuthn PRF → seed (normative for v2 only — NOT applicable in v1; fail-closed).** The numbered steps below apply **only** to the v2 Passkey seed path defined above; a **v1** wallet **MUST NOT** execute them and derives the seed **exclusively** from the BIP-39 mnemonic (V.2-ext).
 
 1. **Fixed PRF salt.** Let `prf_salt = SHA-256(UTF8("zkCoins/v1/PasskeyPRF"))` (32 bytes). This salt is a protocol constant — not per-user, not per-credential, not per-device.
 2. **PRF evaluation.** The wallet **MUST** obtain `prf_output` exclusively via the WebAuthn **PRF** extension (`prf`) with `eval.first = prf_salt` (the salt of step 1 as the first evaluation point). The authenticator's PRF result for `eval.first` **MUST** be used as `prf_output`. Any other salt, a second evaluation point (`eval.second`), or a non-PRF secret **MUST NOT** feed the seed derivation.
@@ -3477,7 +3477,7 @@ A conforming implementation **MUST** produce, from the inputs above, exactly the
 
 ### V.2-passkey — Passkey PRF → seed fixture (pinned; v2 feature — NOT a v1 conformance target) {#v2-passkey--passkey-prf--seed-fixture-pinned}
 
-This vector is a **conformance target only from protocol v2 onward**; a v1 implementation is **not** required to implement the passkey-derived-seed path or reproduce this fixture. Deterministic exercise of [§1.2](#12-key-hierarchy) WebAuthn-PRF → seed — **SHA-256 / HKDF only**, no Poseidon, no live authenticator. The free fixture `prf_output` stands in for a 32-byte `eval.first` result; a conforming (v2) implementation **MUST** reproduce every derived row bit-for-bit (node + SDK byte-equal per the V.7 parity matrix).
+This vector is a **conformance target only from protocol v2 onward**; a **v1** implementation **MUST NOT** implement the passkey-derived-seed path and is therefore **exempt** from this fixture (consistent with the v1 **MUST NOT** in [§1.2](#12-key-hierarchy)). Deterministic exercise of [§1.2](#12-key-hierarchy) WebAuthn-PRF → seed — **SHA-256 / HKDF only**, no Poseidon, no live authenticator. The free fixture `prf_output` stands in for a 32-byte `eval.first` result; a conforming (v2) implementation **MUST** reproduce every derived row bit-for-bit (node + SDK byte-equal per the V.7 parity matrix).
 
 | Symbol | Formula | Hex (32B) |
 |---|---|---|
@@ -3605,7 +3605,7 @@ Until V.4 is filled in by a reference implementation, no `<REGEN>` row should be
 | Vector group | node (Rust) | SDK (TypeScript) | Criterion |
 |---|---|---|---|
 | V.2 address / Bech32m, V.2-ext key chain & `nav_rand` | MUST produce | MUST reproduce | **byte-equal** |
-| V.2-passkey Passkey PRF → seed | MUST produce | MUST reproduce | **byte-equal** (SHA-256/HKDF only) (v2 — not a v1 target) |
+| V.2-passkey Passkey PRF → seed | MUST produce **(v2 only)** | MUST reproduce **(v2 only)** | **byte-equal** (SHA-256/HKDF only) — **v2 only; MUST NOT be implemented in v1** |
 | V.3 `serialize(AccountState)` byte layout (SHA-256 parts) | MUST produce | MUST reproduce | **byte-equal** |
 | V.4 Poseidon values (`E'₂₅₆`, `nflog_empty`, `nk_commit`, `asset_id`, `ash`, `coin.identifier`, `nf`, roots, …) | MUST produce | MUST reproduce | **byte-equal** (SDK implements the §1.7.1 Poseidon primitive) |
 | V.1 `npk_commit@0` / V.4 `H(ProofData@0)` (wallet-native SHA-256 surfaces, §7.5 N-16/N-17) | MUST produce | MUST reproduce | **byte-equal** |
