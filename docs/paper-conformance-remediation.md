@@ -41,7 +41,7 @@ A later coordinator lane may offer optional constant-size batching only if the d
 
 ## Findings and mandatory disposition
 
-**F-01, F-02, F-04 and F-06 are resolved in the normative spec** by PR #97: the on-chain `(Pk_i, R_i)` state nullifier ([spec §3.1](/specification#31-the-on-chain-object), [§1.7.10](/specification#1710-half-aggregation-with-commitments-nisshac-normative)), first-occurrence rebuild from Bitcoin alone ([spec §3.6](/specification#36-chain-scanning)), predecessor-nullifier anchoring of every state-advancing transition including issuance ([spec §2.1](/specification#21-the-compliance-predicate), [§2.3.1](/specification#231-mint--issuance), [§3.10](/specification#310-transaction-states)), and replication reserved for private bearer data ([spec §4.6](/specification#46-data-availability--replication-factor-k)). What remains open is the executable-conformance evidence (canonical vectors) and the assurance work — F-05, F-07, F-08 and the proof/backend/audit gates in [§10](#10-acceptance-gates). The **selected disposition** column records the design decision each finding drove; the **release gate** column records what still gates mainnet.
+**F-01, F-02, F-04 and F-06 are resolved in the normative spec** by PR #97: the on-chain `(Pk_i, R_i)` state nullifier ([spec §3.1](/specification#31-the-on-chain-object), [§1.7.10](/specification#1710-half-aggregation-with-commitments-nisshac-normative)), first-occurrence rebuild from Bitcoin alone ([spec §3.6](/specification#36-chain-scanning)), predecessor-nullifier anchoring of every state-advancing transition including issuance ([spec §2.1](/specification#21-the-compliance-predicate), [§2.3.1](/specification#231-mint--issuance), [§3.10](/specification#310-transaction-states)), and replication reserved for private bearer data ([spec §4.6](/specification#46-data-availability--replication-factor-k)). What remains open is the executable-conformance evidence (canonical vectors, Gate B) and F-08's commit-pinned status matrix; F-05 and F-07 are closed by project decision (see the table below), and Gate C contains no external-review step (project decision 2026-07-22). The **selected disposition** column records the design decision each finding drove; the **release gate** column records what still gates mainnet.
 
 | ID | Severity | Problem | Selected disposition | Release gate |
 |---|---:|---|---|---|
@@ -49,10 +49,10 @@ A later coordinator lane may offer optional constant-size batching only if the d
 | F-02 | high | `bundle_locator` does not directly resolve the Blossom `blob_id`. | Remove public-ledger bundle discovery from admission; the first-occurrence index is rebuilt from Bitcoin. | clean sync |
 | F-03 | high | A five-block reorg bound is treated as absolute. | **Resolved as deliberate deviation**: v1 fixes finality at a hard 6-confirmation bound instead of the paper's conditional-NAV no-op — reorgs of ≤5 blocks are absorbed by canonical replay, and a reorg of ≥6 blocks MAY break zkCoins as an accepted v1 limitation ([spec §3.9](/specification#39-finality-and-reorg-handling)). Refs: #105, #106. | resolved — no further gate; revisit only if a sound `DistinctElement` no-op construction is adopted |
 | F-04 | medium | A mint can be accepted without a Bitcoin state nullifier. | Every issuance is a state update whose consumed `Pk_i` must win first occurrence. | issuance-fork tests |
-| F-05 | high | Plonky2 is deprecated and the backend is not frozen. | Audit a maintained fork or migrate before genesis; pin verifier data and security assumptions. | before vectors |
+| F-05 | high | Plonky2 is deprecated upstream. | **Resolved by project decision (2026-07-22):** v1 pins the immutable crates.io release `plonky2 = "1.1.0"` ([spec §1.7.9](/specification#179-proof-system-parameters-normative)); upstream deprecation is a maintenance risk, not a correctness gate — the pinned artefact is deterministic and sufficient for v1, and migration to a maintained system is a future **version bump**. | closed |
 | F-06 | high | `k = 3` retention cannot guarantee public-ledger DA or operator independence. | Put every state nullifier on Bitcoin; use replication only for private proof recovery. | clean sync |
-| F-07 | high when cited | The formal certificate targets an older specification. | Re-model the final paper-model port and rerun all properties and negative controls. | before assurance claims |
-| F-08 | medium | Paper, target and implementation status are conflated. | Publish a commit-pinned three-column status matrix. | every release |
+| F-07 | high when cited | The formal certificate targets an older specification. | **Superseded for v1:** the certificate is not cited as evidence for the current model; the executable Gate-B negative-control vectors stand in. Re-modelling remains welcome but is not a release gate (project decision: no human-gated mainnet step). | closed for v1 |
+| F-08 | medium | Paper, target and implementation status are conflated. | Publish a commit-pinned three-column status matrix. | filled at the vectors-pin PR; re-affirmed every release |
 
 ## 1. Version-3 aggregate state nullifier
 
@@ -77,7 +77,9 @@ m_state = ASCII("zkCoins/v1/StateUpdate")   # the fixed signed message (§1.4, �
 )
 ```
 
-In the shipped spec `TransitionEssenceV3` is realized as `ProofData` (§1.4): it binds the new account-state hash, output-coins root, input-nullifiers root, coin-history root and the conditional-NAV commitment, with the rotated next key bound through `new_account_state_hash`. `H(ProofData)` over its fixed 160-byte serialization is the single normative essence hash the nonce commits (§3.2); no JSON or implementation serialization may enter it.
+In the shipped spec `TransitionEssenceV3` is realized as `ProofData` (§1.4): it binds the new account-state hash, output-coins root, input-nullifiers root, coin-history root, the conditional-NAV commitment, and the rotated-key commitment `npk_commit = H("zkCoins/v1/NpkCommit" ‖ next_pubkey ‖ npk_rand)` — the sixth field that makes the rotated key wallet-verifiable, rather than bound only through `new_account_state_hash` (spec §1.4, §2.1 clause 2). `H(ProofData)` over its fixed **192 bytes** of `serialize(ProofData)` across these **six** fields is the single normative essence hash the nonce commits (§3.2); no JSON or implementation serialization may enter it.
+
+**Updated 2026-07-23:** `serialize(ProofData)` is now **192 bytes** (six fields; the sixth, `npk_commit`, makes the rotated key wallet-verifiable, [spec §2.1 clause 2](/specification#21-the-compliance-predicate)), and the nullifier accumulator is an RFC-6962 append-only Merkle log (not a leaf-preserving SMT), [spec §1.7.6](/specification#176-nullifier-accumulator-append-only-merkle-log).
 
 The publisher non-interactively half-aggregates entries into the `AggregateStateNullifierV3` inscription payload ([spec §3.5](/specification#35-inscription-format)):
 
@@ -96,7 +98,7 @@ offset  size  field
 
 This is the paper's `Aggregate Nullifier := (Nullifier Public Keys, Aggregate Signature)` with explicit version/format/anchor framing. A one-entry payload (`count = 1`) is valid, so self-publication never depends on finding another participant. The inscription carries **no** on-chain fee field, accumulator root, or transition message: the publisher fee is an ordinary output coin claimed off-chain ([spec §3.8](/specification#38-fees-and-economics)), and network separation is by verifier-data domain, not an on-chain byte.
 
-The normative specification MUST import or reproduce the complete NISSHAC algorithms and security definition from Shielded CSV. Ordinary BIP-340 batch verification is not a substitute: the commitment-opening relation and half-aggregate equation are protocol-critical.
+The normative specification reproduces the complete NISSHAC algorithms, completeness argument, and encoding rules (spec §1.7.10); the paper's formal security definition is referenced as the source work and is a non-gating Workstream-2 write-up ([Assurance Roadmap](/assurance)). Ordinary BIP-340 batch verification is not a substitute: the commitment-opening relation and half-aggregate equation are protocol-critical.
 
 ### 1.2 Exact encoding constraints
 
@@ -113,7 +115,7 @@ The 64-byte figure is asymptotic: each member contributes one 32-byte public key
 
 ### 1.3 Binding carried in private proof data
 
-The recipient's `CoinProof` material MUST contain the exact `TransitionEssenceV3`, the NISSHAC commitment opening, the aggregate's Bitcoin location and an inclusion position. Verification MUST establish all of the following:
+The recipient's `CoinProof` material MUST contain the exact `TransitionEssenceV3`, the NISSHAC commitment opening, and the coin's `nav_opening`; anchoring is established by the receiver's own Path-A scan of the on-chain nullifiers, not by a transported on-chain location or membership index in the proof (spec §2.3.3 step 4, §3.7). Verification MUST establish all of the following:
 
 1. `transition_id` is recomputed from the canonical essence;
 2. `opening_i` opens on-chain `R_i` to that `transition_id` under the NISSHAC commitment relation;
@@ -132,7 +134,7 @@ Every verifier processes valid v3 aggregates in `(block height, transaction inde
 2. verify network, bounds, curve/scalar encodings and the NISSHAC half-aggregate signature;
 3. for each entry in encoded order, insert `(Pk_i -> R_i, Bitcoin location)` only if `Pk_i` is absent;
 4. ignore later valid entries with the same `Pk_i` for state-transition purposes;
-5. append the set of newly admitted entries to the paper-compatible nullifier accumulator and record its historical value for receiver checks.
+5. append the set of newly admitted entries to the nullifier accumulator — the registered **deviation D-05** (RFC-6962 append-only-log accumulator; the paper's ToS `IsPrefix`/`DistinctElement` relation is not ported), not paper-compatible — and record its historical value for receiver checks.
 
 First occurrence is determined solely by canonical Bitcoin order. Relay timing, private bundle availability and publisher identity cannot change it. A duplicate does not replace the earlier commitment.
 
@@ -142,7 +144,7 @@ There is no `prev_root`, `new_root`, `BatchBundle`, `bundle_locator`, public `Ag
 
 ### 3.1 Canonical-chain state
 
-`observed` means present on the current best chain. `accepted` means still present after the wallet's configured confirmation depth. Neither means absolute finality.
+`observed` means present on the current best chain. `accepted` means still present after the 6-confirmation finality floor ([spec §3.9](/specification#39-finality-and-reorg-handling); deployments MAY require more, never fewer). Neither means absolute finality.
 
 On a reorg within the tolerated window (≤5 blocks; the 6-confirmation finality bound, [spec §3.9](/specification#39-finality-and-reorg-handling)), a node MUST:
 
@@ -156,9 +158,9 @@ A reorg of ≥6 blocks can displace a **final** nullifier and MAY break zkCoins 
 
 ### 3.2 Conditional execution rule
 
-Each `TransitionEssenceV3` commits to a conditional NAV covering all chain dependencies of its previous account state and input coins. The recursive predicate proves the single **execute** branch: the conditional NAV and every input object's NAV are prefixes of the live canonical NAV, and it applies the committed balance, spent-set, output and key-rotation transition. There is **no reorg no-op branch**.
+Each `TransitionEssenceV3` commits to a conditional NAV covering all chain dependencies of its previous account state and input coins. The recursive predicate proves the single **execute** branch: the conditional NAV is set to the shared `size_final` prefix (the ≥6-confirmation-final prefix, not the live chain tip); v1 has **no** early build against still-pending dependencies — a not-yet-final dependency means the wallet waits, so `nav` is always exactly `size_final` — a verifier checks `nav` is canonical and `size ≤ size_final` on its own scan (spec §2.3.2 step 5, §3.7, §3.9) — and every input object's NAV is a prefix of it, and it applies the committed balance, spent-set, output and key-rotation transition. There is **no reorg no-op branch**.
 
-zkCoins v1 deliberately does **not** adopt the paper's conditional-NAV no-op (an exactly-one-of predicate with a `distinct-element` branch that lets an account continue after a dependency is orphaned). It fixes a hard **6-confirmation finality bound** instead ([spec §3.9](/specification#39-finality-and-reorg-handling)): reorgs of ≤5 blocks touch only non-final nullifiers and are absorbed by canonical replay; a reorg of ≥6 blocks MAY break zkCoins as an accepted v1 limitation. Accordingly the accumulator is a plain leaf-preserving SMT `prefix` relation and does **not** implement the paper's `distinct-element` no-op relation — a deliberate, registered deviation ([Paper-Deviation Analysis D-16](/paper-conformance-analysis), issues #105/#106). The union-membership, append-set and remove-set behaviours the execute branch and chain scan rely on remain provided by the SMT.
+zkCoins v1 deliberately does **not** adopt the paper's conditional-NAV no-op (an exactly-one-of predicate with a `distinct-element` branch that lets an account continue after a dependency is orphaned). It fixes a hard **6-confirmation finality bound** instead ([spec §3.9](/specification#39-finality-and-reorg-handling)): reorgs of ≤5 blocks touch only non-final nullifiers and are absorbed by canonical replay; a reorg of ≥6 blocks MAY break zkCoins as an accepted v1 limitation. Accordingly the accumulator is an **RFC-6962 append-only Merkle log**; `prefix` is a **constant-size log-consistency** proof, and membership is an **inclusion proof at a position-bound leaf** ([spec §1.7.6](/specification#176-nullifier-accumulator-append-only-merkle-log), [§3.7](/specification#37-the-nullifier-accumulator); register [D-05](/paper-conformance-analysis)) — and does **not** implement the paper's `distinct-element` no-op relation — a deliberate, registered deviation ([Paper-Deviation Analysis D-16](/paper-conformance-analysis), issues #105/#106).
 
 Required tests include one-to-five-block reorgs, arbitrary removed suffixes within the tolerated window, duplicate-first-occurrence reversal, dependent receives/spends, equality with clean replay, and confirmation that a ≥6-block reorg is surfaced as the accepted break boundary ([spec §3.9](/specification#39-finality-and-reorg-handling)) rather than silently mis-handled.
 
@@ -175,7 +177,7 @@ Consequences:
 - no separate synthetic issuance nullifier is needed under this selected paper model;
 - creator authorization, per-asset conservation and the explicitly unlimited v1 creator-supply policy remain separate in-circuit checks.
 
-PR #97 removed the unanchored `mint-verified` path: a recipient credits issuance only after the creating state nullifier reaches the configured confirmation policy and its transition commitment opens correctly.
+PR #97 removed the unanchored `mint-verified` path: a recipient credits issuance only after the creating state nullifier reaches the 6-confirmation finality floor ([spec §3.9](/specification#39-finality-and-reorg-handling); deployments MAY require more, never fewer) and its transition commitment opens correctly.
 
 ## 5. Fees and open publishing
 
@@ -189,7 +191,7 @@ The publisher role remains open and non-custodial:
 - no publisher signature, registry, sequencer, exclusive root lease or coordinator is required;
 - the paper's first-to-publish-wins gossip race, in which multiple publishers compete without being selected in advance, is deferred as a forward-compatible privacy upgrade because it requires a two-step payment structure that v1 does not fix.
 
-Publisher economics, front-running resistance and fee-claim privacy require an explicit proof and test suite. “Permissionless” does not by itself prove that the market remains decentralized.
+Publisher economics, front-running resistance and fee-claim privacy are closed by the [Risks](/risks) verdict table (publisher censorship/delay: holds; fee mismatch: holds under stated assumptions) plus the Gate-B fee-path tests. “Permissionless” does not by itself prove that the market remains decentralized.
 
 ## 6. Data availability and recovery boundary
 
@@ -203,12 +205,9 @@ Keys, commitments, aggregate signatures, order and publisher fee addresses are B
 
 ## 7. Proof backend and assurance
 
-Before canonical vectors or genesis, choose one:
+**Decided (2026-07-22):** v1 stays on the immutable `plonky2 = "1.1.0"` release; exact verifier/circuit digests are frozen at the vectors-pin PR ([spec §1.7.8 v1 freeze](/specification#178-reference-instantiation-status-final-for-v1)). No fork audit and no migration are v1 gates; a migration to a maintained proof system is a future version bump with new digests and lineages.
 
-1. maintain and audit a named Plonky2 fork, document its security margin and freeze exact verifier/circuit digests; or
-2. migrate to a maintained proof system and regenerate the recursive composition, conditional-NAV, NISSHAC-in-circuit and serialization proofs.
-
-The final security package must separately establish:
+Desirable post-v1 cryptographic write-ups (a quality goal, **not** a v1 release gate — [Assurance Roadmap](/assurance) Workstream 2):
 
 - NISSHAC CK-AEUF-CC-CMA security and commitment hiding/binding for the instantiated curve/hash suite;
 - no double spend from first occurrence plus recursive state-key continuity;
@@ -217,7 +216,7 @@ The final security package must separately establish:
 - privacy under the now chain-visible transaction count, rotating keys and commitments;
 - correctness of the concrete recursive circuit and implementation.
 
-Model checking cannot replace primitive proofs or implementation audit.
+Model checking cannot replace primitive proofs; v1 ships without an implementation audit or gating formal proofs by project decision — the executable harness (Gate B) and the in-spec arguments are the v1 assurance basis ([Assurance Roadmap](/assurance)).
 
 ## 8. Required negative controls
 
@@ -241,11 +240,11 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 | Specification area | Edit |
 |---|---|
 | §1.1/§1.7 | add v3 domains, NISSHAC primitives, encodings, verifier data and network binding |
-| §1.4–§1.6 | replace per-coin global nullifiers/root-chain objects with rotating account-state nullifiers and paper-compatible NAV history |
+| §1.4–§1.6 | replace per-coin global nullifiers/root-chain objects with rotating account-state nullifiers and append-only-log NAV history (registered deviation **D-05**; not paper-compatible) |
 | §2.1–§2.3 | bind transition essence/opening, first occurrence, state-key continuity and the single conditional-NAV execute branch (no reorg no-op branch, §3.2) |
 | §2.5–§2.6 | remove `C_batch`; dimension NISSHAC and conditional-NAV gadgets; freeze backend |
 | §3.1–§3.8 | replace `BatchInscription`/`BatchBundle` admission with `AggregateStateNullifierV3`, scanning, half-aggregation and paper-style fees |
-| §3.9–§3.10 | define canonical-tip-relative state, bounded ≤5-block canonical replay and the 6-confirmation finality bound (a ≥6-block reorg is an accepted break) |
+| §3.9–§3.10 | define `size_final` (the shared ≥6-confirmation-final log prefix, replacing tip-relative state), bounded ≤5-block canonical replay and the 6-confirmation finality bound (a ≥6-block reorg is an accepted break) |
 | §4 | separate private `CoinProof` recovery from public ledger reconstruction; remove batch-locator mapping |
 | §5 | remove `mint-verified`; make acceptance/opening/reorg checks explicit |
 | §6 | distinguish paper-derived target, implementation status and residual trust/economic claims |
@@ -257,7 +256,7 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 
 ### Gate A — specification completeness
 
-**Closed by [PR #97](https://github.com/zk-coins/docs/pull/97)** — the criteria below hold in the current `specification.md`; the only residual item is generating and pinning the canonical vectors under Gate B.
+**Closed by [PR #97](https://github.com/zk-coins/docs/pull/97)** — the criteria below hold in the current `specification.md`; the only residual item is generating and pinning the canonical vectors under Gate B — re-verified after the 2026-07-23 append-only-log (D-05) and npk_commit (D-21) changes.
 
 - one normative version contains no mixed v2 root-chain/v3 first-occurrence path;
 - NISSHAC, transition essence, opening, NAV operations, carrier and rejection rules are byte-exact;
@@ -267,7 +266,7 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 
 ### Gate B — executable conformance
 
-- independent implementations reproduce canonical vectors;
+- the node reproduces the canonical vectors and the SDK's primitive-level re-implementation reproduces the byte-equal subset (the spec V.7 parity matrix);
 - one-entry self-publish and multi-entry aggregation work on regtest and public testnet;
 - a clean node reconstructs state from Bitcoin without Nostr, Blossom or a zkCoins index;
 - mutation, duplicate, malformed-encoding, wrong-network and proof-substitution vectors fail;
@@ -276,12 +275,14 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 
 ### Gate C — assurance
 
-- the final specification commit is named in the formal certificate;
-- cryptographic and composition proofs are published and externally reviewed;
-- proof backend and circuits pass external review;
-- chain-visible metadata receives a reviewed privacy/linkability analysis;
-- publisher economics have no open mainnet blocker;
-- implementation audit findings are resolved.
+- the specification's soundness summary ([spec §2.4](/specification#24-soundness-summary)) and security-properties summary ([spec §6.7](/specification#67-security-properties-summary)) exist, every clause reference they cite resolves, every Requirement 1–10 has a row, and D-17–D-19 appear in the [§6.7 precise privacy statement](/specification#67-security-properties-summary), D-16 is stated in [spec §3.9](/specification#39-finality-and-reorg-handling), and D-20 has its row in the [Risks](/risks) verdict table (machine-checkable link/row checks);
+- **D-05** passes its release gate: the **V.11 differential-test** of the in-circuit RFC-6962 log-consistency/inclusion arithmetization against an independent reference ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1), V.11) — executed at the negative-controls / conformance step ([Implementation Mandate](/implementation-mandate) step 5/6) as part of the executable gate, not a separate human review — alongside the existing D-16/D-17–D-20 checks above;
+- **D-05 network-parameter agreement gate:** `network-params.json` is a byte-exact canonical artefact (spec §3.6); every node MUST load the pinned per-network `activation_height` and refuse readiness (`/health/ready` `503`) on mismatch; and a conformance test MUST confirm two independent nodes scanning the same tip from the **same** pinned `activation_height` produce the identical `(size, mth)` / `nav_root`, while a **differing** `activation_height` diverges them **whenever a valid nullifier is admitted in the interval between the two heights** — the conformance fixture **MUST** include at least one such nullifier so the divergence is observably guaranteed — the executable check for the parameter-agreement residual (D-05 (iv)).
+- the [Risks](/risks) verdict table has no open and no broken row;
+- the reference instantiation and backend are final and frozen for v1 ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1), [§1.7.9](/specification#179-proof-system-parameters-normative));
+- a vulnerability disclosure process is published ([SECURITY.md](https://github.com/zk-coins/docs/blob/develop/SECURITY.md)).
+
+By explicit project decision (2026-07-22) there is **no external audit, external proof review, or other human-gated step** in Gate C; the executable Gate-B evidence plus the in-spec arguments above are the v1 assurance basis.
 
 No real-value deployment proceeds until all three gates are complete.
 
@@ -293,10 +294,10 @@ Every release must distinguish:
 |---|---|---|---|---|
 | nullifier | rotating state key + NISSHAC commitment | v3 paper-model port | commit/link | vectors/proof |
 | ordering | Bitcoin first occurrence | canonical scan/reorg replay | commit/link | two-node test |
-| reorg finality | SMT prefix + 6-confirmation bound (no distinct-element no-op) | frozen v3 relation | commit/link | replay + bound test |
+| reorg finality | ToS accumulator, `IsPrefix`/`DistinctElement` exactly-one-of, arbitrary-depth conditional-NAV no-op (paper §3.2/§3.6/§4.2) | RFC-6962 append-only Merkle-log accumulator + hard 6-confirmation finality, no DistinctElement no-op (D-05 succinctness fixed; D-16 unchanged) | commit/link | replay + bound test |
 | recovery | private coin proof required | encrypted replicated bearer data | commit/link | restore test |
 | issuance | application-defined | creator-bound, unlimited, anchored | commit/link | issuance tests |
-| proof backend | abstract PCD | named frozen backend | commit/link | audit/benchmarks |
+| proof backend | abstract PCD | named frozen backend | commit/link | benchmarks (build report, [Implementation Mandate §4](/implementation-mandate)) |
 
 Target properties must never be labelled implemented without a code commit and passing evidence.
 
