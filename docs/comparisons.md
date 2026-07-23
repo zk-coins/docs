@@ -8,12 +8,12 @@ How does zkCoins compare to other privacy and scaling approaches — and what, p
 
 ## Where zkCoins sits
 
-zkCoins is the first real-world **implementation** of two whitepapers:
+zkCoins is an **implementation** of two whitepapers:
 
 - the **Shielded CSV** construction by Jonas Nick (Blockstream), Liam Eagen (Alpen Labs), and Robin Linus (ZeroSync) — [eprint 2025/068](https://eprint.iacr.org/2025/068);
 - the original **zkCoins** concept, prototyped as [ZeroSync/ZKCoins](https://github.com/ZeroSync/ZKCoins).
 
-The project at **zkcoins.app does not compete with these papers — it realizes them.** It claims no invention of the underlying scheme; its contribution is bringing the design to a running node, wallet, and the off-chain transport/recovery layer needed to operate it. Where this page says "zkCoins", read "the Shielded CSV scheme as realized by zkCoins".
+The project at **zkcoins.app does not compete with these papers — it realizes them**, with every load-bearing deviation registered in the [Paper-Deviation Analysis](/paper-conformance-analysis). It claims no invention of the underlying scheme; its contribution is bringing the design to a running node, wallet, and the off-chain transport/recovery layer needed to operate it. Where this page says "zkCoins", read "the Shielded CSV scheme as realized by zkCoins v1, registered deviations included".
 
 ## The differentiator is a combination, not a single property
 
@@ -52,7 +52,7 @@ Both use Client-Side Validation on Bitcoin, but serve different purposes.
 | | zkCoins (Shielded CSV) | RGB |
 |---|---|---|
 | **Focus** | Private payments | Smart contracts + tokens |
-| **Privacy** | Full (ZK proofs hide everything; global anonymity set) | Limited (history revealed to counterparty) |
+| **Privacy** | Full against the public-chain observer (global anonymity set); bounded counterparty residuals (D-17–D-19, [Risks](/risks)) | Limited (history revealed to counterparty) |
 | **Proof size** | Constant (independent of history) | Grows with transaction history |
 | **On-chain footprint** | ~64-byte half-aggregated nullifier per transition (~16 vB), constant in input count ([spec §3.8](/specification#38-fees-and-economics)) | Commitment in a host TX; off-chain consignment grows |
 | **Smart contracts** | No | Yes (zk-AluVM, Turing-complete) |
@@ -108,7 +108,7 @@ Zcash is the conceptual parent of the commitment/nullifier shield. The key diver
 | **Privacy approach** | ZK proofs | Ring signatures + Stealth + RingCT |
 | **Anonymity set** | **All coins ever created** | Ring of 16 decoys |
 | **Scalability** | ~64 B per transition on-chain (~16 vB), constant in input count | ~2-3 KB per TX |
-| **Statistical attacks** | Not possible | Possible (decoy-selection analysis) |
+| **Statistical attacks** | Decoy-selection analysis: not applicable (no decoys, full anonymity set); per-block transition count and inscription timing remain publicly visible ([Risks](/risks)) | Possible (decoy-selection analysis) |
 
 ### vs. CoinJoin
 
@@ -117,7 +117,7 @@ Zcash is the conceptual parent of the commitment/nullifier shield. The key diver
 | **Anonymity set** | All coins | Round participants only |
 | **Amounts hidden** | Yes | No (equal-output) |
 | **Coordinator** | None | Required |
-| **On-chain analysis** | Not possible | Difficult but not impossible |
+| **On-chain analysis** | Amount/decoy-based analysis not possible (no decoys, all amounts hidden); per-transition count, inscription timing, and (toward a repeatedly reused publisher) fee-coin transition linkage remain visible ([Risks](/risks)) | Difficult but not impossible |
 | **Cost** | One ~64-byte nullifier per transition (~16 vB) | Multiple UTXOs (expensive) |
 | **Regulatory risk** | Low (no coordinator) | High (coordinators prosecuted) |
 
@@ -219,7 +219,7 @@ Off-chain value with a Bitcoin peg; privacy via blind signatures rather than ZK.
 
 | Technology | Privacy level | Status |
 |---|---|---|
-| **Shielded CSV** | Maximum (full ZK) | |
+| **Shielded CSV** | Full against the public-chain observer; bounded counterparty residuals (D-17–D-19) | |
 | **Silent Payments (BIP352)** | Receive-only | Near production |
 | **PayJoin (BIP77/78)** | Send-privacy | Production |
 | **CoinJoin** | Medium (statistical) | Under regulatory pressure |

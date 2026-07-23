@@ -8,9 +8,9 @@ This is the **documentation repository** and the single place that describes the
 |---|---|---|
 | **Docs** | [docs.zkcoins.com](https://docs.zkcoins.com) | [dev-docs.zkcoins.app](https://dev-docs.zkcoins.app) |
 | **Wallet app** | [zkcoins.app](https://zkcoins.app) | [dev.zkcoins.app](https://dev.zkcoins.app) |
-| **Bitcoin network** | mainnet | Mutinynet (signet) |
+| **Bitcoin network** | mainnet | Bitcoin Signet |
 
-The Bitcoin network is a per-deployment **env variable** — production runs on **mainnet**, dev against **Mutinynet** — so every node operator chooses their own.
+The Bitcoin network is a per-deployment **env variable** — production runs on **mainnet**, dev against **Bitcoin Signet** — so every node operator chooses their own.
 
 ## What zkCoins is
 
