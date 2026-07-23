@@ -5,7 +5,7 @@ title: Introduction
 
 # zkCoins
 
-zkCoins is a protocol and system — node, wallet, and explorer — realizing **Shielded CSV**, which brings true privacy to Bitcoin through Client-Side Validation and Zero-Knowledge Proofs. No soft fork required. No new consensus rules. Bitcoin as it exists today. zkCoins implements the **Shielded CSV construction** with registered v1 deviations (see the [Paper-Deviation Analysis](/paper-conformance-analysis) — notably D-05 the append-only-log accumulator and D-16 bounded finality).
+zkCoins is a protocol and system — node, wallet, and explorer — realizing **Shielded CSV**, which brings confidential amounts, parties, and transaction graph to Bitcoin through Client-Side Validation and Zero-Knowledge Proofs. No soft fork required. No new consensus rules. Bitcoin as it exists today. zkCoins implements the **Shielded CSV construction** with registered v1 deviations (see the [Paper-Deviation Analysis](/paper-conformance-analysis) — notably D-05 the append-only-log accumulator and D-16 bounded finality).
 
 ## What can users do?
 
