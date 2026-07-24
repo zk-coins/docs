@@ -119,11 +119,11 @@ Each is rare on its own elsewhere; here they hold **together** — see [Comparis
 
 The specification covers every component that will exist: the **node** (validator · prover · relay · data store), the **wallet** (thin key-holder), and the **explorer** (public and authorised views) — together with the cryptography that binds them. For every key, hash, and identifier it states exactly **how it is derived**; for every requirement, **how it is met**.
 
-## The ten requirements
+## The eleven requirements
 
 The whole specification exists to satisfy these (in full on the [Requirements](/requirements) page):
 
-1. Bitcoin L1 as the only base · 2. Private · 3. Trustless · 4. Client-side validation · 5. Custody only in the wallet · 6. Recovery · 7. Self-hostable · 8. Multi-asset · 9. Selective disclosure · 10. Node portability.
+1. Bitcoin L1 as the only base · 2. Private · 3. Trustless · 4. Client-side validation · 5. Custody only in the wallet · 6. Recovery · 7. Self-hostable · 8. Multi-asset · 9. Selective disclosure · 10. Node portability · 11. Standard identity and messaging.
 
 ## Contents
 
@@ -157,6 +157,7 @@ Where each requirement is satisfied:
 | **8 · Multi-asset** | §1.4 (`asset_id`), §1.5 (per-asset balances), §2 (per-asset conservation), §6 (issuance) |
 | **9 · Selective disclosure** | §5 (three opt-in tiers — per-transaction §5.6, balance attestation §5.7, full-history view grant §5.8; each verifiable against Bitcoin, rendered by a self-hostable explorer) |
 | **10 · Node portability** | §1.2 (everything derives from the seed ⇒ no node-specific state), §6 (switch / multi-node) |
+| **11 · Standard identity and messaging** | §4.1/§4.3 (NIP-05 identity, kind-0 payment metadata, retained `nprofile` and DNS-free known contacts), §7.3/V.12 (mandatory NIP-17/kind-10050 and external-client interoperability), Lightning/mail bridge pages (independently optional) |
 
 ## Conventions
 
@@ -266,7 +267,7 @@ A deterministic seed test vector (SHA-256 / HKDF only — no Poseidon) is in [V.
 | `nk` | wallet, and the wallet's **own** node (operational bundle) | compute nullifiers — required in the proving witness ([§2.1 clause 4](#21-the-compliance-predicate)) | spend; it **can link the account's own spends**, which is why it is entrusted only to the account's own node, never a foreign one |
 | `ivk` | wallet, and any node the wallet delegates to | detect & decrypt **incoming** coins | spend |
 | `ovk` | same | recover **outgoing** coin plaintext via the per-coin `out_ciphertext` (§1.3) | spend |
-| `op` | the node | publish/receive on Nostr, sign view grants & acknowledgements | spend, decrypt others' coins |
+| `op` | the node | act as the standard Nostr identity, send/read NIP-17 messages, sign profiles, relay lists, view grants & acknowledgements | spend, decrypt others' coins |
 | `K_tx` (per-coin note key, §1.3) | derived per coin; shareable | decrypt **exactly one** coin | spend, see any other coin |
 
 The **operational bundle** `{ivk, ovk, op, nk, op_secret}` is what a wallet entrusts to its **own** node so the node can receive, prove, and serve on its behalf 24/7 ([§6.2](#62-wallet--node)). None of it can spend; `nk` additionally lets its holder link the account's own spends, which is why the bundle goes only to the account's own node. A *foreign* node never receives the bundle; the wallet instead issues that node a scoped, `op`-signed **view grant** ([§5.2](#52-view-grant)).
@@ -1394,9 +1395,11 @@ Normative keywords (**MUST**, **MUST NOT**, **SHOULD**, **MAY**) are used per RF
 
 ### 4.1 Roles and transport
 
-Every zkCoins **node is paired with a full Nostr relay** for transport. In the reference deployment that relay runs as its **own container** (`nostr-relay`), reached over the relay protocol; it **MAY** be the operator's own (the default) or an external relay ([§6.1](#61-components-and-responsibilities)). The node performs Bitcoin validation, proof verification, state storage, and the capability-gated pull endpoint ([Access & Explorer](#5--access--explorer)); the paired relay performs the encrypted bundle relay/store. There is no separate, mandatory third-party courier — by default transport is part of the operator's own stack.
+Every zkCoins **node is paired with a full Nostr relay** for transport. In the reference deployment that relay runs as its **own container** (`nostr-relay`), reached over the relay protocol; it **MAY** be the operator's own (the default) or an external relay ([§6.1](#61-components-and-responsibilities)). The node performs Bitcoin validation, proof verification, state storage, standard Nostr messaging, and the capability-gated pull endpoint ([Access & Explorer](#5--access--explorer)); the paired relay carries encrypted zkCoins bundle traffic and may also be one of the account's published kind-10050 DM relays. Outgoing NIP-17 messages go to each contact's own kind-10050 relays. There is no separate, mandatory third-party courier for zkCoins bundles — by default that transport is part of the operator's own stack.
 
-The transport key is `op`, the operational / Nostr identity key ([Foundations §1.2](#12-key-hierarchy)). It is a secp256k1 / BIP-340 key — the same family Nostr uses — so it doubles as the wallet's Nostr key with no separate keypair. The node holds `op` and drives transport on the wallet's behalf, publishing to and reading from its relay; `op` **MUST NOT** be able to spend (it is a hardened sibling of the SPEND branch).
+The transport key is `op`, the operational / Nostr identity key ([Foundations §1.2](#12-key-hierarchy)). It is the account's **ordinary Nostr account key**, not a zkCoins-specific messaging key: its public key authors the standard kind-0 profile and kind-10050 DM relay list, and `op` signs NIP-59 seals for NIP-17 messages. The node holding the operational bundle drives transport and messaging on the wallet's behalf; `op` **MUST NOT** be able to spend (it is a hardened sibling of the SPEND branch). A sovereign user's own node therefore controls and can read that user's messages; a hosted provider holding the bundle can do the same for its hosted account ([§6.6](#66-threat-model-and-trust-configurations)). Interoperability means ordinary NIP-17 peers exchange standard events directly with this Nostr identity — no external peer needs the `op` secret or any zkCoins-specific adapter.
+
+Human messages and zkCoins coin delivery are separate protocols on the same Nostr identity. Human messages **MUST** use NIP-17 kinds `14`, `13`, `1059`, and `10050`; zkCoins delivery and acknowledgement rumors remain kinds `1420` and `1421` and **MUST NOT** carry chat content ([§7.3](#73-nostr-event-kinds-normative)).
 
 The transport is trusted only for **availability** and for **metadata minimisation** — never for correctness. A relay can **withhold** a bundle but can neither **forge** nor **alter** one, because the recipient verifies every bundle cryptographically (§4.5). This is the same trust spectrum as the node model: a compromised relay is a privacy/availability problem, never theft.
 
@@ -1511,9 +1514,9 @@ Decryption reverses this: re-derive `kb`, parse `N` and the length-prefixed chun
 
 ### 4.3 Addressing for delivery
 
-A sender starts from the recipient's `address` ([Foundations §1.4](#14-identifiers-and-hashes)) — the protocol's only public identity — and must obtain two things: the recipient's `IVPK` and a relay set to post to.
+A sender normally starts from the recipient's mandatory email-style NIP-05 identifier. The zkCoins payment address `address = H(Pk₀ ‖ nk_commit)` ([Foundations §1.4](#14-identifiers-and-hashes)) remains the value-bearing destination, while the NIP-05 identifier is the public human identity used to discover the recipient's ordinary Nostr key, profile, messaging relays, and zkCoins delivery data.
 
-Addresses are minimal by design and carry no network routing, so resolution is explicit. The supported source, in order of preference, is the **`Invoice`** ([Foundations §1.5](#15-core-data-structures)), extended for transport with the recipient-published, `op`-signed fields:
+An amount-specific **`Invoice`** ([Foundations §1.5](#15-core-data-structures)) remains a valid direct payment object. It carries the recipient-published, `op`-signed transport fields:
 
 ```
 Invoice = {
@@ -1538,7 +1541,29 @@ The two signatures' preimage is a **fixed concatenation** in exactly the order w
 
 The sender **MUST** verify, in order: (i) `H(pk0 ‖ nk_commit) == recipient` (so the named `pk0` and `nk_commit` are the actual address preimage, §1.4); (ii) `addr_sig` valid under `pk0` over `invoice_message` (proves the address-holder authorised these exact contents — `ivpk`, `op_pubkey`, `relays`, amount, asset, memo); (iii) `sig` valid under `op_pubkey` over `invoice_message` (carries the per-issuance authorisation by the recipient's online `op`). Any of these checks failing **MUST** reject the `Invoice`. Check (ii) is the **address ↔ rest binding**: without it, a party that observes the recipient's public `pk0` and `nk_commit` (both are published in the clear in any legitimate `Invoice` or profile) could publish a malicious `Invoice` claiming the legitimate `recipient`/`pk0` but with **their own** `ivpk`/`op_pubkey`, and the sender would encrypt the bundle to the attacker. `addr_sig` makes that forgery infeasible under BIP-340 EUF-CMA. The operational consequence is that **issuing an `Invoice` requires the wallet** (`sk₀` is SPEND-branch, wallet-only) — the same custody boundary that already governs sending. The per-issuance `sig` remains because the recipient's `op` is the online actor that signs the wire-format event the relay sees; it is not redundant with `addr_sig` operationally (one offline, one online).
 
-When no `Invoice` is available, a recipient **MAY** publish the same `{pk0, nk_commit, ivpk, op_pubkey, relays}` tuple as a **profile** event (a replaceable Nostr event, kind 30420) carrying the same `addr_sig` over an `invoice_message` computed with the **profile-fixed values** `amount = 0`, `asset_id` = the all-zero 32-byte value, and `memo` = empty — so the sender and recipient derive a **bit-identical** preimage and the signature verifies; any other values for these three fields **MUST NOT** be used in a profile event — discoverable on well-known relays by `op_pubkey`. The kind-30420 wire content **MUST** carry `nk_commit` alongside `pk0` (content = `{pk0, nk_commit, ivpk, op_pubkey, relays, addr_sig}`, [§7.3](#73-nostr-event-kinds-normative)) so the sender can evaluate check (i) `H(pk0 ‖ nk_commit) == address` from the event alone. The sender verifies the profile by the same three-check rule above, with check (iii) adapted to the profile's wire form ([§7.3](#73-nostr-event-kinds-normative)): the profile content carries no separate `sig` field; the kind-30420 event itself is signed by the recipient's `op` key over the Nostr event serialization, and the sender **MUST** verify that event signature against `op_pubkey` — this satisfies check (iii) for a profile. Resolution by `address` alone, with **no** recipient-published record carrying `addr_sig`, is **not** supported.
+When no `Invoice` is supplied, a zkCoins recipient publishes its delivery data in an additive `zkcoins` object inside the standard replaceable Nostr **kind-0 user-metadata event** authored by its `op` key ([§7.3](#73-nostr-event-kinds-normative)):
+
+```json
+{
+  "name": "Alice",
+  "nip05": "alice@example.com",
+  "lud16": "alice@example.com",
+  "zkcoins": {
+    "version": 1,
+    "network": "mainnet",
+    "address": "zk1...",
+    "pk0": "<32-byte lowercase hex>",
+    "nk_commit": "<32-byte lowercase hex>",
+    "ivpk": "<32-byte lowercase hex>",
+    "relays": ["wss://relay.example.com"],
+    "addr_sig": "<64-byte lowercase hex>"
+  }
+}
+```
+
+`op_pubkey` is the kind-0 event author and **MUST NOT** be duplicated inside `zkcoins`. The `lud16` field is present only when the same identifier supports the optional Lightning bridge. The `zkcoins` object is optional for an ordinary Nostr account: its absence or invalidity makes zkCoins payment unavailable for that profile but **MUST NOT** disable NIP-17 messaging.
+
+For a profile, `addr_sig` uses the existing `invoice_message` with the profile-fixed values `amount = 0`, `asset_id` = the all-zero 32-byte value, and `memo` = empty; `recipient` is `zkcoins.address`, `op_pubkey` is the kind-0 author, and `pk0`, `nk_commit`, `ivpk`, and `relays` come from the `zkcoins` object. A sender **MUST** verify, in order: (i) `H(pk0 ‖ nk_commit) == address`; (ii) `addr_sig` under `pk0` over that profile-fixed `invoice_message`; and (iii) the kind-0 event signature under its author `op_pubkey`. It **MUST** additionally require `version = 1`, the expected `network`, lowercase-hex fields of the stated widths, and at least one valid relay URL. Failing any profile check disables payment through that profile. Resolution by a raw `address` alone, with neither a valid `Invoice` nor a verified kind-0 `zkcoins` object, is not supported.
 
 Each published delivery event carries the per-coin `detect_tag` and `epk` as cleartext tags on the **outer** gift-wrap event (§4.2 step 4, [Foundations §1.3](#13-per-coin-keys-note-encryption--detection)) so the recipient can locate it by scan rather than by trial-decrypting every event.
 
@@ -1582,21 +1607,68 @@ Bounds: `seed_relay_count ≥ 1`, `blob_store_count ≥ 1`, `operator_id_count �
 
 **Privacy (MUST — bootstrap / locator boundary).** **Only** the global, account-independent bootstrap seeds (and the operator/endpoint gossip above) are public. The protocol defines **no** deterministic public recovery identifier and **no** account- or blob-specific public holder gossip (either would be a stable recipient tag or a `blob_id ↔ operator` correlation). The account-specific **`BlobLocatorSet`** — **`holders` only** (ordered base URLs); the companion **`blob_id` always lives beside the set in context**, never inside it ([§7.1](#71-serialization-conventions-normative) `serialize(BlobLocatorSet)`) — lives **exclusively** in the **encrypted** interior of a `DeliveryEvent.payload` or a `SelfDeliveryRecordV1` blob ([§4.2](#42-bundle-delivery)) — never as a cleartext tag, public Nostr event field, or gossipable holder record. An optional **recovery manifest** (an encrypted hint listing account-local blob locators for seed recovery) **MAY** be published only as a **p-tag-less**, freshly gift-wrapped kind-1059 event with **no** stable public identifier and **no** deterministic `d` tag; recovery of that material runs through the [§4.5](#45-recovery) privacy-preserving full scan (K-B11), never through a public lookup key. Disclosure-link holder locators appear **only** in the opt-in URL **fragment** of [§5.6](#56-shareable-confirmation-links) (`;h=<locator>`), never as a public directory entry.
 
-#### End-user addressing — `user@domain` handles
+#### End-user identity — NIP-05 `user@domain`
 
-The protocol identity is `address = H(Pk₀ ‖ nk_commit)` (a Bech32m `zk1…` string), and the deliverable target is the signed `Invoice`/profile above. That raw form is correct but is **not** what an end user sees: the end-user app presents the receive identity as a **handle** `<user>@<domain>` — email-style, in the manner of a Lightning Address — and **never** a raw `zk1…`/`0x…` string and **never** a bare `lnurl1…` string.
+Every zkCoins user has one canonical email-style **NIP-05 identifier** `<user>@<domain>`, such as `alice@example.com`. It identifies the account's existing Nostr `op_pubkey`; it is not a new zkCoins identifier and does not imply that an SMTP mailbox or Lightning bridge exists.
 
-**Handle syntax.** Handle inputs are lowercased before validation and comparison, so `Alice@Example.com` normalises to `alice@example.com`. The canonical form — stored, displayed, resolved — is lowercase: the local part `<user>` is `a-z0-9-_.`, `<domain>` is a DNS hostname. The local part **MUST NOT** be empty, **MUST NOT** begin or end with `.`, and **MUST NOT** contain consecutive dots — otherwise a `.`/`..` segment would RFC-3986-normalise the resolution URL out of the `/.well-known/zkcoins/` path; the constraint stays LUD-16-compatible. The syntax is deliberately LUD-16-compatible (see *One handle for Lightning and zkCoins* below).
+**Identifier syntax.** Inputs are lowercased before validation and comparison, so `Alice@Example.com` normalises to `alice@example.com`. The canonical form — stored, displayed, and resolved — is lowercase. The local name uses only `a-z0-9-_.`, is non-empty, does not begin or end with `.`, and contains no consecutive dots; the domain is a DNS hostname. This is valid NIP-05 syntax and remains compatible with LUD-16.
 
-**Resolution.** `<user>@<domain>` resolves to `https://<domain>/.well-known/zkcoins/<user>` by an HTTPS `GET`. The response body is either the recipient's `addr_sig`-signed `Invoice` ([Foundations §1.5](#15-core-data-structures)), or the recipient's **complete signed kind-30420 profile event** — the Nostr event JSON including `pubkey`, `sig`, and the `d` tag ([§7.3](#73-nostr-event-kinds-normative)) — carrying the profile-fixed values (`amount = 0`, the all-zero `asset_id`, empty `memo`) exactly as defined above in §4.3. Both forms are JSON ([§7.1](#71-serialization-conventions-normative)), discriminated by shape: a body that is a Nostr event with `kind = 30420` is the profile event; any other body is an `Invoice` object carrying exactly the §4.3 `Invoice` fields under the [§7.3](#73-nostr-event-kinds-normative) content conventions — addresses Bech32m, keys and signatures lowercase hex per §7.1, `amount` as a decimal string (the kind-30421 convention), `relays` as a string array, `memo` omitted when absent. The sender then **MUST** run the same three-check verification of §4.3 — `H(pk0 ‖ nk_commit) == recipient`, `addr_sig` under `pk0`, and `sig` under `op_pubkey` for an `Invoice`; when a profile event is returned, check (iii) is satisfied per the profile adaptation defined above, the kind-30420 event signature under `op_pubkey` — before encrypting anything, and proceeds with delivery (§4.2) and real-time push (§4.9). Registering a handle is the existing **optional aliasing role** of the API layer ([§6.1](#61-components-and-responsibilities)); a sovereign node without that role hands out the raw `Invoice`/profile directly, or the user fronts their **own** domain — the handle is an opt-in convenience, not part of the trustless core.
+**First discovery through NIP-05.** When the identifier is not known locally, the client performs the standard NIP-05 request (redirects **MUST NOT** be followed):
 
-**Trust is unchanged.** The handle is a resolution/UX layer only; the trust anchor remains the `addr_sig` binding (§4.3). A malicious or lying resolver can at most refuse, or return an `Invoice` whose `addr_sig` the sender **rejects**. Because `addr_sig` binds the delivered tuple to the delivered `address` and the sender encrypts only to an `addr_sig`-verified `ivpk`, a resolver can **never** tamper with a resolved `Invoice` or redirect funds addressed to a known `address`; the handle → `address` mapping itself is protected by *Handle pinning* below. Resolving a handle discloses the handle → `Invoice` mapping to the serving domain, the same disclosure as publishing a profile.
+```text
+GET https://<domain>/.well-known/nostr.json?name=<user>
+```
 
-**Handle pinning.** On the **first** successful resolution the client **MUST** pin the mapping `<user>@<domain>` → `{address, op_pubkey, relays}` (trust-on-first-use). If a later resolution of the same handle yields a **different** `address` or `op_pubkey`, the client **MUST** warn the user and **MUST NOT** proceed silently; the pinned `address` and `op_pubkey` change only on explicit user confirmation. The client **SHOULD** cross-check every subsequent resolution against the recipient's kind-30420 profile fetched from the **pinned** relay set (`#d = <pinned address>`, [§7.3](#73-nostr-event-kinds-normative)): the cross-check passes when that event verifies under the **pinned** `op_pubkey`, passes the three checks of §4.3, and its `{pk0, nk_commit, ivpk, op_pubkey, relays}` fields match the same fields of the HTTPS response (`addr_sig` is not compared — its preimage differs between an `Invoice` and the profile-fixed event) — for an established handle, the serving HTTPS domain and the pinned Nostr relay set then have to agree, and the domain alone can no longer silently re-map the handle. After a passing cross-check the client updates the pinned `relays` from the verified event, so a legitimate `op`-signed relay migration flows through; if the pinned relay set returns no matching event, the client **MUST** warn the user and **MUST NOT** silently accept the resolution. The first resolution remains trust-on-first-use.
+The response maps `<user>` to a lowercase-hex Nostr public key and, for a zkCoins identity, **MUST** include at least one relay hint for that public key:
 
-**Portability.** The handle appears in **no** value-bearing structure; funds live on the `address`. Loss of the domain (or of the aliasing operator) loses **reachability**, never funds — the same `address` can be re-fronted by a new handle at any time.
+```json
+{
+  "names": {
+    "alice": "<32-byte lowercase op_pubkey hex>"
+  },
+  "relays": {
+    "<32-byte lowercase op_pubkey hex>": ["wss://relay.example.com"]
+  }
+}
+```
 
-**One handle for Lightning and zkCoins.** The handle syntax is LUD-16-compatible precisely so one handle **MAY** serve **both rails from the same QR code**: a Lightning wallet resolves `https://<domain>/.well-known/lnurlp/<user>` per LNURL-pay (LUD-16), a zkCoins wallet resolves `https://<domain>/.well-known/zkcoins/<user>` as above. One handle, one QR, two rails; the wallet selects the rail — a standard LNURL-pay response for Lightning, the `addr_sig`-signed `Invoice` or kind-30420 profile event for zkCoins. QR codes encode the **handle**, never a raw `zk1…` string, so a user shares **one** receive identity and can be paid on either rail. The two resolutions are independent; the zkCoins resolution defined here stands on its own.
+The client fetches the latest valid kind-0 event authored by that public key from the returned relay hints, verifies the Nostr event signature, and requires its `nip05` field to equal the normalized identifier. It also fetches the user's latest valid kind-10050 DM relay list. A valid kind-10050 event with at least one `relay` tag is the standard indication that the identity is ready for NIP-17 messaging; no zkCoins-specific capability marker is consulted. The client then constructs the NIP-19 `nprofile` from `op_pubkey` and the NIP-05 relay hints and retains the contact information below.
+
+**Known-contact storage and DNS-resistant resolution.** After a successful first discovery the node/client **MUST** retain, at minimum:
+
+- the normalized NIP-05 identifier;
+- `op_pubkey`;
+- the NIP-19 `nprofile`, including its relay hints;
+- the last known valid kind-10050 DM relays;
+- the last valid, three-check-verified kind-0 `zkcoins` object, when present.
+
+Resolution is therefore exactly:
+
+```text
+if an nprofile for the identifier is known locally:
+    use its stored op_pubkey and relay hints directly
+    do not call DNS or NIP-05
+else:
+    resolve the identifier through NIP-05
+    fetch and verify kind 0 and kind 10050
+    retain op_pubkey, nprofile, relay hints, DM relays, and any valid zkcoins object
+    continue through Nostr
+```
+
+For a known recipient, normal messaging and zkCoins profile discovery **MUST NOT** make a DNS or NIP-05 request. The client may fetch newer kind-0 and kind-10050 events directly through the stored relay hints and accepts updates only when their signatures verify under the already-pinned `op_pubkey`. Updated kind-10050 tags replace the stored DM relay list; updated, valid `zkcoins.relays` replace the stored zkCoins delivery relay list. A DNS answer, if obtained during an explicit user-requested revalidation, **MUST NOT** silently replace a pinned public key; changing the key requires a warning and explicit user confirmation.
+
+A directly supplied valid `nprofile` can be used and retained without DNS. Until a matching NIP-05 identity has separately been established, it identifies the contact by public key rather than proving an email-style identifier.
+
+**DNS outage behavior.** During a DNS outage, known contacts remain reachable through the stored `nprofile` and kind-10050 relays, and their last verified `zkcoins` object remains usable for native zkCoins delivery. An unknown email-style identifier cannot be discovered until NIP-05 is reachable, unless the user supplies an `nprofile` directly. Lightning Address/LNURL resolution may be unavailable; that does not affect NIP-17 messaging to known contacts.
+
+**Trust and portability.** NIP-05 first discovery is a name-to-key binding and is pinned on first successful use. The `addr_sig` separately binds the discovered Nostr key and zkCoins delivery fields to the payment address through the three checks above. The NIP-05 identifier appears in no value-bearing structure: funds remain on `address`, and loss of a domain can impair discovery but cannot spend or destroy funds. A known contact continues to work from its pinned Nostr identity even when that domain is unavailable.
+
+**One identifier, independent optional bridges.** The NIP-05 identifier and NIP-17 messaging are mandatory. The same identifier may independently support either, both, or neither optional bridge:
+
+- Lightning/LNURL: kind-0 includes `"lud16": "alice@example.com"` and the domain serves `https://example.com/.well-known/lnurlp/alice`;
+- SMTP/email: the domain accepts ordinary email for `alice@example.com`.
+
+Disabling either bridge **MUST NOT** disable NIP-05 identity, NIP-17 messaging, or native zkCoins delivery. A receive QR may encode the shared identifier; it never needs to expose a raw `zk1…` address or bare `lnurl1…` value.
 
 ### 4.4 Note discovery
 
@@ -1683,6 +1755,8 @@ Custody safety **MUST NOT** depend on availability. Losing availability impairs 
 ### 4.7 Metadata and privacy tradeoffs
 
 - **What a relay learns.** That a zkCoins delivery event was stored at some time — the outer event carries the two per-coin cleartext scan tags `zkdt`/`zkepk` (§4.2 step 4), which are fresh and random-looking per coin, so the relay learns *that* an event is a zkCoins delivery (and its timing/volume) but **not** the sender, recipient, amount, asset, proof, or any link between two events (§4.1–§4.2). The tags identify no party and correlate no coins; the residual exposure is that the protocol itself is recognisable on the wire, not the parties or contents.
+- **Human-message metadata differs.** Standard NIP-17 routing uses the recipient's `op_pubkey` in the outer kind-1059 `p` tag. Message content and sender identity remain sealed, but a DM relay can see which Nostr key receives the gift wrap, plus timing and volume. The payment path's per-coin `zkdt`/`zkepk` privacy claim therefore **MUST NOT** be applied to human messages.
+- **NIP-05 discovery uses DNS and HTTPS once.** First discovery exposes the queried identifier to its domain and depends on DNS. Once the `op_pubkey`, `nprofile`, and relay lists are retained, ordinary communication with that known contact makes no DNS/NIP-05 request (§4.3).
 - **Detection scan vs. linkability.** Per-coin `detect_tag`s are all-distinct (fresh `epk` per coin, §4.4), so a relay cannot link or filter for the recipient. The genuine residual cost is **bandwidth**: detection runs recipient-side over the candidate set. The future-version (not in v1) fuzzy-message-detection upgrade reduces that bandwidth.
 - **Blob-fetch pattern.** A relay or Blossom store observes which `blob_id`s one client session fetches; since a blob is fetched only on a `detect_tag` match (§4.4), this groups several of one recipient's deliveries by network session — a correlation the per-coin tags themselves do not create. Mitigations: fetch over the operator's own store (the sovereign default), fetch through Tor, or batch/decoy fetches; the metadata never reveals amounts, parties, or contents (the blob stays encrypted; blob **size** is the one residual content signal, [§4.2.1](#421-bundle-blob-encryption-zbe-normative)).
 - **Network presence.** Operating a relay exposes the operator's network address (IP) to peers. Operators that require location privacy **SHOULD** run the relay behind an anonymity network (e.g. a Tor hidden service).
@@ -2157,9 +2231,9 @@ flowchart TB
 
 | Layer | What runs there | Repo | Role / trust |
 |---|---|---|---|
-| **App · Explorer** | end-user wallet UI (handle receive §4.3, push receipts §4.9) · public explorer web-app | `zk-coins/app` · `zk-coins/explorer` | presentation; the app holds keys on-device, the explorer holds none |
+| **App · Explorer** | end-user wallet UI (NIP-05 receive identity §4.3, push receipts §4.9) · public explorer web-app | `zk-coins/app` · `zk-coins/explorer` | presentation; the app holds keys on-device, the explorer holds none |
 | **SDK** | thin client — on-device client-side primitives (key derivation, hashing, signing), node/API calls | `zk-coins/sdk` | custody stays on the device; REST + stream client |
-| **zkCoins API** (+ own PostgreSQL) | public REST and handle aliasing; hosted-wallet service | the API-layer repo | **optional**, off by default; owns a **non-value-bearing** database |
+| **zkCoins API** (+ own PostgreSQL) | public REST and optional operator-hosted NIP-05 names; hosted-wallet service | the API-layer repo | **optional**, off by default; owns a **non-value-bearing** database |
 | **zkCoins node** (+ PostgreSQL + Publisher) | the trustless **kernel**: scan · accumulator · verify · prove · store · publisher/broadcaster | `zk-coins/node` | the trustless core; owns the **value-bearing** database (§4.8) |
 | **bitcoind · Nostr relay** | Bitcoin L1 settlement and ordering · off-chain transport and data availability | upstream (own or external) | inherits Bitcoin's trust; transport trusted only for availability (§4.1) |
 | **Docker · OS · Hardware** | container runtime, host operating system, physical machine | — | the operational substrate the operator provides |
@@ -2172,17 +2246,17 @@ The node is the always-on workhorse. It **MUST** be runnable as a single self-co
 
 - **Bitcoin scanner.** Reads Bitcoin L1, extracts inscribed nullifiers (marker `0x42 0x42`, Foundations §1.4), verifies each nullifier's signature over the per-network fixed constant `m_state` for the network the scanner operates on, and folds each fresh `Pkᵢ` into the global nullifier accumulator by **first-occurrence** (Foundations §1.6). The accumulator is a **pure function of the on-chain nullifiers** — rebuilt from Bitcoin alone, with no off-chain data-availability dependency. See [On-chain Layer](#3--on-chain-layer).
 - **Prover** (optional — see *Node roles* below). Builds the per-account recursive validity proofs for transactions it is asked to construct. A node that *also* acts as a publisher additionally **half-aggregates** collected transition signatures (§3.3, no proof, no secret keys). See [Proofs & State Transitions](#2--proofs--state-transitions).
-- **Transport via a Nostr relay.** Serves and fetches the off-chain `CoinProof` bundles, performs `detect_tag` discovery for coin bundles, and carries gift-wrapped transport — through a paired Nostr relay that runs as its **own container** (the operator's own by default, or an external relay; [§6.6](#66-threat-model-and-trust-configurations)). See [Transport & Recovery](#4--transport--recovery).
+- **Transport and messaging via Nostr relays.** Serves and fetches the off-chain `CoinProof` bundles, performs `detect_tag` discovery for coin bundles, and sends/receives standard NIP-17 human messages using kind-10050 DM relays — through the operator's paired relay and the relays advertised by contacts ([§6.6](#66-threat-model-and-trust-configurations)). See [Transport & Recovery](#4--transport--recovery).
 - **Data store.** Durably persists **every** value-bearing and accumulator artefact it receives — the *store-everything* invariant ([§4.8](#48-durability--the-store-everything-invariant)) — plus rebuilt tree state; provides the operator's own backup ([Requirement 6](/requirements)).
 - **Capability-gated API.** Answers reads only against a valid ownership proof or view grant, and accepts transaction submissions. See [Access & Explorer](#5--access--explorer) and §6.4 below.
 
-**Keys it holds.** For accounts that delegate to it, the node holds the **operational bundle** `{ivk, ovk, op, nk, op_secret}` (Foundations §1.2): `ivk` to detect and decrypt incoming coins, `ovk` to recover outgoing-coin plaintext, `op` to act as the account's Nostr identity and to sign view grants and acknowledgements, and `nk` to derive nullifiers when building proving witnesses ([§2.1 clause 4](#21-the-compliance-predicate)). For a *foreign* account it holds only an `op`-signed **view grant**, never the bundle directly.
+**Keys it holds.** For accounts that delegate to it, the node holds the **operational bundle** `{ivk, ovk, op, nk, op_secret}` (Foundations §1.2): `ivk` to detect and decrypt incoming coins, `ovk` to recover outgoing-coin plaintext, `op` to act as the account's standard Nostr identity, encrypt/decrypt NIP-17 messages, and sign kind-0 metadata, kind-10050 relay lists, NIP-59 seals, view grants, and acknowledgements, and `nk` to derive nullifiers when building proving witnesses ([§2.1 clause 4](#21-the-compliance-predicate)). For a *foreign* account it holds only an `op`-signed **view grant**, never the bundle directly.
 
 **What it cannot do.** A node **MUST NOT** be able to spend, forge, or double-spend: it never holds any SPEND-branch key (the rotating `skᵢ`), and value integrity is enforced by proof soundness and the nullifier accumulator, not by the node's honesty. `nk` (held for the node's own accounts only) enables nullifier derivation and therefore linkage of *that account's own* spends — a privacy consideration internal to the operator, never spend authority. A foreign node **MAY** lie or withhold data, but it cannot make the account's own node accept an unverifiable answer (§6.3).
 
 #### Node roles — core vs optional
 
-The node is **one program**, but not every operator runs all of it. A small **core** is mandatory for any node that is to be trustless at all; several **operator roles** are optional and **off by default**. The **kernel roles** among these (scanner · accumulator · verification · state store, prover, publisher) are roles *within* the single node component above — not separate components, and not separate programs: they share the whole [Foundations](#1--foundations-normative) layer (identifiers, proof system, accumulator), so they ship in **one codebase** and are selected per deployment by **configuration**, never by running a different binary. The **public wallet API** (and the aliasing/handle conveniences) splits along the kernel/API seam (see *Kernel and API — two boundaries* below): its kernel share — hosted proving and submission — is such a configured role of the node program, while its public REST front is the optional **API layer**, a separate component with its own repository and container. A node **MUST** advertise which optional roles it offers so a client can adapt and treat an unadvertised role as absent (fail-closed). The SPEND branch is never any of these roles (Foundations §1.2). **Wire advertisement (normative):** `GET /v1/info` and the kernel `Info` message ([§7.5](#75-node-rest-api-normative), [§7.8](#78-kernel-rpc--the-internal-interface-normative)) carry a `roles` array whose elements are drawn from the **closed** set `{core, local_prover, hosted_wallet_api, publisher, aliasing}` — mapping the table below (`core` = the always-on scanner/accumulator/verify/store + own-wallet submit/read surface; `local_prover` = prover for the operator's own transitions; `hosted_wallet_api` = public wallet API for hosted accounts; `publisher` = half-aggregate publisher; `aliasing` = `user@domain` handle conveniences). Lightning/mail bridges remain out-of-band extensions and are **not** members of this closed set. Unknown values **MUST** be ignored on read; absence of an optional role means that role is **off**.
+The node is **one program**, but not every operator runs all of it. A small **core** is mandatory for any node that is to be trustless at all; several **operator roles** are optional and **off by default**. The **kernel roles** among these (scanner · accumulator · verification · state store, prover, publisher) are roles *within* the single node component above — not separate components, and not separate programs: they share the whole [Foundations](#1--foundations-normative) layer (identifiers, proof system, accumulator), so they ship in **one codebase** and are selected per deployment by **configuration**, never by running a different binary. Standard NIP-05 resolution, known-contact pinning, and NIP-17 messaging are core client/node behavior. Hosting NIP-05 names for users is a separable API-layer convenience: every user still has a mandatory NIP-05 identity, but its domain may be self-hosted or supplied by any NIP-05 provider. The **public wallet API** and optional operator-hosted NIP-05 service split along the kernel/API seam (see *Kernel and API — two boundaries* below): its kernel share — hosted proving and submission — is such a configured role of the node program, while its public REST front is the optional **API layer**, a separate component with its own repository and container. A node **MUST** advertise which optional roles it offers so a client can adapt and treat an unadvertised role as absent (fail-closed). The SPEND branch is never any of these roles (Foundations §1.2). **Wire advertisement (normative):** `GET /v1/info` and the kernel `Info` message ([§7.5](#75-node-rest-api-normative), [§7.8](#78-kernel-rpc--the-internal-interface-normative)) carry a `roles` array whose elements are drawn from the **closed** set `{core, local_prover, hosted_wallet_api, publisher, aliasing}` — mapping the table below (`core` includes standard messaging; `local_prover` = prover for the operator's own transitions; `hosted_wallet_api` = public wallet API for hosted accounts; `publisher` = half-aggregate publisher; `aliasing` = operator-hosted NIP-05 names). Lightning/mail bridges remain independent out-of-band extensions and are **not** members of this closed set. Unknown values **MUST** be ignored on read; absence of an optional role means that role is **off**.
 
 | Role | Core or optional | Default |
 |---|---|---|
@@ -2191,13 +2265,13 @@ The node is **one program**, but not every operator runs all of it. A small **co
 | **Prover** for the operator's **own** transitions | **Core** *if* the operator proves locally | on / off |
 | **Public wallet API** — proving and submission on behalf of **hosted** accounts (the multi-tenant service a public provider runs) | optional operator role | **off** |
 | **Publisher** — half-aggregate collected transition nullifiers and inscribe them ([§3.4](#34-the-publisher)) | optional operator role | **off** |
-| Aliasing / `user@domain` handles and similar wallet-app conveniences | application features, not core | **off** |
+| Operator-hosted NIP-05 names for users (the `aliasing` advertisement; users may instead supply another NIP-05 identity) | application hosting feature, not core identity/messaging behavior | **off** |
 | Lightning bridge — Lightning ⇄ zkCoins swaps at the operator edge ([extension](/lightning-bridge)) | application features, not core | **off** |
 | Mail bridge — SMTP interop for handles ([extension](/mail-bridge)) | application features, not core | **off** |
 
 A few standard **deployment profiles** follow:
 
-- **Sovereign personal node** — core plus own-account proving; no public API, no publisher, no aliasing. This is the private default.
+- **Sovereign personal node** — core plus own-account proving and standard NIP-17 messaging; no public API, no publisher, and no operator-hosted NIP-05 service. The user supplies a self-hosted or third-party NIP-05 identity. This is the private default.
 - **Public service node** — adds the public wallet API and, optionally, the publisher. Proving for someone else means receiving that account's plaintext witness, so this is the role that carries the privacy trade-off for *its users* ([§6.6](#66-threat-model-and-trust-configurations)); being a public wallet API is **opt-in**, never forced on a node operator.
 - **Validating-only node** — core verification and accumulator, no local prover, no publisher: it follows and checks the chain without producing anything.
 - **Explorer** — not a node profile at all, but a separate stateless **frontend** (its own repository and its own container; see *Running a node* below) that only reads a node's public endpoints; it offers no publisher and no wallet API.
@@ -2212,7 +2286,7 @@ The optional roles split from the core along **one clean seam**, which fixes whe
 This seam answers three placement questions normatively:
 
 - **The broadcaster (publisher) is a kernel role**, never an API role. It needs the accumulator state, the proving stack, and `bitcoind` — all kernel-side. The API layer **MUST NOT** touch Bitcoin; it only **forwards** submitted nullifiers down the kernel RPC, and the kernel's publisher/broadcaster role ([§3.4](#34-the-publisher)) half-aggregates them and inscribes via `bitcoind`. The **prover** is kernel-side for the same reason (it needs accumulator state); the API forwards transition intents and wallet signatures ([§7.8](#78-kernel-rpc--the-internal-interface-normative)), it never proves itself.
-- **Two databases, two owners.** The kernel is the **sole writer and reader** of the **value-bearing / accumulator** PostgreSQL — the store-everything database ([§4.8](#48-durability--the-store-everything-invariant)). The API layer **MUST NOT** read or write it directly; it obtains and submits all zkCoins state through the kernel RPC. Purely operational API state — handle/aliasing mappings (`user@domain` claims), rate-limit counters, API keys, push-subscription registrations — is **not** value-bearing (losing it loses a convenience, never funds, since address and keys are seed-derivable) and lives in a **separate** database owned by the API layer (its own PostgreSQL in a public-service deployment). Neither owner touches the other's store. A **sovereign personal node** that runs no public API has **only** the kernel database.
+- **Two databases, two owners.** The kernel is the **sole writer and reader** of the **value-bearing / accumulator** PostgreSQL — the store-everything database ([§4.8](#48-durability--the-store-everything-invariant)). The API layer **MUST NOT** read or write it directly; it obtains and submits all zkCoins state through the kernel RPC. Purely operational API state — operator-hosted NIP-05 name claims, rate-limit counters, API keys, push-subscription registrations — is **not** value-bearing (losing it loses a hosting convenience, never funds, since address and keys are seed-derivable) and lives in a **separate** database owned by the API layer (its own PostgreSQL in a public-service deployment). Neither owner touches the other's store. A **sovereign personal node** that runs no public API has **only** the kernel database.
 - **Packaging and deployment.** In the **sovereign personal** deployment the kernel serves the owner's own wallet directly — the five-container stack of *Running a node* below, with no separate API container; a **public-service** deployment adds the API-layer container and its own database on top of that stack. Kernel and API **MAY** ship as one repo/binary while the RPC is still maturing (an internal crate boundary) and split into separate repos once the contract stabilises; either way the boundary above holds.
 
 ```mermaid
@@ -2221,7 +2295,7 @@ flowchart TB
   expl["explorer"]
 
   subgraph apilayer["API layer — own repo/container · OPTIONAL"]
-    api["public REST API<br/>wallet API · handle aliasing"]
+    api["public REST API<br/>wallet API · optional NIP-05 hosting"]
     apidb[("postgresql<br/>API app state")]
   end
 
@@ -2292,7 +2366,7 @@ flowchart TB
 The five containers, each shipped and run independently:
 
 - **`bitcoind` — Bitcoin full node.** The source of truth for **reading** the chain (the scanner) and for **broadcasting** the publisher's Taproot reveal transactions. The operator's own `bitcoind` is the default and the only fully trustless option; the node **MAY** instead be configured against an **external** `bitcoind` (one the operator trusts, or a shared instance), trading some privacy and eclipse-resistance for operational simplicity ([§6.6](#66-threat-model-and-trust-configurations)).
-- **`nostr-relay` — transport.** A full Nostr relay that stores and serves the off-chain `CoinProof` bundles and carries gift-wrapped delivery ([Transport & Recovery](#4--transport--recovery)). It runs as its **own container**; the node connects to it over the relay protocol. The operator's own relay is the default; the node **MAY** additionally, or instead, use **external** relay(s).
+- **`nostr-relay` — transport.** A full Nostr relay that stores and serves the off-chain `CoinProof` bundles and carries gift-wrapped delivery plus standard NIP-17 messages ([Transport & Recovery](#4--transport--recovery)). It runs as its **own container**; the node connects to it over the relay protocol. The operator's own relay is the default for zkCoins bundle traffic; NIP-17 messages are published to each recipient's kind-10050 relays, which may be external.
 - **`zkcoins-node` — the core software.** Bitcoin scanner, prover, data store, and capability-gated API ([§6.4](#64-external-interfaces-abstract)). It is one self-contained container that connects out to `bitcoind` and `nostr-relay` and persists to PostgreSQL; it never holds a SPEND key.
 - **`postgresql` — node database.** Persists the rebuilt nullifier set and the off-chain bundles (the concrete backing of the data-store role). Its own container.
 - **`explorer` — stateless presentation.** The read surface ([Access & Explorer](#5--access--explorer)), its own container reading the node; it holds no keys. It is **optional** — a headless deployment **MAY** omit it.
@@ -2365,12 +2439,12 @@ The node exposes five interface families, specified here at an implementation-ne
 | **read.account** | wallet/node → node (pull) | an **ownership proof** (sign the challenge with `sk₀`) **or** an `op`-signed **view grant** | fetch `AccountState`, balances, owned coins, and their bundles — concrete: record locators via [§5.1](#51-capability-gated-pull) pull; the **authoritative** current `AccountState` (canonical bytes + `send_counter` / `current_pubkey` / last state-nullifier) via **ownership-gated** `GET /v1/account/state` ([§7.5](#75-node-rest-api-normative), [§7.8](#78-kernel-rpc--the-internal-interface-normative) `GetAccountState`) | [Access & Explorer](#5--access--explorer) · [§7.5](#75-node-rest-api-normative) |
 | **read.proof** | wallet → node (pull) | an **ownership proof** **or** an `op`-signed **view grant** (within its scope) | fetch a `CoinProof` and its `inclusion_proof` for re-verification | [Access & Explorer](#5--access--explorer) · [Proofs](#2--proofs--state-transitions) |
 | **submit.tx** | wallet → node (push) | none (proof is self-authenticating) | submit a transition for proving and on-chain publication | [On-chain Layer](#3--on-chain-layer) |
-| **relay.\*** | any ↔ node (Nostr) | NIP-44 / NIP-59 envelope; `detect_tag` for `CoinProof` discovery; Blossom `blob_id` for `CoinProof` blob fetch | publish/fetch off-chain `CoinProof` bundles, gift-wrapped delivery, note discovery, k-replication | [Transport & Recovery](#4--transport--recovery) |
+| **relay.\*** | any ↔ node (Nostr) | standard NIP-17 identity/message events; NIP-44 / NIP-59 envelope; `detect_tag` for `CoinProof` discovery; Blossom `blob_id` for `CoinProof` blob fetch | NIP-05/profile discovery, NIP-17 messaging, off-chain `CoinProof` delivery, note discovery, k-replication | [Transport & Recovery](#4--transport--recovery) |
 | **explorer.read** | explorer → mesh / node | a bearer view secret (`zkview` per coin, `zkavk` for full history) or a balance attestation, applied **client-side** | render a disclosed view: one transaction, full account history, or a balance | [Access & Explorer](#5--access--explorer) |
 
 The `read.account` path is **capability-gated**: a node **MUST** reject a request that does not present a valid ownership proof or `op`-signed view grant. Bearer view secrets (`zkview`/`zkavk`) and balance attestations are **not** node authorisations — the explorer applies them client-side to bundles obtained from the relay mesh or a holder, so `explorer.read` widens only what the secret-holder can decrypt from already-public material ([Access & Explorer §5.1](#51-capability-gated-pull)). The `submit.tx` path needs no capability because the submitted transition carries its own validity proof and self-authenticating `SpendRecord`; a node **MUST** verify that proof before publishing.
 
-**Core surface vs optional roles.** The families above are the node **core** surface — every node serves them, for the accounts it is responsible for. The optional operator roles ([§6.1](#61-components-and-responsibilities)) layer **on top** of the same surface rather than adding new wire protocols: the **public wallet API** is `read.account` + `submit.tx` (with proving) offered for **hosted** accounts (those that have delegated their operational bundle to this provider) instead of only the operator's own; the **publisher** consumes already-submitted transitions to half-aggregate and inscribe their nullifiers ([§3.4](#34-the-publisher)); application conveniences (aliasing / `user@domain` handles, the [Lightning bridge](/lightning-bridge), and the [mail bridge](/mail-bridge)) are additional, separately-gated endpoints **outside** this core set. A node advertises which optional surfaces it exposes so clients gate fail-closed ([§6.1](#61-components-and-responsibilities)) — concretely via the closed `roles` set on `GET /v1/info` / kernel `Info` (`{core, local_prover, hosted_wallet_api, publisher, aliasing}`, [§7.5](#75-node-rest-api-normative)).
+**Core surface vs optional roles.** The families above are the node **core** surface — every node serves them, for the accounts it is responsible for. This includes NIP-05 resolution/contact pinning and standard NIP-17 messaging; only hosting users' NIP-05 names is optional. The optional operator roles ([§6.1](#61-components-and-responsibilities)) layer **on top** of the same surface rather than adding new wire protocols: the **public wallet API** is `read.account` + `submit.tx` (with proving) offered for **hosted** accounts (those that have delegated their operational bundle to this provider) instead of only the operator's own; the **publisher** consumes already-submitted transitions to half-aggregate and inscribe their nullifiers ([§3.4](#34-the-publisher)); operator-hosted NIP-05 names (`aliasing`), the [Lightning bridge](/lightning-bridge), and the [mail bridge](/mail-bridge) are additional, independently gated services **outside** this core set. A node advertises which optional surfaces it exposes so clients gate fail-closed ([§6.1](#61-components-and-responsibilities)) — concretely via the closed `roles` set on `GET /v1/info` / kernel `Info` (`{core, local_prover, hosted_wallet_api, publisher, aliasing}`, [§7.5](#75-node-rest-api-normative)).
 
 ### 6.5 Issuance — token standards
 
@@ -2473,6 +2547,8 @@ Custody is **cryptographically safe in every configuration**: no node holds a SP
 - **Own wallet + multiple foreign nodes.** Plaintext is disclosed to all of them; the wallet gets fail-closed discrepancy detection (§6.3): with ≥1 honest node it never *accepts* a false answer, but any single dishonest node can stall it (it halts on disagreement), and consistent collusion of all configured nodes defeats it; custody safe. Running your own node removes this trade-off.
 - **Own wallet + a single foreign node.** Plaintext disclosed to it; you trust it for correctness and liveness (it can lie or omit — including, for a send, proposing outputs that redirect the payment or drop the change output entirely (burn), since the thin wallet cannot independently check `ocr` against the outputs it posted before signing, see below); it **cannot** forge a signature, double-spend, or spend without your key — custody (key theft) safe.
 
+**Nostr messaging follows `op` custody.** The component holding `op` can decrypt incoming NIP-17 messages and can sign outgoing messages as that Nostr identity. With an own node this is under the user's control; a hosted provider holding the operational bundle can read messages and impersonate the account on Nostr, although it still cannot spend zkCoins. Ordinary external NIP-17 correspondents never receive `op`; they interoperate through the public key and standard events alone. This is the existing operational-bundle trust boundary, not an additional bridge trust assumption.
+
 **Send-intent integrity is a correctness property, not custody.** "Cannot forge a signature, double-spend, or spend without your key" above is precise about **custody**: a node without the SPEND key can never produce a valid `txn_sig`, so it can never move a coin unilaterally, in every configuration. It does not mean every field a node proposes for the wallet's cooperative signature is independently checked by the wallet. For a send, the sole prover — in both the **own node** and **single foreign node** rows above — chooses the witness, including which `output_templates[]` (hence which `output_coins_root`) it builds the proof from, before the wallet ever sees it ([§7.5](#75-node-rest-api-normative)). Because the thin wallet runs no Poseidon (the thin-client rule), it cannot recompute `output_coins_root` from the templates it posted and so signs the node-reported `ocr` on trust that the node proved the templates it was given, not others ([§7.5](#75-node-rest-api-normative)). A dishonest or compromised single foreign node can therefore redirect a send's outputs to a party of its choosing, or drop an output — including the per-asset change coin — entirely (burn), within one cooperative signature — a correctness failure of the same kind this section already asks a foreign operator to be trusted for, not a break of the custody guarantee (no signature is forged, no coin moves without the wallet's key), but its effect on the sender is the same as theft. Self-hosting, or using only a node vetted for correctness and not merely liveness, is the only mitigation this design offers; see [Risks](/risks).
 
 **Node building blocks — own vs external.** Independently of the wallet↔node choice above, a node operator also chooses where its `bitcoind` and its `nostr-relay` come from ([§6.1](#61-components-and-responsibilities)). Running both yourself is the sovereign default. Pointing the node at an **external `bitcoind`** trades privacy (that node sees your chain queries) and raises eclipse exposure (the inherited assumption below), but **cannot** affect custody or correctness beyond that eclipse exposure — the node still re-verifies every inscription, bundle, and proof against its Bitcoin chain view ([Requirement 4](/requirements) via §6.2), and an external `bitcoind` can distort only that chain view, which the inherited ≥1-honest-peer assumption bounds. Using **external relay(s)** for transport sits on the same spectrum as any foreign relay: trusted only for availability and metadata-minimisation, never for correctness or custody (§4.1). Both are deliberate trade-offs, not new trust roots.
@@ -2501,6 +2577,7 @@ How this architecture maps to the [Requirements](/requirements) at a glance:
 | **8 · Multi-asset** | `asset_id` plus the version-bound token standards — `IssuanceTerms_v1` (uncapped) and `IssuanceTerms_v2` (auditable capped supply, `cap_total`) — let anyone create their own asset; the creator is the sole minter (§6.5). |
 | **9 · Selective disclosure** | Three opt-in disclosure tiers, each verifiable against Bitcoin: a single transaction via a per-coin `K_tx` (§5.6), a history-private balance attestation (§5.7), and a full-history account view grant (§5.8); rendered by a self-hostable, stateless explorer (§6.1). |
 | **10 · Node portability** | No node-specific wallet state; switch and multi-node by configuration alone (§6.3). |
+| **11 · Standard identity and messaging** | Mandatory NIP-05 `user@domain` identity, signed kind-0 `zkcoins` object, standard NIP-17/kind-10050 messaging, and retained `nprofile` relay hints for DNS-free known contacts (§4.1, §4.3, §7.3); Lightning and SMTP bridges remain independent and optional. |
 
 *(This table is the architecture summary; the [Requirements traceability](#requirements-traceability) table at the top of this page is the canonical requirement→mechanism map.)*
 
@@ -2555,7 +2632,7 @@ Each **`output_ref`** is `coin_id (32B) ‖ blob_id (32B) ‖ epk (32B x-only) �
 | Plane | Carries | Mechanism | Section |
 |---|---|---|---|
 | **Bitcoin L1** | half-aggregated nullifier `(Pkⱼ, Rⱼ)` (~64 B/tx) | Taproot commit/reveal, witness-payload marker prefix `0x42 0x42` | [§3.5](#35-inscription-format) |
-| **Nostr relay** (WebSocket) | gift-wrapped delivery events, ACKs, recipient & publisher profiles | NIP-01 relay, NIP-44 v2, NIP-59 (§7.3) | [§4.2](#42-bundle-delivery) |
+| **Nostr relay** (WebSocket) | standard profiles and NIP-17 messages; gift-wrapped zkCoins delivery events, ACKs, and publisher profiles | NIP-01, NIP-05, NIP-17, NIP-44 v2, NIP-59 (§7.3) | [§4.1](#41-roles-and-transport)–[§4.3](#43-addressing-for-delivery) |
 | **Blossom** (HTTP) | encrypted `CoinProof` / `SelfDeliveryRecordV1` blobs; direct `ReplicaReceiptV1` upload responses | content-addressed blob store (§7.4) | [§4.6](#46-data-availability--replication-factor-k) |
 | **Node REST** (HTTPS/Tor) | submit, proving jobs, capability-gated pull, public chain projection | versioned `/v1/` API (§7.5) | [§5.1](#51-capability-gated-pull), [§6.4](#64-external-interfaces-abstract) |
 | **Kernel RPC** (internal) | proving · state reads · capability-gated pull · receipts · publish (server-to-server) | gRPC, private channel, `kernel.v1` (§7.8) | §7.8 |
@@ -2564,18 +2641,36 @@ A node deployment exposes the **four externally-visible planes** above ([§6.1](
 
 ### 7.3 Nostr event kinds (normative)
 
-zkCoins uses Nostr only as an authenticated, metadata-minimising transport ([§4.1](#41-roles-and-transport)). The relay sees only gift-wrapped (kind `1059`) events for private traffic — bearing nothing identifying beyond the two per-coin cleartext scan tags `zkdt`/`zkepk` of [§4.2 step 4](#42-bundle-delivery) — and the inner kinds below are visible only after a recipient unwraps. All zkCoins events that are not gift-wrapped (the two profile kinds) are signed by the publishing party's `op` key.
+zkCoins uses the account's `op` key as its ordinary Nostr identity ([§4.1](#41-roles-and-transport)). Standard kind-0 metadata, NIP-05 discovery, NIP-17 direct messages, and kind-10050 DM relay lists are mandatory for human identity and messaging. The separate zkCoins payment transport remains metadata-minimising: its outer kind-1059 delivery events reveal only the per-coin `zkdt`/`zkepk` scan tags of [§4.2 step 4](#42-bundle-delivery), and its inner kinds are visible only after the recipient unwraps.
 
 | Kind | Name | Class | Purpose |
 |---|---|---|---|
+| `0` | Nostr user metadata | replaceable | standard profile; mandatory `nip05`, optional `lud16`, and optional additive `zkcoins` object |
 | `1059` | NIP-59 gift wrap | regular | outer envelope (ephemeral key), as NIP-59 |
 | `13` | NIP-59 seal | regular | inner seal, as NIP-59 |
+| `14` | NIP-17 direct-message rumor | (rumor — unsigned, inside the seal) | human chat message, exactly as NIP-17 |
+| `10050` | NIP-17 DM relay list | replaceable | recipient's preferred relays for NIP-17 messages |
 | `1420` | zkCoins delivery rumor | (rumor — unsigned, inside the seal) | the `DeliveryEvent.payload` of [§4.2](#42-bundle-delivery) |
 | `1421` | zkCoins ACK rumor | (rumor — inside the seal) | the acknowledgement of [§4.2](#42-bundle-delivery) ACK rule |
-| `30420` | zkCoins recipient profile | addressable | the `{pk0, nk_commit, ivpk, op_pubkey, relays, addr_sig}` tuple of [§4.3](#43-addressing-for-delivery); `d` tag = Bech32m `address` |
 | `30421` | zkCoins publisher profile | addressable | the `{fee_address, fee_asset_id, fee, relays}` of [§3.8](#38-fees-and-economics), `op`-signed; `d` tag = hex `op_pubkey` |
 | `30422` | zkCoins operator endpoint | addressable | signed `OperatorEndpointV1` of [§4.3](#43-addressing-for-delivery) (global infrastructure only); `d` tag = hex `operator_id` |
 | `30423` | zkCoins bootstrap manifest | addressable | signed `BootstrapManifestV1` of [§4.3](#43-addressing-for-delivery); `d` tag = network tag |
+
+**User metadata (kind 0).** Every zkCoins account publishes a standard kind-0 event authored and signed by its `op` key. Its JSON `content` **MUST** contain the normalized NIP-05 identifier in `nip05` and the §4.3 `zkcoins` object; it **MAY** contain other standard Nostr metadata fields. An ordinary Nostr account that only exchanges messages does not need the `zkcoins` object. The object has exactly the fields `{version, network, address, pk0, nk_commit, ivpk, relays, addr_sig}`: `version` is the JSON number `1`; `network` is one of `mainnet`, `testnet`, or `regtest`; `address` is Bech32m; `pk0`, `nk_commit`, and `ivpk` are lowercase hex of exactly 32 bytes; `relays` is a non-empty JSON array of relay URL strings used for kinds 1420/1421; and `addr_sig` is lowercase hex of exactly 64 bytes. `op_pubkey` is the kind-0 author and is not duplicated in the object. `lud16` is emitted only when the optional Lightning bridge is enabled for the same identifier.
+
+A consumer verifies the latest kind-0 event and `zkcoins` object exactly as §4.3 specifies: valid event signature under the NIP-05-mapped author, matching `nip05`, expected network/version, `H(pk0 ‖ nk_commit) == address`, and `addr_sig` under `pk0` over the profile-fixed `invoice_message` with the event author as `op_pubkey`. An absent or invalid `zkcoins` object disables native zkCoins payment only. Ordinary Nostr users without that object remain fully valid NIP-17 correspondents.
+
+**Private direct messages (NIP-17).** Human one-to-one messages **MUST** follow NIP-17 without a zkCoins extension:
+
+1. The unsigned rumor is kind `14`; its `pubkey` is the sender's `op_pubkey`, its plaintext `content` is the message, and its `p` tag names the recipient's `op_pubkey`. Standard NIP-17 reply tags may be used.
+2. The sender NIP-44-v2-encrypts the rumor to the receiver and signs the resulting kind-13 seal with `op`. The seal and rumor public keys **MUST** match.
+3. The sender wraps the seal in a kind-1059 gift wrap under a fresh random wrapper key, with the receiver's public key in the outer `p` tag, as NIP-59 requires.
+4. The sender creates separate receiver and sender copies: one gift wrap addressed to the recipient and one addressed to the sender. Each copy is encrypted separately for that receiver.
+5. Each copy is published **only** to the relays in that receiver's latest valid kind-10050 event. If no valid kind-10050 event with at least one `relay` tag is known, that identity is not ready for NIP-17 and the client **MUST NOT** guess a relay or silently use another DM protocol.
+
+New human messages **MUST NOT** use kind `4` / NIP-04 and **MUST NOT** silently fall back to it. A client **MAY** read historical NIP-04 messages. Kinds `1420` and `1421` are restricted to zkCoins coin-bundle delivery and acknowledgements and **MUST NOT** carry chat text. No `zkcoins` profile object, custom endpoint, event kind, tag, or capability marker is required for an ordinary NIP-17 peer to send, receive, or reply.
+
+**DM relay list (kind 10050).** This standard replaceable event is signed by `op`, has empty `content`, and contains one or more `relay` tags with the relays on which the account receives NIP-17 gift wraps. A zkCoins account **MUST** publish and keep a valid kind-10050 event available through its NIP-05/profile relay hints. Senders use exactly these DM relays; the `zkcoins.relays` array is for payment delivery and does not replace kind 10050.
 
 **Delivery rumor (kind 1420).** Built per NIP-59: the rumor (unsigned event) has `kind = 1420` and `content` = the JSON of the [§4.2](#42-bundle-delivery) `DeliveryEvent.payload`. Field encoding (normative, **one** JSON mapping — no free URL list):
 - `blob_id` — lowercase-hex of the 32-byte content hash;
@@ -2586,8 +2681,6 @@ zkCoins uses Nostr only as an authenticated, metadata-minimising transport ([§4
 It is sealed (kind 13, NIP-44-encrypted to the recipient's `IVPK`) and gift-wrapped (kind 1059, fresh ephemeral key) so the relay learns neither party; the **outer** kind-1059 event carries **exactly** the two cleartext scan tags `["zkdt", <detect_tag hex>]` and `["zkepk", <epk hex>]` ([§4.2 step 4](#42-bundle-delivery)) and **MUST NOT** carry `blob_id`, holder URLs, `record_kind`, coin ids, or any `ReplicaReceiptV1` field in cleartext. The recipient finds candidates by the [§4.4](#44-note-discovery) scan: the relay cannot pre-filter, so the recipient pulls kind-1059 events and matches the outer tags with one ECDH and one Poseidon hash per event, unwrapping only matches.
 
 **ACK rumor (kind 1421).** `content` is exactly the JSON object `{detect_tag, blob_id, ack_nonce, op_sig}` with **four closed fields** and no others — `op_sig` lives **inside** this JSON content, never as a Nostr tag and never outside the rumor. All four values are **lowercase hex** of the underlying raw bytes (`detect_tag` 32 B, `blob_id` 32 B, `ack_nonce` 32 B, `op_sig` **exactly 64 B** / 128 hex chars). `op_sig` is the BIP-340 signature by the recipient's `op` over the fixed preimage `ack_message = H("zkCoins/v1/Ack" ‖ detect_tag ‖ blob_id ‖ ack_nonce)`, where `detect_tag`, `blob_id`, and `ack_nonce` enter as their **raw 32-byte** values (not their hex encodings) in that exact order ([§4.2](#42-bundle-delivery)). A decoder **MUST** reject missing/extra fields, non-lowercase-hex, wrong hex widths, or an `op_sig` that is not exactly 64 decoded bytes. Sealed and gift-wrapped back to the sender.
-
-**Recipient profile (kind 30420).** A replaceable addressable event. `content` is exactly the JSON object `{pk0, nk_commit, ivpk, op_pubkey, relays, addr_sig}` — **six closed fields**, no others — of the [§4.3](#43-addressing-for-delivery) profile tuple: `pk0`, `nk_commit`, `ivpk`, `op_pubkey`, and `addr_sig` as lowercase hex (32 / 32 / 32 / 32 / 64 bytes respectively), `relays` as a JSON array of UTF-8 URL strings (≥ 1). `addr_sig` is BIP-340 under `pk0` over the profile-fixed `invoice_message` (`amount = 0`, all-zero `asset_id`, empty `memo`, [§4.3](#43-addressing-for-delivery)). The event's `d` tag is the Bech32m `address`; the event `pubkey` **MUST** equal `op_pubkey` (hex), and the Nostr event signature **MUST** verify under that key (this is check (iii)). A sender resolving an `address` queries the recipient's known relays for `kind:30420` with `#d = <address>` and **MUST** verify, in order: (i) `H(pk0 ‖ nk_commit) == address` decoded from the `d` tag (so `nk_commit` is **required** on the wire — without it the address cannot be checked); (ii) `addr_sig` under `pk0` over the profile-fixed `invoice_message`; (iii) the kind-30420 event signature under `op_pubkey`. Strict JSON: unknown fields **MUST** be ignored on read by a tolerant consumer but a conforming producer emits exactly these six content fields; missing any of the six, wrong hex widths, empty `relays`, or a failed check **MUST** reject the profile. It is **not** gift-wrapped — it is intentionally public so any sender can discover it — but it discloses only what an `Invoice` would. Positive and negative profile vectors: [V.12](#v12-recipient-profile-kind-30420--wire-vectors).
 
 **Publisher profile (kind 30421).** A replaceable addressable event a publisher publishes so wallets can discover and rate it ([§3.8](#38-fees-and-economics) step 1); `content` = JSON `{fee_address, fee_asset_id, fee, relays}` (`fee` as a decimal string, `fee_address` Bech32m, keys hex per §7.1), signed by the publisher's `op` key over the whole content (so authenticating `op_pubkey` binds the advertised `fee_address` to the operator). A wallet authenticates it before sending a fee coin. The publisher's Bitcoin identity is just the reveal-transaction key ([§3.4](#34-the-publisher)) — there is **no** on-chain publisher protocol key.
 
@@ -2927,7 +3020,7 @@ A node MUST verify `chan_bind` and `chal` for these two endpoints exactly as [§
 
 **Transport.** The kernel RPC is **gRPC** over a versioned Protocol-Buffers contract (package `kernel.v1`), with generated clients for the kernel (Rust) and any API-layer language. It is reached over a **private, operator-internal** channel only — loopback, a private container network, or mTLS between the API and kernel containers — and is **never** exposed to the public internet; only the §7.5 REST surface is public. A breaking change is a new package version (`kernel.v2`), never a silent change to `kernel.v1` (mirroring the §7.5 `/v1/` rule). The contract is parameterised by the same network tag as the circuits (§2.5, [§1.7.9](#179-proof-system-parameters-normative)), so a client and kernel on different networks cannot interoperate.
 
-**Trust at this boundary.** The kernel RPC is a **trusted, server-to-server** channel *inside one operator's deployment*; it is deliberately **not** capability-gated the way §7.5 is. Public authorisation — ownership-proof challenges, `zkgrant` view grants, rate-limiting, idempotency, handle/aliasing — is the **API layer's** responsibility (§7.5, [§5.1](#51-capability-gated-pull)); the kernel trusts its caller for *access*, never for *correctness*. The custody and soundness invariants of [§6.1](#61-components-and-responsibilities) and [§6.6](#66-threat-model-and-trust-configurations) hold regardless of the caller: the kernel never holds a SPEND-branch key, never accepts a proof it has not verified, and is the **sole writer and reader** of the value-bearing store ([§4.8](#48-durability--the-store-everything-invariant)). A faulty or malicious API layer can refuse or lie to *its own users* — a liveness/privacy failure for them, identical to relying on a dishonest foreign node ([§6.6](#66-threat-model-and-trust-configurations)) — but **cannot** make the kernel forge, steal, or double-spend.
+**Trust at this boundary.** The kernel RPC is a **trusted, server-to-server** channel *inside one operator's deployment*; it is deliberately **not** capability-gated the way §7.5 is. Public authorisation — ownership-proof challenges, `zkgrant` view grants, rate-limiting, idempotency, and optional NIP-05 name hosting — is the **API layer's** responsibility (§7.5, [§5.1](#51-capability-gated-pull)); the kernel trusts its caller for *access*, never for *correctness*. The custody and soundness invariants of [§6.1](#61-components-and-responsibilities) and [§6.6](#66-threat-model-and-trust-configurations) hold regardless of the caller: the kernel never holds a SPEND-branch key, never accepts a proof it has not verified, and is the **sole writer and reader** of the value-bearing store ([§4.8](#48-durability--the-store-everything-invariant)). A faulty or malicious API layer can refuse or lie to *its own users* — a liveness/privacy failure for them, identical to relying on a dishonest foreign node ([§6.6](#66-threat-model-and-trust-configurations)) — but **cannot** make the kernel forge, steal, or double-spend.
 
 **Who enforces the capability gate.** The "a node **MUST** reject a request without a valid ownership proof or view grant" rule of [§5.1](#51-capability-gated-pull)/[§6.4](#64-external-interfaces-abstract) binds to whichever component **terminates the public endpoint** — the API layer in a split deployment, the node itself in the monolith. That component performs the §5.1 challenge–response, **including the `chan_bind` host/onion-key binding, which MUST be computed from the public host it authoritatively serves and MUST NOT be re-derived by the kernel from forwarded request metadata** (a forwarded `Host` header is attacker-influenceable, the §5.1 footgun). It then invokes the `OpenPullChallenge`/`Pull`/`GetRecord`/`GetCoinProof`/`GetAccountState` procedures only for an **already-authorised** caller (`GetAccountState` additionally requires an **ownership** session — a grant session is rejected as `unauthorized` upstream); the kernel's pull procedures release records to that caller and do not re-run the capability gate (in the monolith the same code path runs both).
 
@@ -3284,7 +3377,7 @@ An independent API layer **MUST** map each kernel error onto the §7.5 REST surf
 
 **Real-time receipts.** `SubscribeReceipts` is the gRPC server-stream the API layer relays to its public SSE/WebSocket channel ([§4.9](#49-real-time-push-delivery) steps 4–5). The request is `{ session, chan_bind }` — **not** `{ subject }` — matching `CoinProofRequest`: the kernel looks up the pull-session state (ownership **or** grant), checks `chan_bind` equality against the session record, and filters emitted events to that session's stored `subject` and resolved `scope`. Missing/invalid session credential is rejected by the API layer as `401 unauthorized`; unknown, expired, or `chan_bind`-mismatching session as `410 session_expired` ([§7.5](#75-node-rest-api-normative)) — the same `UNAUTHENTICATED` + `ErrorInfo.metadata.http_status` split as the per-procedure error table above. The kernel emits a receipt the instant it has verified and durably persisted ([§4.8](#48-durability--the-store-everything-invariant)) an in-scope incoming coin, so the push pipeline carries no trust the recipient does not re-derive.
 
-**Stores and transport planes.** The value-bearing store ([§4.8](#48-durability--the-store-everything-invariant)) and the Blossom blob store (§7.4) are owned by the kernel; the API layer reaches blobs through the kernel or the public `/blossom` path (§7.4), **never** by touching the kernel's database directly ([§6.1](#61-components-and-responsibilities)). The Nostr relay plane (§7.3) is the paired `nostr-relay` ([§4.1](#41-roles-and-transport)), driven by the kernel with the account's `op` key. Any API-layer-only state — handle/aliasing (`user@domain`), rate-limits, push-subscription registrations — lives in the API layer's **own** database ([§6.1](#61-components-and-responsibilities)), never in the kernel store.
+**Stores and transport planes.** The value-bearing store ([§4.8](#48-durability--the-store-everything-invariant)) and the Blossom blob store (§7.4) are owned by the kernel; the API layer reaches blobs through the kernel or the public `/blossom` path (§7.4), **never** by touching the kernel's database directly ([§6.1](#61-components-and-responsibilities)). The Nostr relay plane (§7.3) is driven by the kernel with the account's `op` key and includes both the paired `nostr-relay` for zkCoins transport and contacts' kind-10050 DM relays for NIP-17. The minimum known-contact state required by §4.3 is retained by the component that performs messaging. Any API-layer-only state — operator-hosted NIP-05 names, rate-limits, push-subscription registrations — lives in the API layer's **own** store ([§6.1](#61-components-and-responsibilities)), never in the kernel's value-bearing store.
 
 
 
@@ -3362,9 +3455,12 @@ A short, scannable reference for the jargon, notation, and identifier names used
 - **`nav_rand`** — `HKDF("zkCoins/v1/NavRand", op_secret ‖ u64-be(send_counter))`; the deterministic 256-bit randomness that makes `nav_commitment` hiding; reproducible by any holder of the operational bundle (so a fresh node rebuilds any prior opening) and MUST NOT be derived from `nav`. ([§1.4](#14-identifiers-and-hashes))
 - **`npk_commit`** — the sixth `ProofData` field, `H("zkCoins/v1/NpkCommit" ‖ next_pubkey ‖ npk_rand)` (SHA-256): a **hiding** commitment to the rotated `next_pubkey`, computed by the wallet so it can verify the node folded its own rotation key (§2.1 clause 2, §7.5 fail-closed); `npk_rand` is **32 unmodified CSPRNG / `getRandomValues` bytes** per attempt (fail-closed if unavailable; no scalar reduction, no HKDF), never reused (hygiene). Equal `npk_commit` / rotation-linkage from reused `npk_rand` arises only on **same-key retries** (same `next_pubkey`). ([§1.4](#14-identifiers-and-hashes), [§2.1](#21-the-compliance-predicate))
 - **`nf` (nullifier)** — `Hc("Nullifier", nk ‖ coin.identifier)`; **in-circuit bookkeeping only** — folded into `input_nullifiers_root`, never published; **no `nf` ever appears on Bitcoin** (the on-chain object is the account-state nullifier `(Pkᵢ, Rᵢ)`, [§3.1](#31-the-on-chain-object)); unlinkable to the coin without `nk`. ([§1.4](#14-identifiers-and-hashes))
-- **NIP-44 v2** — encrypted message format (ECDH-secp256k1 → HKDF-SHA-256 → ChaCha20 + HMAC-SHA-256); used for the delivery payload and acknowledgements. ([§1.1](#11-cryptographic-primitives), [§4.2](#42-bundle-delivery))
+- **NIP-05 identifier** — the mandatory normalized email-style account identity (`user@domain`) that maps through `/.well-known/nostr.json?name=user` to the account's `op_pubkey`; DNS is used only for a contact whose `nprofile` is not already known. ([§4.3](#43-addressing-for-delivery))
+- **NIP-17** — standard private direct messages: a kind-14 rumor, NIP-44-v2-encrypted inside a kind-13 seal and separately kind-1059-gift-wrapped to recipient and sender, published to each receiver's kind-10050 DM relays. Mandatory for human messaging; no NIP-04 fallback. ([§7.3](#73-nostr-event-kinds-normative))
+- **`nprofile`** — the NIP-19 profile identifier containing `op_pubkey` and relay hints retained after first NIP-05 discovery; known contacts are reached from it without DNS. ([§4.3](#43-addressing-for-delivery))
+- **NIP-44 v2** — encrypted message format (ECDH-secp256k1 → HKDF-SHA-256 → ChaCha20 + HMAC-SHA-256); used for zkCoins delivery controls, acknowledgements, and standard NIP-17 messages. ([§1.1](#11-cryptographic-primitives), [§4.2](#42-bundle-delivery), [§7.3](#73-nostr-event-kinds-normative))
 - **`NIP44Binary`** — labelled helper mapping binary protocol values onto NIP-44 v2's UTF-8 plaintext interface: `NIP44Binary(key, label, b) := NIP44_v2(key, UTF8("zkcoins-bin-v1:" ‖ label ‖ ":" ‖ base64url_no_pad(b)))`; stored fields are the UTF-8 of NIP-44's Base64 payload; open checks prefix, label, canonical base64url-no-pad, and expected length fail-closed. Call sites: `ciphertext` (`"coin"`, 112 B) and `out_ciphertext` (`"K_tx"`, 32 B). ([§1.3](#13-per-coin-keys-note-encryption--detection))
-- **NIP-59** — Nostr gift-wrap; outer envelope under a fresh ephemeral key so a relay sees neither sender nor recipient. ([§1.1](#11-cryptographic-primitives), [§4.2](#42-bundle-delivery))
+- **NIP-59** — Nostr seal and gift-wrap framing. zkCoins coin delivery uses fresh per-coin scan tags that identify neither party; standard NIP-17 gift wraps instead carry the receiver's `op_pubkey` in an outer `p` tag for routing. ([§4.2](#42-bundle-delivery), [§7.3](#73-nostr-event-kinds-normative))
 - **NISSHAC** — Non-Interactive Signature Half-Aggregation with Commitments: the *Shielded CSV* scheme that half-aggregates `n` BIP-340 signatures into `(R₁ … Rₙ, s_agg)` while each `Rᵢ` sign-to-contract-commits that transition's `H(ProofData)`; the source of the half-aggregate verification equation and the commitment-opening relation the on-chain nullifiers rely on. ([§1.7.10](#1710-half-aggregation-with-commitments-nisshac-normative), [§3.3](#33-half-aggregation))
 - **`nk`** — nullifier key (own hardened branch `A/3'`, account-level; part of the operational bundle held by the wallet **and** its own node); used only in-circuit to compute `nf`s — it cannot spend, but links the account's own spends, so it never goes to a foreign node. ([§1.2](#12-key-hierarchy))
 - **`op_secret`** — hardened `A/4'` secret in the operational bundle; keys the deterministic `nav_rand = HKDF("zkCoins/v1/NavRand", op_secret ‖ u64-be(send_counter))` derivation (§1.4); separate from `op` so the conditional-NAV randomness never shares key material with the Nostr signature; cannot spend. ([§1.2](#12-key-hierarchy))
@@ -3372,7 +3468,7 @@ A short, scannable reference for the jargon, notation, and identifier names used
 - **Nullifier-accumulator log / consistency proof** — the RFC-6962 append-only Merkle log and its inclusion/log-consistency proofs (§1.7.6, §3.7); the consistency `SUBPROOF` node-list is circuit-internal in v1 (not a public wire object).
 - **`ocr` (output_coins_root)** — Poseidon Merkle root over a transition's output `coin.identifier`s under tag `CoinsRoot`. ([§1.4](#14-identifiers-and-hashes), [§1.7.5](#175-poseidon-merkle-tree-used-for-ocr-and-inr))
 - **on-chain nullifier `(Pkᵢ, Rᵢ)`** — the **only** object zkCoins writes to Bitcoin: the account-state nullifier of one state-advancing transition — `Pkᵢ` the rotating `current_pubkey`, `Rᵢ` the sign-to-contract nonce committing `H(ProofData)`. A publisher half-aggregates many into one inscription; every node folds each `Pkᵢ` into the accumulator by first-occurrence. ~64 B/tx before aggregation. ([§1.4](#14-identifiers-and-hashes), [§3.1](#31-the-on-chain-object))
-- **`op`** — operational/Nostr identity key; held by the node; signs view grants and acknowledgements; cannot spend. ([§1.2](#12-key-hierarchy))
+- **`op`** — the account's operational and standard Nostr identity key; held by the node; signs kind-0 profiles, kind-10050 relay lists, NIP-17 seals, view grants, and acknowledgements and decrypts NIP-17 messages; cannot spend. ([§1.2](#12-key-hierarchy), [§6.6](#66-threat-model-and-trust-configurations))
 - **`out_ciphertext`** — per-outgoing-coin `NIP44Binary(K_out, "K_tx", K_tx)` with `K_out = HKDF("zkCoins/v1/OutKey", ovk ‖ epk)`; UTF-8 of the NIP-44 Base64 payload; carried in each `SelfDeliveryRecordV1.output_ref` so an `ovk` holder can recover outgoing plaintext. ([§1.3](#13-per-coin-keys-note-encryption--detection), [§4.2](#42-bundle-delivery))
 - **`ovk`** — outgoing viewing key (VIEW branch); recovers outgoing-coin plaintext via the per-coin `out_ciphertext`; cannot spend. ([§1.2](#12-key-hierarchy), [§1.3](#13-per-coin-keys-note-encryption--detection))
 - **Ownership proof** — a BIP-340 signature by `sk₀` over a node-issued challenge; grants the subject's full Private view. ([§5.1(a)](#a-ownership-proof))
@@ -3412,7 +3508,7 @@ A short, scannable reference for the jargon, notation, and identifier names used
 ### See also
 
 - [Contents](#contents) — the order to read the spec sections in.
-- [Requirements](/requirements) — the ten non-negotiable properties this glossary's identifiers exist to satisfy.
+- [Requirements](/requirements) — the eleven non-negotiable properties this glossary's identifiers exist to satisfy.
 - [Test vectors](#test-vectors-conformance-harness) — worked-example values for the identifiers above.
 
 
@@ -3616,7 +3712,7 @@ Until V.4 is filled in by a reference implementation, no `<REGEN>` row should be
 | V.8 synthetic signing fixture | MUST recompute & produce | MUST recompute & reproduce | **byte-equal** after recompute against fixture `m_state = "zkCoins/v1/StateUpdate/testnet"` (nonce rule deterministic; all signature/aggregate rows are **pinned for testnet** in V.8) |
 | V.11 nullifier-accumulator log vectors (`nflog_empty`, hand-listed smoke set over the pinned sample-leaf sequence for small `n ≤ 9`, **and** the **generated log-boundary suite** for every `k = 0…63` as symbolic subtree-root fixtures) | MUST produce | MUST reproduce | **hand-listed:** **byte-equal** once `<REGEN>` filled; **boundary suite:** Accept\|Reject on split/peak-bagging with given O(log n) subtree roots (`<REGEN>` Poseidon nodes) — **no** Θ(n) materialisation. Structure / sizes / Accept\|Reject normative before fill. Feeds the D-05 release gate ([§1.7.8](#178-reference-instantiation-status-final-for-v1)) |
 | V.10 note-encryption fixture (keys + `NIP44Binary` envelope preimages) | MUST reproduce | MUST reproduce | **byte-equal** on keys/`out_plain`; NIP-44 AEAD via NIP-44 vectors; envelope negatives reject |
-| V.12 recipient profile kind 30420 | MUST produce/accept positive; MUST reject negatives | MUST produce/accept positive; MUST reject negatives | wire + three-check rule |
+| V.12 kind-0 `zkcoins` profile + NIP-17 interoperability | MUST produce/accept profile positive, reject negatives, and pass bidirectional NIP-17 client tests | MUST reproduce profile checks and participate in the client tests within its scope | three-check profile rule + live interop |
 | V.9 negative controls | MUST reject every case | MUST reject every case within its scope (signing/encoding cases) | each case rejects with the named reason |
 
 ### V.8 Signing & half-aggregation fixture (synthetic, fully pinned)
@@ -3795,31 +3891,52 @@ Conformance vectors for the [§1.7.6](#176-nullifier-accumulator-append-only-mer
 
 **Acceptance (V.11).** Pass iff: (i) every hand-listed positive vector matches once `<REGEN>` is filled; (ii) the generated log-boundary suite covers every in-scope `(k, n)` / inclusion / adjacent consistency case above, Accepts every honest fixture-fed witness, and never requires Θ(n) leaf materialisation for high `k`; (iii) every NL-1–NL-7 and every NL-B1–NL-B2 case Rejects; (iv) node and SDK agree on Accept/Reject (and on filled hand-listed `<REGEN>` paths) per the V.7 parity matrix. This acceptance is the executable form of the [§1.7.8](#178-reference-instantiation-status-final-for-v1) freeze differential-test and the D-05 release gate.
 
-### V.12 Recipient profile (kind 30420) — wire vectors
+### V.12 Kind-0 zkCoins profile and NIP-17 interoperability
 
-Conformance vectors for the [§7.3](#73-nostr-event-kinds-normative) kind-30420 recipient profile and the three-check rule of [§4.3](#43-addressing-for-delivery). Structural / SHA-256 parts are pinbar; Poseidon-dependent fields (`nk_commit`, hence `address`) stay `<REGEN>` until V.4 is filled.
+This group tests the [§7.3](#73-nostr-event-kinds-normative) standard kind-0 profile, the §4.3 three-check payment binding, DNS-resistant known-contact behavior, and real NIP-17 interoperability. Structural and SHA-256 parts are pinnable; Poseidon-dependent `nk_commit` and `address` remain `<REGEN>` until V.4 is filled.
 
-**Positive (accept).**
+**Positive profile (accept).** The fixture consists of:
 
-A kind-30420 event with:
+- a NIP-05 response whose `names.alice` is the lowercase-hex `op_pubkey` and whose `relays[op_pubkey]` is a non-empty relay array;
+- a valid kind-0 event authored and signed by that `op_pubkey`, with `content.nip05 = "alice@example.com"`;
+- `content.zkcoins` = exactly `{version, network, address, pk0, nk_commit, ivpk, relays, addr_sig}`, with `version = 1`, the harness network, valid Bech32m `address`, 32-byte lowercase-hex `pk0`/`nk_commit`/`ivpk`, a non-empty relay array, and a 64-byte lowercase-hex `addr_sig`;
+- `H(pk0 ‖ nk_commit) == address`;
+- `addr_sig` valid under `pk0` over the profile-fixed `invoice_message` (`amount = 0`, all-zero `asset_id`, empty `memo`, kind-0 author as `op_pubkey`).
 
-- `content` = exactly the six-field JSON `{pk0, nk_commit, ivpk, op_pubkey, relays, addr_sig}` (no extra content fields required of a conforming producer);
-- `pk0` / `nk_commit` / `ivpk` / `op_pubkey` lowercase hex of 32 bytes each; `addr_sig` lowercase hex of **exactly 64** bytes; `relays` a non-empty string array;
-- `d` tag = Bech32m `address` with `H(pk0 ‖ nk_commit) == address`;
-- event `pubkey` = `op_pubkey` (hex) and a valid Nostr event signature under that key;
-- `addr_sig` valid BIP-340 under `pk0` over the profile-fixed `invoice_message` (`amount = 0`, all-zero `asset_id`, empty `memo`, [§4.3](#43-addressing-for-delivery)).
+A conforming consumer **MUST** accept the profile after the NIP-05 match and checks (i)–(iii), construct an `nprofile` from the author and relay hints, and retain the §4.3 minimum contact information. Removing the optional `zkcoins` object from an otherwise valid ordinary Nostr profile **MUST** leave NIP-17 messaging enabled and disable only zkCoins payment.
 
-A conforming sender **MUST** accept this profile after checks (i)–(iii).
-
-**Negative (each MUST reject).**
+**Profile negatives (each MUST disable payment).**
 
 | # | Case | Expected |
 |---|---|---|
-| P-01 | `content` omits `nk_commit` | reject — address check (i) impossible / missing required field |
-| P-02 | `nk_commit` present but `H(pk0 ‖ nk_commit) ≠` `d`-tag address | reject — check (i) fails |
-| P-03 | `addr_sig` valid under a different key, or over a non-profile-fixed `invoice_message` | reject — check (ii) fails |
-| P-04 | event signature not valid under `op_pubkey`, or event `pubkey` ≠ `op_pubkey` | reject — check (iii) fails |
-| P-05 | empty `relays`, wrong hex widths, or `addr_sig` ≠ 64 decoded bytes | reject — malformed content |
+| P-01 | `zkcoins` omits `nk_commit`, `address`, or another required object field | payment profile rejected — required binding input missing |
+| P-02 | `H(pk0 ‖ nk_commit) ≠ address` | payment profile rejected — check (i) fails |
+| P-03 | `addr_sig` verifies under another key or over a non-profile-fixed `invoice_message` | payment profile rejected — check (ii) fails |
+| P-04 | kind-0 signature is invalid or the event author differs from the NIP-05-mapped `op_pubkey` | profile rejected — check (iii) / NIP-05 binding fails |
+| P-05 | empty `relays`, wrong hex widths/case, invalid Bech32m, or `addr_sig` is not 64 decoded bytes | payment profile rejected — malformed object |
+| P-06 | kind-0 `nip05` does not equal the normalized identifier | identity/profile rejected — reverse NIP-05 check fails |
+| P-07 | `version != 1` or `network` differs from the active network | payment profile rejected — unsupported or wrong network |
 
-**Acceptance:** accept the positive event; reject every P-01–P-05 case with the named reason.
+Rejecting only the `zkcoins` object in P-01–P-03/P-05/P-07 **MUST NOT** turn off standard NIP-17 messaging when the Nostr identity and kind-10050 event remain valid.
 
+**Mandatory live interoperability matrix.** Before every release, bidirectional one-to-one text messaging **MUST** pass against the current stable versions of all four clients:
+
+| Client | Required platform |
+|---|---|
+| Primal | stable web or mobile build |
+| Amethyst | stable Android build |
+| Damus | stable iOS build |
+| 0xchat | stable mobile build |
+
+For each client, record the tested client version and pass/fail result and verify all of the following:
+
+1. The external client discovers the zkCoins identity through its email-style NIP-05 identifier.
+2. The external client obtains kind 10050 and sends a NIP-17 message that the zkCoins stack receives.
+3. The zkCoins stack discovers the external identity through NIP-05, obtains kind 10050, and sends a message that the external client receives.
+4. Both sides can reply in the same one-to-one conversation.
+5. Captured events show a kind-14 rumor, NIP-44 v2, kind-13 seal, kind-1059 gift wrap, kind-10050 relay selection, and separate sender/recipient copies.
+6. The external client uses no zkCoins endpoint, event kind, tag, profile field, or bridge.
+7. No kind-4/NIP-04 event or unnoticed NIP-04 fallback occurs.
+8. After the external contact's `nprofile` is retained, repeat messaging with DNS/NIP-05 blocked and assert that no DNS or NIP-05 request is made.
+
+**Acceptance:** accept the positive profile; reject P-01–P-07 with the named scope; pass every live test in both directions with Primal, Amethyst, Damus, and 0xchat. A release fails V.12 if baseline one-to-one messaging fails with any client.

@@ -4,7 +4,7 @@ title: Requirements
 
 # Protocol Requirements
 
-The non-negotiable requirements zkCoins must satisfy. Each is a property of the protocol, independent of how it is implemented; implementation choices (commitment batching, the off-chain transport mechanism, key derivation, the replication factor, and similar) are not requirements.
+The non-negotiable requirements zkCoins must satisfy. Each is a property of the protocol, independent of internal code structure; details not named here remain implementation choices.
 
 ### 1. Bitcoin L1 as the only base
 
@@ -45,3 +45,7 @@ The holder of an account can voluntarily disclose, to a recipient of its choosin
 ### 10. Node portability
 
 A wallet — the holder of the seed — can switch nodes at any time and can use multiple nodes simultaneously. A wallet must not depend on any node-specific state; every conforming node is interchangeable, and no node can lock a wallet in.
+
+### 11. Standard identity and messaging
+
+Every zkCoins user has a canonical, normalized email-style NIP-05 identifier such as `alice@example.com`, and its standard kind-0 profile contains the additive signed `zkcoins` payment object. Human messaging is standard Nostr NIP-17 using the account's existing Nostr identity key and kind-10050 DM relays; it must interoperate bidirectionally with ordinary NIP-17 clients and must never require a zkCoins-specific message kind, endpoint, profile, or capability marker. After first discovery, a contact's public key, NIP-19 `nprofile` relay hints, and last known kind-10050 DM relays are retained so known contacts can be reached without DNS or another NIP-05 request. Lightning/LNURL and SMTP/email bridges are independent, optional operator services and are not prerequisites for NIP-05 identity or NIP-17 messaging.
