@@ -4,7 +4,7 @@ title: Mail Bridge
 
 # Mail Bridge
 
-:::info Optional operator role
+:::info Optional operator service
 The SMTP/email bridge is an **optional operator service**, **off by default**, and independent of both the optional Lightning bridge and mandatory NIP-17 messaging. It moves messages, never zkCoins value.
 :::
 
@@ -23,8 +23,8 @@ SMTP is not a fallback protocol inside NIP-17. Enabling or disabling the email b
 
 For a recipient entered as `bob@example.com`, the sender follows the standard §4.3 flow:
 
-1. If Bob's `nprofile` is already retained, use its stored public key and relay hints directly without DNS or NIP-05.
-2. Otherwise resolve `https://example.com/.well-known/nostr.json?name=bob`, verify the matching kind-0 profile, and retain the resulting contact.
+1. If Bob's `nprofile` is already retained, use its stored public key, relay hints, and IP endpoints retained after original-hostname-authenticated TLS plus a successful relay WebSocket upgrade directly without DNS or NIP-05; preserve each original relay scheme, hostname, port, path, SNI, certificate check, and WebSocket `Host`.
+2. Otherwise resolve `https://example.com/.well-known/nostr.json?name=bob`, verify the matching kind-0 profile, and retain the resulting contact. Search the union of any NIP-05 relay hints and the configured standard profile/discovery relays (including bootstrap seeds) with ordinary NIP-01 author-and-kind filters.
 3. If Bob has a valid kind-10050 event, send through standard NIP-17 to exactly those DM relays.
 4. If Bob is not ready for NIP-17, SMTP may be offered only when the sender's operator has enabled the email bridge and the user explicitly chooses email.
 
@@ -40,7 +40,7 @@ Once a contact has successfully exchanged NIP-17 messages, a failure to fetch ki
 
 NIP-17 and SMTP messages **MUST** remain separate conversations. Plain email content must never appear as if it were authenticated by the contact's Nostr key.
 
-During a DNS outage, known NIP-17 contacts continue to work from retained `nprofile` and DM relays. SMTP delivery may fail because ordinary email infrastructure depends on DNS; that is acceptable and does not trigger a Nostr downgrade.
+During a DNS outage, a known NIP-17 contact continues to work after a cold start only when at least one previously reached, retained relay IP endpoint still serves its original path. The client connects to that IP while preserving the original relay scheme, hostname, port, and path for TLS SNI, certificate verification, WebSocket `Host`, and the relay upgrade; it never retains an endpoint after TLS alone, disables TLS verification, or accepts an IP-address certificate instead. Relay failure or signed rotation solely to previously unknown hostnames is unavailable until DNS returns. SMTP delivery may also fail because ordinary email infrastructure depends on DNS; that is acceptable and does not trigger a Nostr downgrade.
 
 ## Inbound email
 
@@ -59,6 +59,6 @@ These restrictions do not apply to authenticated application UI outside the emai
 
 ## Privacy and trust
 
-On the SMTP path, the bridge necessarily processes message plaintext, headers, sender, recipient, timing, and volume. On the NIP-17 path, content is readable by the component holding the account's `op` key: the user's own node in a sovereign setup, or the hosting provider for a hosted account ([spec §6.6](/specification#66-threat-model-and-trust-configurations)). External relays see the recipient `p` tag plus timing and volume, but not the sealed content or sender identity.
+On the SMTP path, the bridge necessarily processes message plaintext, headers, sender, recipient, timing, and volume. On the NIP-17 path, content is readable by the component holding the account's `op` key: the user's own node in a sovereign setup, or the hosting provider for a hosted account ([spec §6.6](/specification#66-threat-model-and-trust-configurations)). The sender's identity does not appear in the public gift-wrap event, and its content remains encrypted. A relay or its operator can nevertheless learn or correlate the sender through NIP-42 AUTH, source IP and connection metadata, or the relay's own authentication and admission rules; it also sees the recipient `p` tag, timing, and volume.
 
 The bridge holds no SPEND key and cannot move funds. Failure of SMTP delivery, mailbox storage, or the bridge itself can lose or delay email only; mandatory NIP-17 messaging and native zkCoins remain separate.
