@@ -2308,7 +2308,7 @@ The node is **one program**, but not every operator runs all of it. A small **co
 
 A few standard **deployment profiles** follow:
 
-- **Sovereign personal node** — core plus own-account proving and standard NIP-17 messaging; no public API, no publisher, and no operator-hosted NIP-05 service. The user supplies a self-hosted or third-party NIP-05 identity. This is the private default.
+- **Sovereign personal node** — core (standard NIP-17 messaging included, as for every node) plus own-account proving; no public API, no publisher, and no operator-hosted NIP-05 service. The user **MAY** self-host a name or take one from any provider, and **MAY** equally run without one ([§4.3](#43-addressing-for-delivery)). This is the private default.
 - **Public service node** — adds the public wallet API and, optionally, the publisher. Proving for someone else means receiving that account's plaintext witness, so this is the role that carries the privacy trade-off for *its users* ([§6.6](#66-threat-model-and-trust-configurations)); being a public wallet API is **opt-in**, never forced on a node operator.
 - **Validating-only node** — core verification and accumulator, no local prover, no publisher: it follows and checks the chain without producing anything.
 - **Explorer** — not a node profile at all, but a separate stateless **frontend** (its own repository and its own container; see *Running a node* below) that only reads a node's public endpoints; it offers no publisher and no wallet API.
