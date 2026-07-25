@@ -3649,10 +3649,10 @@ Asset definition:
 
 ```
 Pk₀_sample      (32B) = 5dcffebb708081e3cc78b22f54d260467022c095a67da835f50713a36ee40746
-nk_commit_sample(32B) = <REGEN — = Hc("NkCommit", nk_sample), Poseidon, see V.4>
+nk_commit_sample(32B) = 444981ebd6edc1116dc1a13d51e7ed2c47988cc66ad5fb95c12de4f2efa4456e
 address               = H(Pk₀_sample ‖ nk_commit_sample)     ; 64-byte preimage (§1.4)
-                      = <REGEN — SHA-256 of the 64-byte preimage>
-zk-bech32m            = <REGEN — Bech32m(HRP "zk", address)>
+                      = e38121742a22e04e51175eb3e38a66df7e7e691c0041c169bc3a2592696f803d
+zk-bech32m            = zk1uwqjzap2ytsyu5ght6e78znxmal8u6guqpquz6du8gjey6t0sq7st3s86p
 ```
 
 A conforming implementation **MUST** produce, from the inputs above, exactly the `address` bytes that `H(Pk₀_sample ‖ nk_commit_sample)` yields and its Bech32m string; both are `<REGEN>` because `nk_commit_sample` is Poseidon-dependent (V.4). The address preimage is the **64-byte** concatenation `Pk₀_sample ‖ nk_commit_sample`. The Bech32m HRP is `zk`; the encoding is per [§1.7.7](#177-bech32m-and-bitcoin-conventions). The Bech32m checksum constant is the BIP-350 value `0x2BC830A3`.
@@ -3696,15 +3696,14 @@ A worked example: an account holding 1 000 000 000 base units of `USD-Demo` afte
 
 ```
 Fixed fields  (pinned bytes):
-   owner               (32B): <REGEN — = address = H(Pk₀_sample ‖ nk_commit_sample), see V.2>
-   nk_commit           (32B): <REGEN — = Hc("NkCommit", nk_sample), the account nullifier-key
-                               commitment (§2.1 clause 4), see V.4>
+   owner               (32B): e38121742a22e04e51175eb3e38a66df7e7e691c0041c169bc3a2592696f803d
+   nk_commit           (32B): 444981ebd6edc1116dc1a13d51e7ed2c47988cc66ad5fb95c12de4f2efa4456e
    current_pubkey      (32B): fba3ea150382de6f39a07348d327b1efa8c120da1ee599148ff6fed7803465fb
    send_counter        ( 8B): 0000000000000001
-   coin_history_root   (32B): <REGEN — equals coin_history_root@0, the SMT root after admitting coin.identifier@0 at state 1 (V.4); NOT the empty root E'₂₅₆>
+   coin_history_root   (32B): f5c33d0522df857744c548ca3ba539f6f9409870b2779b63e483cbd45c3e4b4b
    balances_count      ( 4B): 00000001   ← ≤ MAX_ACCOUNT_ASSETS = 32 (§2.5); one active entry here
    [balances entry, sorted ascending by asset_id]:
-       asset_id        (32B): <REGEN — see V.4>
+       asset_id        (32B): da7deb2e2d8ad91a2ec9e2aafc6756b2b11f092c79650ce313658f3a9b2ab7cf
        amount          (16B): 0000000000000000000000003b9aca00   ← u128 big-endian, 1 000 000 000
 
 Sizes:
@@ -3722,27 +3721,27 @@ For each value below, the formula is fixed; the bytes MUST be produced by the re
 
 | Symbol | Formula | Bytes (`<REGEN>`) |
 |---|---|---|
-| `nflog_empty` (nullifier-accumulator empty-log root) | `Hc("NfLog/Empty", 0)` — the empty append-only Merkle log ([§1.7.6](#176-nullifier-accumulator-append-only-merkle-log)); the retired 256-bit-SMT empty root `E₂₅₆` no longer exists | `<REGEN>` |
-| `E'₂₅₆` (coin-history-SMT empty root) | same structure with the per-account tags: `E'₀ = Hc("CoinHist/Leaf", 0)` and `E'ᵢ = Hc("CoinHist/Node", i, E'_{i-1}, E'_{i-1})`; empty root `E'₂₅₆ = Hc("CoinHist/Node", 256, E'₂₅₅, E'₂₅₅)` — [§1.7.6](#176-nullifier-accumulator-append-only-merkle-log) | `<REGEN>` |
-| `asset_id` | `Hc("AssetId", "zkCoins/v1/genesis" ‖ Pk₀_sample ‖ H("USD-Demo") ‖ decimals=0x02 ‖ issuance_version=0x01)` | `<REGEN>` |
-| `nk_commit_sample` | `Hc("NkCommit", nk_sample)` — the account nullifier-key commitment ([§2.1 clause 4](#21-the-compliance-predicate)), a fixed field of `serialize(AccountState)` (V.3) | `<REGEN>` |
-| `ash_empty` | `Hc("AccountState", serialize(canonical_empty_account_for(address)))` per [§2.2](#22-proof-types) — the InitialProof's `prev_account_state` digest; uses `nk_commit = nk_commit_sample` and `coin_history_root = E'₂₅₆` | `<REGEN>` |
-| `coin.identifier@0` | a coin minted to `address`, first output of the InitialProof: `Hc("Coin", ash_empty ‖ recipient=address ‖ asset_id ‖ amount=1000000000 ‖ coin_index=0)` (the mint's `recipient` is the issuing `address`, V.2, and `amount` is the V.3 supply, 1 000 000 000) | `<REGEN>` |
-| `coin_history_root@0` | the per-account coin-history SMT root after admitting `coin.identifier@0` as leaf state `1` (received-unspent), starting from `E'₂₅₆`; the result is a single populated path through 256 levels | `<REGEN>` |
-| `ash@0` | `Hc("AccountState", serialize(<V.3 byte string with the regenerated nk_commit_sample, asset_id, coin_history_root@0, and owner (= H(Pk₀_sample ‖ nk_commit_sample), §1.4) substituted>))` | `<REGEN>` |
-| `nf_sample` | `Hc("Nullifier", nk_sample ‖ coin.identifier@0)` | `<REGEN>` |
-| `ocr@0` | Poseidon Merkle root over `[coin.identifier@0]`, tag `CoinsRoot` (one leaf, padded to one) per [§1.7.5](#175-poseidon-merkle-tree-used-for-ocr-and-inr) | `<REGEN>` |
-| `inr@0` | Poseidon Merkle root over the empty list of nullifiers (a mint), tag `NullifiersRoot` — equals the `L_⊥` leaf-hash | `<REGEN>` |
-| `nav_empty` | the empty accumulator log value `(size = 0, mth = nflog_empty)`; `nav_root(nav_empty) = Hc("NfLog/Root", 0 ‖ nflog_empty)`, `nflog_empty = Hc("NfLog/Empty", 0)` (§1.7.6) | `<REGEN>` |
+| `nflog_empty` (nullifier-accumulator empty-log root) | `Hc("NfLog/Empty", 0)` — the empty append-only Merkle log ([§1.7.6](#176-nullifier-accumulator-append-only-merkle-log)); the retired 256-bit-SMT empty root `E₂₅₆` no longer exists | `f7599780b12dc6120b6e305e77feb04d1db533fbeb19f3fd25ca22b5b222c2bc` |
+| `E'₂₅₆` (coin-history-SMT empty root) | same structure with the per-account tags: `E'₀ = Hc("CoinHist/Leaf", 0)` and `E'ᵢ = Hc("CoinHist/Node", i, E'_{i-1}, E'_{i-1})`; empty root `E'₂₅₆ = Hc("CoinHist/Node", 256, E'₂₅₅, E'₂₅₅)` — [§1.7.6](#176-nullifier-accumulator-append-only-merkle-log) | `7d558733b6f685d85aff62341e3d017234056105bced89ce0319166dc90a6dcf` |
+| `asset_id` | `Hc("AssetId", "zkCoins/v1/genesis" ‖ Pk₀_sample ‖ H("USD-Demo") ‖ decimals=0x02 ‖ issuance_version=0x01)` | `da7deb2e2d8ad91a2ec9e2aafc6756b2b11f092c79650ce313658f3a9b2ab7cf` |
+| `nk_commit_sample` | `Hc("NkCommit", nk_sample)` — the account nullifier-key commitment ([§2.1 clause 4](#21-the-compliance-predicate)), a fixed field of `serialize(AccountState)` (V.3) | `444981ebd6edc1116dc1a13d51e7ed2c47988cc66ad5fb95c12de4f2efa4456e` |
+| `ash_empty` | `Hc("AccountState", serialize(canonical_empty_account_for(address)))` per [§2.2](#22-proof-types) — the InitialProof's `prev_account_state` digest; uses `nk_commit = nk_commit_sample` and `coin_history_root = E'₂₅₆` | `ef56b9ac8dc7a119c9d2679164b91f341d785e9649470158c2661cfd4f71b61b` |
+| `coin.identifier@0` | a coin minted to `address`, first output of the InitialProof: `Hc("Coin", ash_empty ‖ recipient=address ‖ asset_id ‖ amount=1000000000 ‖ coin_index=0)` (the mint's `recipient` is the issuing `address`, V.2, and `amount` is the V.3 supply, 1 000 000 000) | `a1cc00c5a5c0fa499664ca891690c3bde52a4c9326f6794659f8ad1926288790` |
+| `coin_history_root@0` | the per-account coin-history SMT root after admitting `coin.identifier@0` as leaf state `1` (received-unspent), starting from `E'₂₅₆`; the result is a single populated path through 256 levels | `f5c33d0522df857744c548ca3ba539f6f9409870b2779b63e483cbd45c3e4b4b` |
+| `ash@0` | `Hc("AccountState", serialize(<V.3 byte string with the regenerated nk_commit_sample, asset_id, coin_history_root@0, and owner (= H(Pk₀_sample ‖ nk_commit_sample), §1.4) substituted>))` | `a6591d3c3810ffdd8c0b7ff496e10521d36d76c8dc78a1726cb023efdaed2b43` |
+| `nf_sample` | `Hc("Nullifier", nk_sample ‖ coin.identifier@0)` | `9cc178b183bb3c266f6638c5d5fc1b965f5b296822f4c6655a7634f438ce38d2` |
+| `ocr@0` | Poseidon Merkle root over `[coin.identifier@0]`, tag `CoinsRoot` (one leaf, padded to one) per [§1.7.5](#175-poseidon-merkle-tree-used-for-ocr-and-inr) | `5961dbe2cdb0380b21034619eff89fec37ad5e99c0dfa7ca7b47a4e35d8fd3e8` |
+| `inr@0` | Poseidon Merkle root over the empty list of nullifiers (a mint), tag `NullifiersRoot` — equals the `L_⊥` leaf-hash | `1de3b164f2c7e8eebad7e30e14a971e0380451c5763ebe4a79825fe29a228575` |
+| `nav_empty` | the empty accumulator log value `(size = 0, mth = nflog_empty)`; `nav_root(nav_empty) = Hc("NfLog/Root", 0 ‖ nflog_empty)`, `nflog_empty = Hc("NfLog/Empty", 0)` (§1.7.6) | `cf2717e42bab4463cde1b657f010e65fd2940d459a2af8ea862dbf22702c14d0` |
 | `nav_rand_sample@0` | `H("zkCoins/v1/test-vector/nav_rand")` = `e3b0e624bff8dbe486dd0761c14dcb84b4ccaf026fc60c58b69d653e6f656560` — a fixed illustrative commitment blind (real wallets derive it as `HKDF("zkCoins/v1/NavRand", op_secret ‖ u64-be(send_counter))`, §1.4) | fixed |
-| `nav_commitment@0` | `Hc("NavCommit", nav_root(nav_empty) ‖ nav_rand_sample@0)` (a fresh-network **genesis** mint, where `size_final = 0`, commits the empty conditional NAV `nav_empty`; a mint on an already-active network uses `nav = size_final`, §2.3.1) | `<REGEN>` |
-| `H(ProofData@0)` | `SHA-256(serialize(ProofData@0))` = `SHA-256(ash@0 ‖ ocr@0 ‖ inr@0 ‖ coin_history_root@0 ‖ nav_commitment@0 ‖ npk_commit@0)`, `npk_commit@0 = H("zkCoins/v1/NpkCommit" ‖ Pk₁_sample ‖ npk_rand@0)` (canonical 192-byte `serialize(ProofData)`, [§1.4](#14-identifiers-and-hashes)) | derived from the six above |
-| `circuit_digest(C)` | the `verifier_only.circuit_digest` of the per-account circuit `C` built per [§1.7.9](#179-proof-system-parameters-normative) (`standard_recursion_zk_config`, one per network tag (`zkCoins/v1/mainnet`, `zkCoins/v1/testnet`, `zkCoins/v1/regtest`)), encoded per [§1.7.1](#171-poseidon-instance-and-digest-encoding). A pinned protocol constant ([§1.7.9](#179-proof-system-parameters-normative)) | `<REGEN>` (per network) |
-| `circuit_digest(C_balance)` | the [§2.2](#22-proof-types) balance-attestation circuit's `verifier_only.circuit_digest`, one per network tag (`zkCoins/v1/mainnet`, `zkCoins/v1/testnet`, `zkCoins/v1/regtest`), produced by the same deterministic §1.7.9 build discipline as `C` | `<REGEN>` |
-| `network_id` | `Hc("Network", network_tag_bytes)` for each network tag (`zkCoins/v1/mainnet`, `zkCoins/v1/testnet`, `zkCoins/v1/regtest`) — the public-input Poseidon `HashOut` ([§1.4](#14-identifiers-and-hashes), [§2.5](#25-circuit-dimensioning-normative)); not part of `serialize(ProofData)` | `<REGEN>` (per network) |
-| `detect_tag@fixture` | `Hc("zkCoins/v1/DetectTag", ss ‖ epk)` over the pinned V.10 `ss`/`epk` | `<REGEN>` |
-| `asset_id_v2` | `Hc("AssetIdV2", genesis_tag ‖ Pk₀_sample ‖ H("EUR-Demo") ‖ decimals=0x02 ‖ issuance_version=0x02 ‖ cap_total=500000000 (16B be) ‖ terms_salt_fixture)` — `terms_salt_fixture = H("zkCoins/v1/test-vector/terms_salt")` (SHA-256, pinned: compute and inline it at the vectors PR) | `<REGEN>` |
-| `terms_hash_v1` / `terms_hash_v2` | `Hc("IssuanceTerms", asset_id ‖ issuance_version)` and the v2 analogue per [§6.5](#65-issuance--token-standards) | `<REGEN>` |
+| `nav_commitment@0` | `Hc("NavCommit", nav_root(nav_empty) ‖ nav_rand_sample@0)` (a fresh-network **genesis** mint, where `size_final = 0`, commits the empty conditional NAV `nav_empty`; a mint on an already-active network uses `nav = size_final`, §2.3.1) | `eec40cabb6cece9f2c76cd3fde2f55c2bf193def66c4482bd94f1cb44acbe34d` |
+| `H(ProofData@0)` | `SHA-256(serialize(ProofData@0))` = `SHA-256(ash@0 ‖ ocr@0 ‖ inr@0 ‖ coin_history_root@0 ‖ nav_commitment@0 ‖ npk_commit@0)`, `npk_commit@0 = H("zkCoins/v1/NpkCommit" ‖ Pk₁_sample ‖ npk_rand@0)` (canonical 192-byte `serialize(ProofData)`, [§1.4](#14-identifiers-and-hashes)) | derived from the six above — `db8c60533ba19eba14958f6ce44fd8df2e784d17dac28d8532e66fa938308de4` |
+| `circuit_digest(C)` | the `verifier_only.circuit_digest` of the per-account circuit `C` built per [§1.7.9](#179-proof-system-parameters-normative) (`standard_recursion_zk_config`, one per network tag (`zkCoins/v1/mainnet`, `zkCoins/v1/testnet`, `zkCoins/v1/regtest`)), encoded per [§1.7.1](#171-poseidon-instance-and-digest-encoding). A pinned protocol constant ([§1.7.9](#179-proof-system-parameters-normative)) | mainnet `14a3adaf256b5f129d07079c29ccc35a713ecd55ea41a2e93b09925cc88c60aa`<br>testnet `10d38c9ee6322ae6a50aa9908918d03dcedbcf984f023c3fab549eb8bce83c5c`<br>regtest `9d256e8c828f531fc6cf9ffd4fa1ca9480473d00a99f92ea535912daa34e8352` |
+| `circuit_digest(C_balance)` | the [§2.2](#22-proof-types) balance-attestation circuit's `verifier_only.circuit_digest`, one per network tag (`zkCoins/v1/mainnet`, `zkCoins/v1/testnet`, `zkCoins/v1/regtest`), produced by the same deterministic §1.7.9 build discipline as `C` | mainnet `0a4202fc772295d6db4eb9c5bd2bbb7a59d45cff1653648dff4681f4ba55d606`<br>testnet `cbb8f284fab6f81aa3616f55da76942c1259845e0b9135f9c8fe9385d3f7fe87`<br>regtest `bd696087e0e0f47b556a6803ef4fb5b9ebae2327e0438dd405f33752dc90772d` |
+| `network_id` | `Hc("Network", network_tag_bytes)` for each network tag (`zkCoins/v1/mainnet`, `zkCoins/v1/testnet`, `zkCoins/v1/regtest`) — the public-input Poseidon `HashOut` ([§1.4](#14-identifiers-and-hashes), [§2.5](#25-circuit-dimensioning-normative)); not part of `serialize(ProofData)` | mainnet `fb5080433fbd3d5c9ed7aad0e1feced2954859c4492ecb0880b0713f6b09ec8c`<br>testnet `edd03cfdd9de40d33160fac02396576b5bcf94f94c568bbcef291a49f61b5e28`<br>regtest `f26dcd6b70992a28ef809001793c1e9a3c0aa68c3a7dcc9b43b1ca0e919467de` |
+| `detect_tag@fixture` | `Hc("zkCoins/v1/DetectTag", ss ‖ epk)` over the pinned V.10 `ss`/`epk` | `52f38f5972d4b44ef361fadfd8e5f927f3ec9ed8d34c888435fe91d0ff76ea4c` |
+| `asset_id_v2` | `Hc("AssetIdV2", genesis_tag ‖ Pk₀_sample ‖ H("EUR-Demo") ‖ decimals=0x02 ‖ issuance_version=0x02 ‖ cap_total=500000000 (16B be) ‖ terms_salt_fixture)` — `terms_salt_fixture = H("zkCoins/v1/test-vector/terms_salt")` (SHA-256, pinned: compute and inline it at the vectors PR) | `299c74853e87d0a617b8631285752d90362481e7ff06f940c6f219545c4194ab` |
+| `terms_hash_v1` / `terms_hash_v2` | `Hc("IssuanceTerms", asset_id ‖ issuance_version)` and the v2 analogue per [§6.5](#65-issuance--token-standards) | v1 `aa80213d58ea4fc9990f5425f71afd56f5117841ab7a3e52f46beb46330fbbf4`<br>v2 `305bb19e79746450253d3eb2a4c1f68c4727d5792c019fe3b734e8720fbb3c2f` |
 
 ### V.5 `SpendRecord` byte layout (pinned for the SHA-256 / structural parts)
 
@@ -3752,13 +3751,22 @@ The `SpendRecord` byte layout is:
 
 ```
 Pkᵢ          (32B): <Pkᵢ — spender's current per-transition signing pubkey, x-only>
-signature    (64B): <REGEN — BIP-340(sk, m_state) with S2C tweak t = H(bytes(R') ‖ H(ProofData@0)); produced at runbook step 2 with the V.2-ext keys (curve-valid); **verification-locked** (BIP-340 + S2C verify against the pinned H(ProofData@0)), never byte-pinned>
-                     where m_state is the per-network FIXED message "zkCoins/v1/StateUpdate/{mainnet|testnet|regtest}" and
-                     H(ProofData) = H(ProofData@0) from V.4
+signature    (64B): mainnet  7db327f8ff4bb148f051a038d370c4213149fe3affeff5b7fb7e9f8e3cc4438532168b5fca622ba2fad6d72ed201e71cef1003df880d345ddbe2b89f1ce3d4e5
+                     testnet  c62142c2448e098e5f8f4ec306b8a922be44226ae754e7b515178485d2da2286c52881936dd64a1dc3b9756c4a7a033e76ca4ad778624acbf580c041be6f7bf0
+                     regtest  8945e81ed57b06222bd86b957f6800fc5569014b295c40c0b7a501787edca2c916b9c2f693f5e43c030bfc4fa0f210b9e96d45b06e943e652c8edb3b4a06d7fc
+                     BIP-340(sk, m_state) with S2C tweak t = H(bytes(R') ‖ H(ProofData@0)); V.2-ext keys; m_state = "zkCoins/v1/StateUpdate/{mainnet|testnet|regtest}"; H(ProofData) = H(ProofData@0) from V.4
 
 Record size: 96 bytes (32 + 64) — the same for a send, a mint, or a pure receive; there is no
 message, k, or nullifier list. The on-chain nullifier keeps only (Pkᵢ, Rᵢ), where Rᵢ is the
 signature's sign-to-contract nonce (§3.5).
+```
+
+`R'` (32B, pre-tweak S2C nonce — **not** part of the 96-byte `SpendRecord`; required to recompute the §3.2 opening `R = R' + t·G` with `t = H(bytes(R') ‖ H(ProofData@0))`):
+
+```
+R'           (32B): mainnet  fafd5229e657311d934989a4bc8bdfc8f033b4d640d2eb27b9fdda316f5c9601
+                     testnet  8c5b9be1e267c2f40ead298fb6fd8f98c0bc3efb862fce6ef7fa98b5691b3c6e
+                     regtest  7f415c530cd07713998ae0467e2c18fce210a7818ec7ad26a7b419009d6598f1
 ```
 
 A send, a mint, and a pure receive all produce the identical 96-byte `SpendRecord` authorization, and **every** one publishes its `(Pkᵢ, Rᵢ)` on Bitcoin: each is a state-advancing transition arbitrated by first-occurrence ([§2.1 clause 1](#21-the-compliance-predicate), [§3.10](#310-transaction-states)). A mint's receiver additionally re-verifies the mint's recursive proof — an `InitialProof`, or an `AccountUpdateProof` carrying `asset_issuance` for a follow-up mint ([§2.3.1](#231-mint--issuance)) — on top of the first-occurrence check on that on-chain nullifier.
@@ -3781,7 +3789,7 @@ Body (format 0x01 — m pairs then one shared scalar):
    R₁                        (32B): <R₁ — its sign-to-contract nonce, §3.2>
    Pk₂                       (32B): <Pkⱼ of transition 2, x-only>
    R₂                        (32B): <R₂ — its sign-to-contract nonce, §3.2>
-   s_agg                     (32B): <REGEN — Σⱼ aⱼ·sⱼ mod n, the single shared aggregate scalar, §3.3>
+   s_agg                     (32B): cfb0c36a8399589b5580ba41cafaf66b7d707443a202e4113f3635872ca58b78
 
 Payload size: 42 (header) + 2·64 (pairs) + 32 (s_agg) = 202 bytes for m = 2, ENTIRELY in witness data;
 the marginal cost of one more transition is 64 bytes (Pkⱼ ‖ Rⱼ) — ~16 vBytes by Bitcoin's 1/4
@@ -3957,13 +3965,13 @@ Conformance vectors for the [§1.7.6](#176-nullifier-accumulator-append-only-mer
 
 **Positive — hand-listed smoke set (formulas pinned; bytes `<REGEN>`; full materialisation permitted).**
 
-| Value | Formula |
-|---|---|
-| `nflog_empty` | `Hc("NfLog/Empty", 0)` |
-| `mth@n` for `n ∈ {1,2,3,4,5,7,8,9}` | the [§1.7.6](#176-nullifier-accumulator-append-only-merkle-log) `MTH(D[0:n])` over the pinned sample-leaf sequence above (leaf `Hc("NfLog/Leaf", p ‖ Pkₚ ‖ Rₚ)`) |
-| `nav_root@n` for the same `n` | `Hc("NfLog/Root", n ‖ mth@n)` (`n` as an 8-byte big-endian byte string, §1.7.6); value `<REGEN>` |
-| `inclusion@(p,n)` | the RFC-6962 audit path `PATH(p, D[0:n])` recomputing `mth@n`, for exactly the closed finite set `(p, n) ∈ {(0,3),(1,3),(2,3),(0,4),(1,4),(3,4),(0,5),(2,5),(4,5),(0,8),(3,8),(7,8)}` (positions `p` encoded as 8-byte big-endian, [§1.7.6](#176-nullifier-accumulator-append-only-merkle-log)); the reference implementation MUST emit an inclusion vector for exactly these pairs |
-| `consistency@(m,n)` for `(m,n) ∈ {(1,2),(3,4),(5,8),(7,8),(8,9)}` | the RFC-6962 `PROOF(m, D[0:n])` recomputing both `mth@m` and `mth@n` |
+| Value | Formula | Bytes |
+|---|---|---|
+| `nflog_empty` | `Hc("NfLog/Empty", 0)` | `f7599780b12dc6120b6e305e77feb04d1db533fbeb19f3fd25ca22b5b222c2bc` |
+| `mth@n` for `n ∈ {1,2,3,4,5,7,8,9}` | the [§1.7.6](#176-nullifier-accumulator-append-only-merkle-log) `MTH(D[0:n])` over the pinned sample-leaf sequence above (leaf `Hc("NfLog/Leaf", p ‖ Pkₚ ‖ Rₚ)`) | n=1 `f93137ec4a1b7e5cee06e9f82018bb77a07ffe54b51a1f684f001b2ec31629b6`<br>n=2 `781523c7eef6bb32b4a93501f0312455e1f60a8e4ae27b9650b37e6e14845e99`<br>n=3 `895bd18668d1d6f69e5c63f29a2ec71750540b2ae9e91a863bc2d1d790178b14`<br>n=4 `6e223c78305f2aa63bc2b59f645f595767dd08adfa263a65fd956f072461bad3`<br>n=5 `06cc2c84c4c72559f1f63c9ef920260e1961d87bc608fb16ccd864067d6ac845`<br>n=7 `ba0f01b37308f7a360f851d4a67f88a63e26479e1527698591e2da398b164f10`<br>n=8 `c3326a12b33a1c39191d27890b495f9fa77276052346e1e2a9b547e9c6b64e6d`<br>n=9 `3ff9e35c9b06729a6867fc8ae7889ea7f2db00115070e09eeeb68b0575981ff8` |
+| `nav_root@n` for the same `n` | `Hc("NfLog/Root", n ‖ mth@n)` (`n` as an 8-byte big-endian byte string, §1.7.6) | n=1 `c3b08e877ef1a527ffa95bdfca5f10f4873cd64fe3386054366799c89942ef77`<br>n=2 `c6fd29296967409a97032133ad5f70d512c297f6cbcb4de54e783952b8c67b39`<br>n=3 `29b58d3b4484e8d277bd0143a16d0c7e44d5ff3ccc071dc1b0f3db600b8bf538`<br>n=4 `8f72865adf62b586e8222f4eb91cf66d0a1b9dd79038cc7b68dd28d209166921`<br>n=5 `9119cddbad699a46d73a8dd5e6aa270d3540188539e5a7cfab783c1ef0630c48`<br>n=7 `174c085eee8398caf1687148d4f75bb6d2bd99e427454dfa8109ccdb0478f75f`<br>n=8 `f5c3ffe58466affc44e443d7f58aa1d12ad30686632ef52f622a9fbe8e282f92`<br>n=9 `02e8ab8dbf3ee0f87dbf757eb7bbd989139427b415100b4a456336614ab4dca3` |
+| `inclusion@(p,n)` | the RFC-6962 audit path `PATH(p, D[0:n])` recomputing `mth@n`, for exactly the closed finite set `(p, n) ∈ {(0,3),(1,3),(2,3),(0,4),(1,4),(3,4),(0,5),(2,5),(4,5),(0,8),(3,8),(7,8)}` (positions `p` encoded as 8-byte big-endian, [§1.7.6](#176-nullifier-accumulator-append-only-merkle-log)); the reference implementation MUST emit an inclusion vector for exactly these pairs | (0,3) `6dbfaac4a4e0f0ee13d112990117a3aa9d92682d43dd14a80d04e15517904be7`, `b8622bca769fe9e7e34b3435a5ccb662f5c8d323095266a0831c7279ab89f6ea`<br>(1,3) `f93137ec4a1b7e5cee06e9f82018bb77a07ffe54b51a1f684f001b2ec31629b6`, `b8622bca769fe9e7e34b3435a5ccb662f5c8d323095266a0831c7279ab89f6ea`<br>(2,3) `781523c7eef6bb32b4a93501f0312455e1f60a8e4ae27b9650b37e6e14845e99`<br>(0,4) `6dbfaac4a4e0f0ee13d112990117a3aa9d92682d43dd14a80d04e15517904be7`, `deb92380fe477108e2d52da016af8c3aa4be8082a2995f82158e0990468e3a1c`<br>(1,4) `f93137ec4a1b7e5cee06e9f82018bb77a07ffe54b51a1f684f001b2ec31629b6`, `deb92380fe477108e2d52da016af8c3aa4be8082a2995f82158e0990468e3a1c`<br>(3,4) `b8622bca769fe9e7e34b3435a5ccb662f5c8d323095266a0831c7279ab89f6ea`, `781523c7eef6bb32b4a93501f0312455e1f60a8e4ae27b9650b37e6e14845e99`<br>(0,5) `6dbfaac4a4e0f0ee13d112990117a3aa9d92682d43dd14a80d04e15517904be7`, `deb92380fe477108e2d52da016af8c3aa4be8082a2995f82158e0990468e3a1c`, `04dedc84f08fcc8fa0590c3f73da1c2508a18beca1ba6bb2a1dd4952c0651611`<br>(2,5) `ca343e33072c93be82cf22efea8ee2b24be1148b64a7e4868fda4053d2ffc883`, `781523c7eef6bb32b4a93501f0312455e1f60a8e4ae27b9650b37e6e14845e99`, `04dedc84f08fcc8fa0590c3f73da1c2508a18beca1ba6bb2a1dd4952c0651611`<br>(4,5) `6e223c78305f2aa63bc2b59f645f595767dd08adfa263a65fd956f072461bad3`<br>(0,8) `6dbfaac4a4e0f0ee13d112990117a3aa9d92682d43dd14a80d04e15517904be7`, `deb92380fe477108e2d52da016af8c3aa4be8082a2995f82158e0990468e3a1c`, `30a878fb87d3bfb5b9dde282459cfbe95d62065acc8f324640f7583d7d9ff469`<br>(3,8) `b8622bca769fe9e7e34b3435a5ccb662f5c8d323095266a0831c7279ab89f6ea`, `781523c7eef6bb32b4a93501f0312455e1f60a8e4ae27b9650b37e6e14845e99`, `30a878fb87d3bfb5b9dde282459cfbe95d62065acc8f324640f7583d7d9ff469`<br>(7,8) `a8c07f1809b531ef558023f260529df2c1ea1b081c2dd9dcde679e85f0e25403`, `e7b262beb1d085e7e098a5113bcefb18984d0a5f10ec5fab7fe703357e9d8f38`, `6e223c78305f2aa63bc2b59f645f595767dd08adfa263a65fd956f072461bad3` |
+| `consistency@(m,n)` for `(m,n) ∈ {(1,2),(3,4),(5,8),(7,8),(8,9)}` | the RFC-6962 `PROOF(m, D[0:n])` recomputing both `mth@m` and `mth@n` | (1,2) `6dbfaac4a4e0f0ee13d112990117a3aa9d92682d43dd14a80d04e15517904be7`<br>(3,4) `b8622bca769fe9e7e34b3435a5ccb662f5c8d323095266a0831c7279ab89f6ea`, `ca343e33072c93be82cf22efea8ee2b24be1148b64a7e4868fda4053d2ffc883`, `781523c7eef6bb32b4a93501f0312455e1f60a8e4ae27b9650b37e6e14845e99`<br>(5,8) `04dedc84f08fcc8fa0590c3f73da1c2508a18beca1ba6bb2a1dd4952c0651611`, `95de696c30fa370019f764a73be549c27072d7ac8a544fc4cf31b37729c897c1`, `d993b5b7af65b72fecab240a7ce110534e4fba3eaa741d9b2e71a637993594bc`, `6e223c78305f2aa63bc2b59f645f595767dd08adfa263a65fd956f072461bad3`<br>(7,8) `a8c07f1809b531ef558023f260529df2c1ea1b081c2dd9dcde679e85f0e25403`, `6f47eeefe4ed6f140b0bc291c85d50664f81cffffe8c60a344a2438ce04d1f68`, `e7b262beb1d085e7e098a5113bcefb18984d0a5f10ec5fab7fe703357e9d8f38`, `6e223c78305f2aa63bc2b59f645f595767dd08adfa263a65fd956f072461bad3`<br>(8,9) `0da207c4228e161d9e0af8fa0722b9e812db48c14170659a7a168dbd3405c218` |
 
 **Generated log-boundary suite (normative — every `k = 0…63`; symbolic subtree roots, no full leaf materialisation).** A conforming reference implementation **MUST** generate and differential-test this suite against an independent RFC-6962 reference of the **same split-/peak-bagging interface**; the SDK **MUST** reproduce the same Accept/Reject structure (V.7 parity matrix). The suite **does not** materialise all leaves of a size-`n` log. For each case it supplies the **O(log n) boundary subtree roots** that the gadget's top-run (and interior-run) splits consume — as **fixture inputs** (Poseidon `HashOut` digests, hence `<REGEN>`) — together with the claimed sizes and the expected Accept/Reject. Evaluating `MTH(D[0:n])` from scratch over `n ≈ 2⁶³` independent leaves is **out of scope** and **MUST NOT** be required of the harness.
 
