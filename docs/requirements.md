@@ -44,7 +44,7 @@ The holder of an account can voluntarily disclose, to a recipient of its choosin
 
 ### 10. Node portability
 
-A wallet — the holder of the seed — can switch nodes at any time and can use multiple nodes simultaneously. A wallet must not depend on any node-specific state; every conforming node is interchangeable, and no node can lock a wallet in.
+A wallet — the holder of the seed — can switch nodes at any time and can use multiple nodes simultaneously. A wallet must not depend on any node-specific **value-bearing** state; every conforming node is interchangeable for custody and transacting, and no node can lock a wallet's funds in. Non-value-bearing operational state and its portability limits — including the retained contact record required to preserve DNS-free known-contact behavior across a node switch — must be stated explicitly ([spec §6.3](/specification#63-node-portability-and-multi-node-operation)).
 
 ### 11. Standard identity and messaging
 
