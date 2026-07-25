@@ -10,7 +10,7 @@ The SMTP/email bridge is an **optional operator service**, **off by default**, a
 
 ## One identifier, two independent message transports
 
-A zkCoins user reached by email carries a NIP-05 name such as `alice@example.com` ([spec §4.3](/specification#43-addressing-for-delivery)) — optional at the protocol layer, required by end-user apps ([Implementation Mandate](/implementation-mandate#app-layer-identity-and-contacts-normative)). That name always resolves to the user's standard Nostr account and remains usable for NIP-17 messaging whether or not an email bridge exists.
+Every zkCoins user carries a NIP-05 name such as `alice@example.com` ([spec §4.3](/specification#43-addressing-for-delivery)). That name always resolves to the user's standard Nostr account and remains usable for NIP-17 messaging whether or not an email bridge exists.
 
 An operator may additionally make the same identifier a working SMTP email address:
 
