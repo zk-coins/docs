@@ -28,7 +28,7 @@ For a recipient entered as `bob@example.com`, the sender follows the standard §
 3. If Bob has a valid kind-10050 event, send through standard NIP-17 to exactly those DM relays.
 4. If Bob is not ready for NIP-17, SMTP may be offered only when the sender's operator has enabled the email bridge and the user explicitly chooses email.
 
-Whether the sender's own operator has enabled the email bridge is not something the client learns from a spec-defined advertisement mechanism — the mail bridge, like the Lightning bridge, sits outside the closed `roles` set ([spec §6.4](/specification#64-external-interfaces-abstract), *Core surface vs optional roles*) and is known only out of band, from the operator's own configuration or service description. A client that has not been told the bridge is enabled **MUST** treat it as absent.
+Whether the sender's own operator has enabled the email bridge is not something the client learns from a spec-defined advertisement mechanism — the mail bridge sits outside the closed `roles` set ([spec §6.4](/specification#64-external-interfaces-abstract), *Core surface vs optional roles*) and is known only out of band, from the operator's own configuration or service description. A client that has not been told the bridge is enabled **MUST** treat it as absent.
 
 The absence of a `zkcoins` object does not affect NIP-17.
 
