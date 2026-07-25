@@ -4,7 +4,7 @@ title: Requirements
 
 # Protocol Requirements
 
-The non-negotiable requirements zkCoins must satisfy. Each is a property of the protocol, independent of internal code structure; details not named here remain implementation choices.
+The non-negotiable requirements zkCoins must satisfy. Each is a property of the protocol, independent of how it is implemented; implementation choices (commitment batching, the off-chain bundle transport mechanism, the concrete key-derivation scheme, the replication factor, and similar) are not requirements.
 
 ### 1. Bitcoin L1 as the only base
 
@@ -48,4 +48,8 @@ A wallet — the holder of the seed — can switch nodes at any time and can use
 
 ### 11. Standard identity and messaging
 
-Every zkCoins user has a canonical, normalized email-style NIP-05 identifier such as `alice@example.com`, and its standard kind-0 profile contains the additive signed `zkcoins` payment object. Human messaging is standard Nostr NIP-17 using the account's existing Nostr identity key and kind-10050 DM relays; it must interoperate bidirectionally with ordinary NIP-17 clients and must never require a zkCoins-specific message kind, endpoint, profile, or capability marker. Discovery searches the union of non-empty NIP-05 relay hints and configured standard profile/discovery relays (including bootstrap seeds) with NIP-01 author-and-kind filters, so a reverse-matching kind 0 and valid kind 10050 may come from different relays; only relays that returned a valid relevant event become `nprofile` hints. After first discovery, the node retains the contact's public key, standard NIP-19 `nprofile` relay hints, last valid kind-10050 DM relays, and the last successfully connected IP endpoints for those relay URLs. A retained endpoint is usable only after original-hostname-authenticated TLS and a successful relay WebSocket upgrade on the original path, with the original scheme, hostname, port, path, SNI, certificate verification, and WebSocket `Host` preserved; TLS verification must never be disabled. Normal use and a cold start for a known contact make no DNS or NIP-05 request, provided at least one retained endpoint still serves. Lightning/LNURL and SMTP/email bridges are independent, optional operator services and are not prerequisites for NIP-05 identity or NIP-17 messaging.
+An account's Nostr identity key is one of the keys [Requirement 6](#6-recovery) derives from the seed, and its payment identifier is fixed by those keys alone. Human messaging is standard Nostr NIP-17 carried by that same seed-derived Nostr identity key; it must interoperate bidirectionally with ordinary Nostr clients and must never require a zkCoins-specific message kind, endpoint, profile field, or capability marker.
+
+A human-readable name for an account — an email-style identifier such as `alice@example.com` — is a **naming layer above the protocol**, not part of it. It is served by a node or any name provider, is never derived from the seed, and enters no signature preimage or value-bearing structure. A node must therefore be able to receive, pay, message, and recover **without any such name existing**, an account must be able to carry several names at once, and a name must be replaceable without touching keys, funds, or an established contact. Lightning/LNURL and SMTP/email bridges are independent, optional operator services and are prerequisites for nothing.
+
+*(That end-user applications present names rather than raw identifiers is an application requirement, stated for the `app` layer in the [Implementation Mandate](/implementation-mandate#app-layer-identity-and-contacts-normative).)*

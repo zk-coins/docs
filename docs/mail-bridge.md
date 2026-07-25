@@ -10,7 +10,7 @@ The SMTP/email bridge is an **optional operator service**, **off by default**, a
 
 ## One identifier, two independent message transports
 
-Every zkCoins user has a mandatory NIP-05 identifier such as `alice@example.com` ([spec §4.3](/specification#43-addressing-for-delivery)). That identifier always names the user's standard Nostr account and remains usable for NIP-17 messaging whether or not an email bridge exists.
+A zkCoins user reached by email carries a NIP-05 name such as `alice@example.com` ([spec §4.3](/specification#43-addressing-for-delivery)) — optional at the protocol layer, required by end-user apps ([Implementation Mandate](/implementation-mandate#app-layer-identity-and-contacts-normative)). That name always resolves to the user's standard Nostr account and remains usable for NIP-17 messaging whether or not an email bridge exists.
 
 An operator may additionally make the same identifier a working SMTP email address:
 
@@ -46,7 +46,7 @@ During a DNS outage, a known NIP-17 contact continues to work after a cold start
 
 An enabled bridge accepts SMTP for its own advertised addresses, applies ordinary inbound protections such as SPF, DKIM, DMARC, spam filtering, and rate limits, and delivers mail to the user's email inbox. These checks authenticate infrastructure and sending domains, not the human author.
 
-The UI **MUST** label every inbound message by transport:
+The UI **MUST** label every message by transport, **inbound and outbound alike**, and that label **MUST** persist in conversation history rather than appearing only at send time — an outbound-only SMTP thread is otherwise indistinguishable in history from an authenticated NIP-17 one:
 
 - NIP-17 content is authenticated to the sender's Nostr public key.
 - SMTP content is email and does not gain Nostr authentication merely because its `From` address resembles a NIP-05 identifier.
