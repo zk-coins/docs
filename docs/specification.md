@@ -2298,6 +2298,7 @@ The node is **one program**, but not every operator runs all of it. A small **co
 |---|---|---|
 | Bitcoin scanner · nullifier-accumulator · proof **verification** · state store | **Core** — every real node | always on |
 | `submit.tx` and the read interfaces for the operator's **own** wallet ([§6.4](#64-external-interfaces-abstract)) | **Core** | always on |
+| Standard NIP-17 messaging on kind-10050 DM relays, consuming a counterparty's NIP-05 name, and known-contact pinning ([§4.3](#43-addressing-for-delivery), [§7.3](#73-nostr-event-kinds-normative)) — *having* a name of one's own is not required | **Core** | always on |
 | **Prover** for the operator's **own** transitions | **Core** *if* the operator proves locally | on / off |
 | **Public wallet API** — proving and submission on behalf of **hosted** accounts (the multi-tenant service a public provider runs) | optional operator role | **off** |
 | **Publisher** — half-aggregate collected transition nullifiers and inscribe them ([§3.4](#34-the-publisher)) | optional operator role | **off** |
