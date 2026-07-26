@@ -53,7 +53,7 @@ A layer is done only when **all** of the following hold:
 
 ### App layer — identity and contacts (normative) {#app-layer-identity-and-contacts-normative}
 
-The rules below bind the `app` layer and the API layer. They do not bind the node layer, which resolves no names ([Requirement 11](./requirements.md#11-standard-identity-and-messaging)).
+The rules below bind the `app` layer and the API layer, which together own naming ([Requirement 11](./requirements.md#11-standard-identity-and-messaging)).
 
 Below, **name** means a normalized email-style identifier such as `alice@example.com`, resolved as a NIP-05 identity ([spec §4.3](./specification.md#43-addressing-for-delivery)).
 

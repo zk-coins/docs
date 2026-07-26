@@ -50,7 +50,7 @@ A wallet — the holder of the seed — can switch nodes at any time and can use
 
 An account's Nostr identity key is one of the keys [Requirement 6](#6-recovery) derives from the seed, and its payment identifier is fixed by those keys alone. Human messaging is standard Nostr NIP-17 carried by that same seed-derived Nostr identity key; it must interoperate bidirectionally with ordinary Nostr clients and must never require a zkCoins-specific message kind, endpoint, profile field, or capability marker.
 
-The app and API layers give every account they serve an email-style NIP-05 name such as `alice@example.com` and publish the signed payment object bound to it, so the account is reachable and payable by that name. The node kernel requires neither and resolves no names.
+The app and API layers give every account they serve an email-style NIP-05 name such as `alice@example.com`, resolve names, and publish the signed payment object bound to the name, so the account is reachable and payable by it. The node kernel works from public keys.
 
 A name is not derived from the seed and enters no signature preimage and no value-bearing structure. An account can carry several names at once; any name can be replaced without affecting keys, funds, or an established contact; losing a name costs reachability under that name and nothing else. Lightning/LNURL and SMTP/email bridges are independent, optional operator services and are prerequisites for nothing.
 
