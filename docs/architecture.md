@@ -96,6 +96,7 @@ The boundary is between **components**, not processes. A small deployment runs k
 ## Where to read further
 
 - [Requirements](/requirements) — the eleven properties the design exists to satisfy
+- [Keys and identities](/keys-and-identities) — every key, secret, identity, and capability, with its holder
 - [Specification §6](/specification#6--system-architecture) — the normative component, seam, and deployment rules
 - [Specification §7](/specification#7--wire-formats--node-interfaces) — REST, kernel RPC, Nostr kinds, Blossom
 - [Implementation Mandate](/implementation-mandate) — what each layer must implement before it counts as done

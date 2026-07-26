@@ -139,7 +139,7 @@ The whole specification exists to satisfy these (in full on the [Requirements](/
 | — | [Glossary](#glossary) | Every term, identifier, and notation, alphabetical, one line each |
 | — | [Test vectors](#test-vectors-conformance-harness) | Worked-example values and a conformance harness for implementations |
 
-New here? Read **Foundations** first — everything else builds on it. Stuck on a term? Jump to the **Glossary**.
+New here? Read **Foundations** first — everything else builds on it. Stuck on a term? Jump to the **Glossary**. Looking for one key, secret, or capability and who holds it? [Keys and identities](/keys-and-identities) lists every one of them and points back here.
 
 ## Requirements traceability
 

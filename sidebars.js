@@ -5,6 +5,7 @@ const sidebars = {
     'architecture',
     'requirements',
     'specification',
+    'keys-and-identities',
     'implementation-mandate',
     'protocol',
     'lightning-bridge',
