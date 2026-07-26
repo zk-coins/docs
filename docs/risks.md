@@ -141,7 +141,7 @@ A publisher receives a transition nullifier, half-aggregates signatures, and bro
 
 **Mitigation:** Publishing is permissionless and contention-free. A nullifier references no shared accumulator root and cannot go stale merely because another publisher writes first, so the account can submit the same nullifier to another publisher or have its own node self-publish it; redundant publication is idempotent under the first-occurrence rule ([spec §3.4](/specification#34-the-publisher), [§3.6](/specification#36-chain-scanning)). Half-aggregation lowers fees but is not required for correctness or liveness.
 
-## Fee-asset / cost-currency mismatch
+## Sponsorship sustainability and unmetered admission
 
 **Risk: a sponsored publisher has no revenue at all.**
 
