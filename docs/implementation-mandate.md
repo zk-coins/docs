@@ -53,7 +53,7 @@ A layer is done only when **all** of the following hold:
 
 ### App layer — identity and contacts (normative) {#app-layer-identity-and-contacts-normative}
 
-The rules below bind the **`app` layer only**. They are product requirements on what an end user sees and can do; the node and SDK layers are deliberately free of them ([Requirement 11](./requirements.md#11-standard-identity-and-messaging)), and no rule here may be read back into the protocol.
+The rules below bind the **wallet side** — the `app` layer, and the API layer where it provisions and hosts names. They are product requirements on what an end user sees and can do. The **node** layer is deliberately free of them: a node resolves names and messages, but a node deployment holding no wallet account — a publisher, a validating-only node — carries no name of its own ([Requirement 11](./requirements.md#11-standard-identity-and-messaging)).
 
 Below, **name** means a normalized email-style identifier such as `alice@example.com`, resolved as a NIP-05 identity ([spec §4.3](./specification.md#43-addressing-for-delivery)).
 
