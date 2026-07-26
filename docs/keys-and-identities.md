@@ -71,7 +71,7 @@ address = hash( Pk₀ ‖ nk_commit )
        "who may spend"  "which serial numbers belong to this account"
 ```
 
-`Pk₀` alone would say who may sign. Folding in `nk_commit` also fixes *which* nullifier the account will use to void a coin. Without that second ingredient, a holder could run two accounts with two different `nk` under one address and spend a coin twice. Because both are baked in at account creation, the address is immutable for the life of the account.
+`Pk₀` alone would say who may sign. Folding in `nk_commit` also fixes *which* nullifier the account will use to void a coin. Without that second ingredient a holder could register two accounts, with two different `nk`, under one address — the correspondence address ↔ account would stop being one-to-one. Double-spending is closed separately, by Bitcoin first-occurrence on `Pk₀`; `nk_commit` closes the equivocation. Because both are baked in at account creation, the address is immutable for the life of the account.
 
 Note what is **not** in the address: neither `IVPK` nor `op_pubkey`. Those are joined to it by signature, not by arithmetic — see *Two identities* below.
 
@@ -185,7 +185,8 @@ seed ─ BIP-32 ─▶ m
               │     └─ A/1'/1'  = ovk                    outgoing
               ├─ A/2'   = op → op_pubkey = op·G          Nostr identity
               ├─ A/3'   = nk                             nullifier key
-              └─ A/4'   = op_secret                      keys the nav_rand HKDF
+              ├─ A/4'   = op_secret                      keys the nav_rand HKDF
+              └─ A/5'/j' = op_j                          RESERVED, unused in v1
 ```
 
 Every branch separation is hardened, so a party holding the VIEW branch, `op`, `nk`, or `op_secret` cannot derive the SPEND branch.
@@ -271,7 +272,7 @@ Fresh for every output coin, so one per-coin capability discloses one coin and n
 | **Name** `user@domain` | **not** seed-derived; issued by the API and app layers | the public label; exactly one in force, attested by `name_sig` |
 | **`nprofile`** | `op_pubkey` plus relay hints | the NIP-19 identifier, the DNS-free route to a contact |
 | `publisher_pubkey` | the publisher's `op_pubkey` — a role of that identity, not a separate one | the author of kind 30421; how a spender names a publisher |
-| `operator_id` | the operator's own identifier in `OperatorEndpointV1` | endpoint gossip; global infrastructure only, never account- or blob-specific |
+| `operator_id` — a role of an `op_pubkey`, not a separate identity | the operator's own identifier in `OperatorEndpointV1` | endpoint gossip; global infrastructure only, never account- or blob-specific |
 
 Binding `nk_commit` into the address preimage makes the nullifier key part of the payment identity, so a coin sent to an address has exactly one valid nullifier and a holder cannot equivocate two accounts under one address ([§1.4](/specification#14-identifiers-and-hashes)). Accounts and addresses are one-to-one: there are no diversified addresses, sub-addresses, or change addresses, so the **account** is the unit of every isolation boundary ([§1.2](/specification#12-key-hierarchy)).
 
@@ -322,7 +323,7 @@ For an account-wide disclosure, prefer a scoped `zkgrant` over `zkavk` — not b
 | `op_sig` | `op` | that the recipient acknowledged a delivery (kind-1421 ACK) |
 | `op_signature` (in a `ViewGrant`) | `op` | the scope and window of a delegation |
 | `op_sig` (in `OperatorEndpointV1`) | the operator's `op` | endpoint gossip |
-| `receipt_sig` (in `ReplicaReceiptV1`) | the holder's key | that both the blob and its delivery event are durably committed |
+| `receipt_sig` (in `ReplicaReceiptV1`) | the replica holder's `op`, verified under `holder_op_pubkey` | that both the blob and its delivery event are durably committed |
 | `manifest_sig` (in `BootstrapManifestV1`) | `bootstrap_pubkey` | the network's bootstrap infrastructure list |
 
 ```
