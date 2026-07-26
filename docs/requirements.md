@@ -4,7 +4,7 @@ title: Requirements
 
 # Protocol Requirements
 
-The non-negotiable requirements zkCoins must satisfy. Each is a property of the protocol, independent of how it is implemented; implementation choices (commitment batching, the off-chain transport mechanism, key derivation, the replication factor, and similar) are not requirements.
+The non-negotiable requirements zkCoins must satisfy. Each is a property of the protocol, independent of how it is implemented; implementation choices (commitment batching, the off-chain bundle transport mechanism, the concrete key-derivation scheme, the replication factor, and similar) are not requirements.
 
 ### 1. Bitcoin L1 as the only base
 
@@ -44,4 +44,14 @@ The holder of an account can voluntarily disclose, to a recipient of its choosin
 
 ### 10. Node portability
 
-A wallet — the holder of the seed — can switch nodes at any time and can use multiple nodes simultaneously. A wallet must not depend on any node-specific state; every conforming node is interchangeable, and no node can lock a wallet in.
+A wallet — the holder of the seed — can switch nodes at any time and can use multiple nodes simultaneously. A wallet must not depend on any node-specific **value-bearing** state; every conforming node is interchangeable for custody and transacting, and no node can lock a wallet's funds in. Non-value-bearing operational state and its portability limits — including the retained contact record required to preserve DNS-free known-contact behavior across a node switch — must be stated explicitly ([spec §6.3](/specification#63-node-portability-and-multi-node-operation)).
+
+### 11. Standard identity and messaging
+
+An account's Nostr identity key is one of the keys [Requirement 6](#6-recovery) derives from the seed, and its payment identifier is fixed by those keys alone. Human messaging is standard Nostr NIP-17 carried by that same seed-derived Nostr identity key; it must interoperate bidirectionally with ordinary Nostr clients and must never require a zkCoins-specific message kind, endpoint, profile field, or capability marker.
+
+The app and API layers give every account they serve an email-style NIP-05 name such as `alice@example.com`, resolve names, and publish the signed payment object bound to the name, so the account is reachable and payable by it. The node kernel works from public keys.
+
+An account has one name in force at a time, and the account holder attests it with the wallet-only spend key, so a consumer can establish that the seed holder — not merely whoever holds the node-held Nostr key — put that name on that identity. Every app verifies that attestation before it accepts a name for a counterparty. A name is not derived from the seed, enters no value-bearing structure, and carries no payment authority; it can be replaced without affecting keys, funds, or an established contact, and losing it costs reachability under that name and nothing else. Lightning/LNURL and SMTP/email bridges are independent, optional operator services and are prerequisites for nothing.
+
+*(That end-user applications present names rather than raw identifiers is an application requirement, stated for the `app` layer in the [Implementation Mandate](/implementation-mandate#app-layer-identity-and-contacts-normative).)*

@@ -42,7 +42,7 @@ The per-coin `CoinProof` bundle — the recipient's custody of a coin's value an
 
 ### 3. Privacy by construction
 
-The ZK proofs hide all transaction details — amounts, assets, sender, receiver, transaction graph. Because there is one on-chain nullifier per transition, the per-block **transaction count** becomes public — the chain reveals *how many* transitions occurred, but never who, what, or how much ([spec §3.5](/specification#35-inscription-format)). The remaining counterparty-scope disclosures are bounded and final for v1 — the accepted v1 boundaries (privacy: D-17–D-19; fee pricing: D-20) — see the [precise privacy statement](/specification#67-security-properties-summary) and [Risks](/risks).
+The ZK proofs hide all transaction details — amounts, assets, sender, receiver, transaction graph. Because there is one on-chain nullifier per transition, the per-block **transaction count** becomes public — the chain reveals *how many* transitions occurred, but never who, what, or how much ([spec §3.5](/specification#35-inscription-format)). The remaining counterparty-scope disclosures are bounded and final for v1 — the accepted v1 boundaries (privacy: D-17–D-19; publisher sponsorship: D-20) — see the [precise privacy statement](/specification#67-security-properties-summary) and [Risks](/risks).
 
 ## Performance
 

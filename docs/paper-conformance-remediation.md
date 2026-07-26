@@ -96,7 +96,7 @@ offset  size  field
              format 0x01:  m x ( Pk_j (x-only) || R_j (x-only) ) then one shared s_agg (§3.3)
 ```
 
-This is the paper's `Aggregate Nullifier := (Nullifier Public Keys, Aggregate Signature)` with explicit version/format/anchor framing. A one-entry payload (`count = 1`) is valid, so self-publication never depends on finding another participant. The inscription carries **no** on-chain fee field, accumulator root, or transition message: the publisher fee is an ordinary output coin claimed off-chain ([spec §3.8](/specification#38-fees-and-economics)), and network separation is by verifier-data domain, not an on-chain byte.
+This is the paper's `Aggregate Nullifier := (Nullifier Public Keys, Aggregate Signature)` with explicit version/format/anchor framing. A one-entry payload (`count = 1`) is valid, so self-publication never depends on finding another participant. The inscription carries **no** on-chain fee field, accumulator root, or transition message: v1 carries no publisher fee at all, publishing being sponsored, and the deferred fee would be an ordinary output coin claimed off-chain ([spec §3.8](/specification#38-fees-and-economics)), and network separation is by verifier-data domain, not an on-chain byte.
 
 The normative specification reproduces the complete NISSHAC algorithms, completeness argument, and encoding rules (spec §1.7.10); the paper's formal security definition is referenced as the source work and is a non-gating Workstream-2 write-up ([Assurance Roadmap](/assurance)). Ordinary BIP-340 batch verification is not a substitute: the commitment-opening relation and half-aggregate equation are protocol-critical.
 
@@ -183,21 +183,21 @@ PR #97 removed the unanchored `mint-verified` path: a recipient credits issuance
 
 The publisher role remains open and non-custodial:
 
-- the spender picks a publisher from its `op`-signed profile, which specifies a flat `fee` per transition in the publisher's chosen `fee_asset_id`, and includes exactly one fee output coin `{recipient = fee_address, amount >= fee, asset_id = fee_asset_id}` in the transition that publisher will anchor ([spec §3.8]);
-- the fee coin sits under the transition's single `output_coins_root` (`ocr`) and is atomically bound with the payment by the one on-chain nullifier through sign-to-contract, so the publisher cannot collect the fee without anchoring the payment and an un-anchored transition's fee coin never reaches `completed`;
-- the fee is an ordinary output coin the sender includes for the publisher, addressed to the publisher's off-chain payout address ([spec §3.8](/specification#38-fees-and-economics)) — there is no on-chain fee field;
-- if the selected publisher censors, the spender re-picks with a fresh fee coin to a new `fee_address`, or self-publishes; first-occurrence nullifier semantics make competing transitions idempotent, so at most one is anchored and exactly one fee is paid, to the publisher that actually anchors it;
+- **v1 is sponsored**: the spender picks a publisher from its `op`-signed profile and hands off **fee-lessly**; the publisher pays the Bitcoin inscription cost and is not reimbursed ([spec §3.8](/specification#38-fees-and-economics)). The paid variant below is retained as the deferred mechanism of [spec §3.8.1](/specification#381-fee-coin-mechanism-deferred) and is **not** v1 behaviour: there, the profile would specify a flat `fee` per transition in the publisher's chosen `fee_asset_id`, and the spender would include exactly one fee output coin `{recipient = fee_address, amount >= fee, asset_id = fee_asset_id}` in the transition that publisher will anchor ([spec §3.8]);
+- (deferred) the fee coin would sit under the transition's single `output_coins_root` (`ocr`), atomically bound with the payment by the one on-chain nullifier through sign-to-contract, so a paid publisher could not collect without anchoring the payment, and an un-anchored transition's fee coin would never reach `completed`;
+- (deferred) the fee would be an ordinary output coin the sender includes for the publisher, addressed to the publisher's off-chain payout address ([spec §3.8](/specification#38-fees-and-economics)) — there is no on-chain fee field;
+- if the selected publisher censors, the spender re-picks another publisher — in v1 at no cost, since nothing was paid — or self-publishes; first-occurrence nullifier semantics make competing transitions idempotent, so at most one is anchored; under the deferred fee mechanism exactly one fee would be paid, to the publisher that actually anchors it, and in v1 none is paid at all;
 - a wallet may publish a one-entry aggregate itself;
 - no publisher signature, registry, sequencer, exclusive root lease or coordinator is required;
 - the paper's first-to-publish-wins gossip race, in which multiple publishers compete without being selected in advance, is deferred as a forward-compatible privacy upgrade because it requires a two-step payment structure that v1 does not fix.
 
-Publisher economics, front-running resistance and fee-claim privacy are closed by the [Risks](/risks) verdict table (publisher censorship/delay: holds; fee mismatch: holds under stated assumptions) plus the Gate-B fee-path tests. “Permissionless” does not by itself prove that the market remains decentralized.
+Publisher economics, front-running resistance and hand-off privacy are closed by the [Risks](/risks) verdict table (publisher censorship/delay: holds; sponsorship sustainability and unmetered admission: holds under stated assumptions) ; there is no fee path to test in v1. “Permissionless” does not by itself prove that the market remains decentralized.
 
 ## 6. Data availability and recovery boundary
 
 ### Public ledger data
 
-Keys, commitments, aggregate signatures, order and publisher fee addresses are Bitcoin data. A clean node reconstructs first occurrence and every historical NAV from Bitcoin witness history alone. A pruned node may retrieve old blocks from an untrusted source but must verify them against its header chain.
+Keys, commitments, aggregate signatures and order are Bitcoin data. A clean node reconstructs first occurrence and every historical NAV from Bitcoin witness history alone. A pruned node may retrieve old blocks from an untrusted source but must verify them against its header chain.
 
 ### Private bearer data
 
@@ -275,7 +275,7 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 
 ### Gate C — assurance
 
-- the specification's soundness summary ([spec §2.4](/specification#24-soundness-summary)) and security-properties summary ([spec §6.7](/specification#67-security-properties-summary)) exist, every clause reference they cite resolves, every Requirement 1–10 has a row, and D-17–D-19 appear in the [§6.7 precise privacy statement](/specification#67-security-properties-summary), D-16 is stated in [spec §3.9](/specification#39-finality-and-reorg-handling), and D-20 has its row in the [Risks](/risks) verdict table (machine-checkable link/row checks);
+- the specification's soundness summary ([spec §2.4](/specification#24-soundness-summary)) and security-properties summary ([spec §6.7](/specification#67-security-properties-summary)) exist, every clause reference they cite resolves, every Requirement 1–11 has a row, and D-17–D-19 appear in the [§6.7 precise privacy statement](/specification#67-security-properties-summary), D-16 is stated in [spec §3.9](/specification#39-finality-and-reorg-handling), and D-20 has its row in the [Risks](/risks) verdict table (machine-checkable link/row checks);
 - **D-05** passes its release gate: the **V.11 differential-test** of the in-circuit RFC-6962 log-consistency/inclusion arithmetization against an independent reference ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1), V.11) — executed at the negative-controls / conformance step ([Implementation Mandate](/implementation-mandate) step 5/6) as part of the executable gate, not a separate human review — alongside the existing D-16/D-17–D-20 checks above;
 - **D-05 network-parameter agreement gate:** `network-params.json` is a byte-exact canonical artefact (spec §3.6); every node MUST load the pinned per-network `activation_height` and refuse readiness (`/health/ready` `503`) on mismatch; and a conformance test MUST confirm two independent nodes scanning the same tip from the **same** pinned `activation_height` produce the identical `(size, mth)` / `nav_root`, while a **differing** `activation_height` diverges them **whenever a valid nullifier is admitted in the interval between the two heights** — the conformance fixture **MUST** include at least one such nullifier so the divergence is observably guaranteed — the executable check for the parameter-agreement residual (D-05 (iv)).
 - the [Risks](/risks) verdict table has no open and no broken row;
