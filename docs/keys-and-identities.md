@@ -281,12 +281,12 @@ A client pins `op_pubkey` **and** the payment identity `{address, pk0, nk_commit
 
 Each is a Bech32m string under its own HRP, so the encodings can never be confused; a value under the wrong HRP must be rejected ([§1.7.7](/specification#177-bech32m-and-bitcoin-conventions), [§5.4](/specification#54-capabilities-at-a-glance)).
 
-| HRP | Payload | Reach | Revocable |
+| HRP | Payload | Reach | Forward-stoppable? |
 |---|---|---|---|
 | `zk` | `address`, 32 B | — | — |
 | `zkview` | `K_tx`, 32 B | exactly one coin | no — pure bearer |
 | `zkavk` | `ivk ‖ ovk` (64 B), or `ivk` alone (32 B, incoming-only) | the whole account history | **no** |
-| `zkgrant` | the full `ViewGrant` serialization, `op`-signed | an asset list × a time window, bound to grantee key `D` | **yes**, forward-only |
+| `zkgrant` | the full `ViewGrant` serialization, `op`-signed | an asset list × a time window, bound to grantee key `D` | **yes** at nodes you operate — never retroactive |
 | `zkbid` | `blob_id = H(ciphertext)`, 32 B | a locator, not a key | — |
 | `zkatt` | `SHA-256(BalanceAttestationV1)`, 32 B | a balance attestation's content handle | — |
 
@@ -294,7 +294,7 @@ The 90-character limit of BIP-173/BIP-350 does not apply to these HRPs: a `zkavk
 
 `zkview`, `zkavk`, and the balance attestation are **not** node authorisations. They are client-side decryption secrets an explorer applies to material it obtains from the relay mesh, so they widen only what their holder can already decrypt. Each must therefore travel in the URL **fragment**, never in a path or query string ([§5.1](/specification#51-capability-gated-pull), [§5.6](/specification#56-shareable-confirmation-links)).
 
-For an account-wide disclosure that can be retracted, use a scoped `zkgrant` rather than the irrevocable `zkavk`.
+For an account-wide disclosure, prefer a scoped `zkgrant` over `zkavk` — not because it can be retracted, since nothing un-sees what a grantee already read, but because it carries an `expiry` and can be refused for future pulls at nodes you operate ([§5](/specification#5--access--explorer) *Consent is one-way*).
 
 ## 7 · Request authentication
 
