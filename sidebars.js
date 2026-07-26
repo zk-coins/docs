@@ -2,6 +2,7 @@
 const sidebars = {
   docs: [
     'intro',
+    'architecture',
     'requirements',
     'specification',
     'implementation-mandate',

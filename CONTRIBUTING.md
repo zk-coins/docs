@@ -49,6 +49,7 @@ npm start    # http://localhost:3092
 docs/
 ├── docs/                         # Markdown content
 │   ├── intro.md                  # Landing page (slug: /)
+│   ├── architecture.md           # Components, repositories, boundaries, deployments
 │   ├── requirements.md           # The eleven protocol requirements
 │   ├── specification.md          # The normative protocol specification (single source of truth)
 │   ├── implementation-mandate.md # Standing instruction to every implementor

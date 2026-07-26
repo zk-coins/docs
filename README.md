@@ -2,7 +2,7 @@
 
 **Private Bitcoin payments via Shielded CSV** — no new chain, no token, no consensus change, no trusted operator. Only Bitcoin, zero-knowledge proofs, and the user's own keys.
 
-This is the **documentation repository** and the single place that describes the whole system end to end. New here? Start with the **[Specification](https://docs.zkcoins.com/specification)** (the full A-to-Z technical design) or the **[Requirements](https://docs.zkcoins.com/requirements)**.
+This is the **documentation repository** and the single place that describes the whole system end to end. New here? Start with the **[Architecture](https://docs.zkcoins.com/architecture)** for the map, then the **[Specification](https://docs.zkcoins.com/specification)** (the full A-to-Z technical design) or the **[Requirements](https://docs.zkcoins.com/requirements)**.
 
 | | Production | Dev |
 |---|---|---|
@@ -34,7 +34,7 @@ Supporting repos: [`zk-coins/research`](https://github.com/zk-coins/research) (p
 
 ## This repository (docs)
 
-A Docusaurus site published to Cloudflare Pages. Sections: Introduction, Requirements, **Specification**, Implementation Mandate, Protocol, Comparisons, Risks, Assurance Roadmap.
+A Docusaurus site published to Cloudflare Pages. Sections: Introduction, **Architecture**, Requirements, **Specification**, Implementation Mandate, Protocol, Comparisons, Risks, Assurance Roadmap.
 
 ### Development
 
