@@ -345,7 +345,7 @@ name_sig     = BIP-340(sk₀, name_message)
 
 `bootstrap_pubkey` is the only authority permitted to sign a `BootstrapManifestV1`; a manifest that does not verify under the pinned key is rejected, and there is no other trust root for bootstrap ([§3.6](/specification#36-chain-scanning), [§4.3](/specification#43-addressing-for-delivery)).
 
-The publisher has no protocol key material of its own. Because v1 publishing is sponsored and carries no fee ([§3.8](/specification#38-fees-and-economics)), there is no fee address to bind and therefore no payment-identity block to sign: its kind-30421 profile is `{version, relays}` under its `op` key, and its Bitcoin identity is the reveal-transaction key. Running a publisher takes a key and a relay — no account, no address, no `sk₀`, no wallet. The deferred paid variant would need all four ([§3.8.1](/specification#381-fee-coin-mechanism-deferred)).
+The publisher has no protocol key material of its own. Because v1 publishing is sponsored and carries no fee ([§3.8](/specification#38-fees-and-economics)), there is no fee address to bind and therefore no payment-identity block to sign: its kind-30421 profile is `{version, relays}` under its `op` key, and its Bitcoin identity is the reveal-transaction key. Running a publisher takes an `op` key, a relay presence, and an HTTP endpoint for the hand-off — no account, no address, no `sk₀`, no wallet. The deferred paid variant would need all four ([§3.8.1](/specification#381-fee-coin-mechanism-deferred)).
 
 ## 10 · Derived values that are not keys
 
