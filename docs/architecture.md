@@ -4,7 +4,7 @@ title: Architecture
 
 # Architecture
 
-The components zkCoins is built from, which repository each lives in, and the boundaries between them. Every rule here is normative in [Specification §6](/specification#6--system-architecture); this page is the map.
+The components zkCoins is built from, which repository each lives in, and the boundaries between them. Every claim here maps to a normative rule in [Specification §§4, 6, and 7](/specification#6--system-architecture) — components and seams in §6, the naming layer in §4.3, the wire and RPC contracts in §7 — and each section below links to the one it rests on. This page is the map, not the norm.
 
 ## The picture
 
@@ -61,7 +61,7 @@ flowchart TB
 
 **Custody sits in the app.** The key that authorises spending exists only on the user's device and reaches no node and no server ([Requirement 5](/requirements#5-custody-only-in-the-wallet)). The kernel holds viewing keys and the account's Nostr key; it detects, decrypts, proves, and transports, and it cannot spend.
 
-**The kernel speaks gRPC, the API speaks REST.** `kernel.v1` runs on loopback, a private container network, or mTLS between containers. Every public request — wallet, SDK, app, explorer — arrives at the API layer, which terminates it and enforces the capability gate. The kernel remains the sole reader and writer of the value-bearing store, so an API layer that is compromised can refuse and mislead its own users while forging, moving, and double-spending nothing ([§6.1](/specification#61-components-and-responsibilities), [§7.8](/specification#78-kernel-rpc--the-internal-interface-normative)).
+**The kernel speaks gRPC, the API speaks REST.** `kernel.v1` runs on loopback, a private container network, or mTLS between containers. Every public request — wallet, SDK, app, explorer — arrives at the API layer, which terminates it and enforces the capability gate. The kernel remains the sole reader and writer of the value-bearing store, so a compromised API layer can forge no proof, mint no coin, and double-spend nothing ([§6.1](/specification#61-components-and-responsibilities), [§7.8](/specification#78-kernel-rpc--the-internal-interface-normative)). It is **not** harmless: like any component between the wallet and the prover it relays a send's `output_templates`, and the thin wallet runs no Poseidon and so cannot recompute `output_coins_root` from what it posted. A compromised relayer can therefore redirect or drop the outputs of a send the wallet then cooperatively signs — a correctness failure, not a custody one, whose effect on the sender is nonetheless the same as theft ([§6.6](/specification#66-threat-model-and-trust-configurations) *Send-intent integrity*).
 
 **Names live above the kernel.** The app and API layers resolve an account's email-style NIP-05 name, and an API running `wallet` issues names for the accounts it serves. The kernel works from `op_pubkey`, `nprofile`, and `addr_sig`-carrying objects, which keeps DNS and certificate authorities out of the trustless core and lets a publisher back end run on a key and a relay ([§4.3](/specification#43-addressing-for-delivery)).
 

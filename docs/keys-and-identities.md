@@ -6,7 +6,7 @@ title: Keys and identities
 
 Every key, secret, identity, and capability zkCoins defines — first how they relate to one another, then the complete list with each value's origin, holder, and reach. Each value is defined normatively in the [Specification](/specification); this page explains and indexes those definitions.
 
-Everything descends from one seed except the name, which is a label the API and app layers issue and the holder attests. That single split is what the rest of this page organises itself around.
+Every long-term key of the account descends from one seed. The name does not — it is a label the API and app layers issue and the holder attests — and neither does the fresh randomness a transition draws, nor any key belonging to another party. That split is what the rest of this page organises itself around.
 
 ## How the keys fit together
 
@@ -29,23 +29,23 @@ flowchart TB
   pk0 --> addr(["<b>address</b><br/>where money goes"])
   nkc --> addr
 
-  addr --> prof
-  ivpk --> prof
-  oppk --> prof
+  addr ==> prof
+  ivpk ==> prof
+  oppk ==> prof
   prof["<b>kind-0 profile</b> · public<br/>address · Pk₀ · nk_commit · IVPK · relays<br/>authored by op_pubkey"]
-  prof --> name(["<b>user@domain</b><br/><i>a label — not seed-derived</i>"])
+  prof ==> name(["<b>user@domain</b><br/><i>a label — not seed-derived</i>"])
 
   sk -. "addr_sig" .-> prof
   sk -. "name_sig" .-> name
 ```
 
-Solid arrows are derivation — one value computed from another. Dotted arrows are signatures by `sk₀`, the key that never leaves the device.
+Three kinds of arrow, and the difference between them is the whole point. **Solid** is derivation — one value computed from another, so the target cannot exist without the source. **Thick** is carriage — the profile publishes a copy of a value it did not compute; a wrong copy is caught by the signatures and by nothing else. **Dotted** is a signature by `sk₀`, the key that never leaves the device. The name hangs off the profile by carriage and off `sk₀` by signature; nothing derives it.
 
-### One seed, one tree, four jobs
+### One seed, one tree, five jobs
 
-A user writes down twelve words. Those become one long secret number, the seed, and every other key is computed from it by a fixed recipe. That is why the twelve words are enough to restore an account: whoever holds the seed can recompute everything.
+A user writes down twelve words. Those become one long secret number, the seed, and every other key is computed from it by a fixed recipe. That is why the twelve words are enough to restore an account: whoever holds the seed can recompute every long-term key it owns. What the seed does **not** cover is the name, the fresh per-transition randomness `esk` and `npk_rand`, and any key belonging to someone else — a grantee, a replica holder, a network trust root. `nav_rand` is the one piece of randomness that *is* reproducible from the seed, which is why it has a branch of its own.
 
-The tree exists because an account does four separable jobs, and only the first of them must stay on the user's own device:
+The tree exists because an account does five separable jobs, and only the first of them must stay on the user's own device:
 
 | Job | Branch | Who should be able to do it |
 |---|---|---|
@@ -53,8 +53,9 @@ The tree exists because an account does four separable jobs, and only the first 
 | **See** incoming coins | `A/1'` | also the node, so it can watch around the clock |
 | **Speak** — chat, profile, discovery | `A/2'` | also the node, so the account is reachable while the user sleeps |
 | **Void** spent coins | `A/3'` | also the node, so it can build proofs |
+| **Reproduce** a past proof's randomness | `A/4'` | also the node — `op_secret` keys the `nav_rand` derivation, so a rebuilt node can reopen any prior commitment |
 
-The separations are **hardened**, which makes the tree a one-way street: a parent can compute its children, but a child can reach neither its parent nor its siblings. A node holding the view, speak, and void branches therefore cannot compute the spend branch. It sees everything and can take nothing.
+The separations are **hardened**, which makes the tree a one-way street: a parent can compute its children, but a child can reach neither its parent nor its siblings. A node holding the view, speak, void, and reproduce branches therefore cannot compute the spend branch. It sees everything and can take nothing.
 
 ### Two recurring notions
 
@@ -117,7 +118,7 @@ An account has two identities, both seed-derived, both immutable, with different
 | | `address` | `op_pubkey` |
 |---|---|---|
 | **Is** | where money goes | the Nostr identity — who speaks, sends, and is found |
-| **Appears in** | proofs, and on Bitcoin | Nostr relays |
+| **Appears in** | profiles, invoices, coins, and proofs — **not** on Bitcoin, which carries the per-transition nullifier `(Pkᵢ, Rᵢ)` instead | Nostr relays |
 | **Needs** | `sk₀`, on the device | the node may hold `op` |
 
 `op_pubkey` is an ordinary Nostr account of the kind any Nostr client understands. Everything human runs on it: encrypted chat under NIP-17, the kind-0 profile that carries the payment fields, the kind-10050 relay list that says where to reach the account, and the NIP-05 name that resolves to it. It is also what a contact is pinned to.
@@ -301,7 +302,7 @@ For an account-wide disclosure that can be retracted, use a scoped `zkgrant` rat
 | Item | Key | Purpose |
 |---|---|---|
 | `nonce` | 32 bytes, node-issued | the challenge; consumed on use, 60-second window |
-| `chan_bind` | from the node's own hostname | channel binding that survives TLS-terminating proxies and is computable in a browser |
+| `chan_bind` | from the **API layer's** authoritative public hostname or onion key — never re-derived by the kernel from forwarded request metadata | channel binding that survives TLS-terminating proxies and is computable in a browser |
 | `tls-exporter` | RFC 9266, 32 bytes | optional extra hardening; must never be required |
 | **OwnershipProof** | `sk₀` over `chal` | the only authority for `/v1/pull`, `/v1/attest/balance`, and `/v1/grants` |
 | **GrantProof** | the grantee's secret `d` for `D` | delegated pull; must not mint further grants |
@@ -317,7 +318,9 @@ For an account-wide disclosure that can be retracted, use a scoped `zkgrant` rat
 | `addr_sig` | **`sk₀`** | that the address holder authorised exactly these payment fields, including the choice of `ivpk` and `op_pubkey` |
 | `name_sig` | **`sk₀`** | that the seed holder consented to this name |
 | `sig` (on an `Invoice`) | `op` | the per-issuance authorisation by the recipient's online key |
-| Event signatures | `op` | kinds 0, 10050, 30421, and the NIP-59 seal and gift wrap |
+| Event signatures | `op` | kinds 0, 10050, 30421, and the NIP-59 kind-13 seal |
+| Gift-wrap signature | a **fresh one-time key**, per event | the kind-1059 wrapper — never `op`, which is what keeps the two copies unlinkable |
+| `op_sig` | `op` | that the recipient acknowledged a delivery (kind-1421 ACK) |
 | `op_signature` (in a `ViewGrant`) | `op` | the scope and window of a delegation |
 | `op_sig` (in `OperatorEndpointV1`) | the operator's `op` | endpoint gossip |
 | `receipt_sig` (in `ReplicaReceiptV1`) | the holder's key | that both the blob and its delivery event are durably committed |
@@ -328,7 +331,7 @@ name_message = H( "zkCoins/v1/NameConsent" ‖ network ‖ u32-be name_len ‖ U
 name_sig     = BIP-340(sk₀, name_message)
 ```
 
-`addr_sig` and `name_sig` come from `sk₀` rather than `op` because `op` is node-held: an `op` signature over a name attests only that the node asserted it, while an `sk₀` signature attests the seed holder. The operational consequence is that issuing an `Invoice` requires the wallet, the same custody boundary that governs sending. `txn_sig` is the protocol's only Schnorr object — there is no separate publisher proof or publisher signature over shared state ([§1.4](/specification#14-identifiers-and-hashes), [§3.2](/specification#32-transition-signing-bip-340--sign-to-contract), [§4.3](/specification#43-addressing-for-delivery)).
+`addr_sig` and `name_sig` come from `sk₀` rather than `op` because `op` is node-held: an `op` signature over a name attests only that the node asserted it, while an `sk₀` signature attests the seed holder. The operational consequence is that issuing an `Invoice` requires the wallet, the same custody boundary that governs sending. `txn_sig` is the only Schnorr object placed on-chain and half-aggregated — there is no separate publisher proof or publisher signature over shared state ([§1.4](/specification#14-identifiers-and-hashes), [§3.2](/specification#32-transition-signing-bip-340--sign-to-contract), [§4.3](/specification#43-addressing-for-delivery)).
 
 ## 9 · Network-level keys
 
