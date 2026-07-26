@@ -28,7 +28,7 @@ Every incentive/residual verdict for v1, closed per the [Assurance Roadmap](/ass
 | Publisher-observed spend linkage | **accepted v1 boundary** (D-19) | rotation/self-publish removes the edge at no cost |
 | Anonymity set depends on usage | **holds under stated assumptions** | global set grows with adoption; no protocol lever |
 | Publisher censorship and delay | **holds** | permissionless, contention-free publishing + self-publish escape; v1 publishing is sponsored, so a censored spender simply re-picks a publisher or self-publishes and forfeits nothing (covers D-09) |
-| Fee-asset / cost-currency mismatch | **holds under stated assumptions** (D-20) | market-priced, never correctness-relevant |
+| Sponsorship sustainability and unmetered admission | **holds under stated assumptions** (D-20) | a sponsor has no revenue and no admission proof; self-publish is the universal escape, and neither correctness nor custody depends on a publisher existing |
 | Interactive receive | **holds under stated assumptions** | the receiver's own 24/7 node stands in; liveness-only, never safety |
 | Unobservable total supply (token standard 1) | **accepted v1 boundary** | documented issuer-trust (register D-13); token standard 2 provides the auditable cap |
 | Carrying real Bitcoin requires a bridge | **holds** (out of core scope) | bridges are explicit, off-by-default operator extensions |
