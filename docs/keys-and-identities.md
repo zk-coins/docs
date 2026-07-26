@@ -4,9 +4,159 @@ title: Keys and identities
 
 # Keys and identities
 
-Every key, secret, identity, and capability zkCoins defines, in one list — with its origin, its holder, and what it reaches. Each value is defined normatively in the [Specification](/specification); this page is the inventory and points at the definition.
+Every key, secret, identity, and capability zkCoins defines — first how they relate to one another, then the complete list with each value's origin, holder, and reach. Each value is defined normatively in the [Specification](/specification); this page explains and indexes those definitions.
 
 Everything descends from one seed except the name, which is a label the API and app layers issue and the holder attests. That single split is what the rest of this page organises itself around.
+
+## How the keys fit together
+
+The inventory below lists each value on its own. This section explains how they relate — what produces what, and what binds what to what.
+
+```mermaid
+flowchart TB
+  words(["12-word mnemonic"]) --> seed(["seed"])
+
+  seed --> sk["<b>sk₀ · skᵢ</b><br/>SPEND<br/><i>wallet only</i>"]
+  seed --> ivk["<b>ivk · ovk</b><br/>VIEW<br/><i>wallet + its own node</i>"]
+  seed --> op["<b>op</b><br/>NOSTR IDENTITY KEY<br/><i>the node</i>"]
+  seed --> nk["<b>nk</b><br/>NULLIFIER<br/><i>wallet + its own node</i>"]
+
+  sk --> pk0(["Pk₀"])
+  ivk --> ivpk(["IVPK<br/><i>encrypt to me</i>"])
+  op --> oppk(["<b>op_pubkey</b><br/>the Nostr identity"])
+  nk --> nkc(["nk_commit"])
+
+  pk0 --> addr(["<b>address</b><br/>where money goes"])
+  nkc --> addr
+
+  addr --> prof
+  ivpk --> prof
+  oppk --> prof
+  prof["<b>kind-0 profile</b> · public<br/>address · Pk₀ · nk_commit · IVPK · relays<br/>authored by op_pubkey"]
+  prof --> name(["<b>user@domain</b><br/><i>a label — not seed-derived</i>"])
+
+  sk -. "addr_sig" .-> prof
+  sk -. "name_sig" .-> name
+```
+
+Solid arrows are derivation — one value computed from another. Dotted arrows are signatures by `sk₀`, the key that never leaves the device.
+
+### One seed, one tree, four jobs
+
+A user writes down twelve words. Those become one long secret number, the seed, and every other key is computed from it by a fixed recipe. That is why the twelve words are enough to restore an account: whoever holds the seed can recompute everything.
+
+The tree exists because an account does four separable jobs, and only the first of them must stay on the user's own device:
+
+| Job | Branch | Who should be able to do it |
+|---|---|---|
+| **Spend** money | `A/0'` | the user's device alone |
+| **See** incoming coins | `A/1'` | also the node, so it can watch around the clock |
+| **Speak** — chat, profile, discovery | `A/2'` | also the node, so the account is reachable while the user sleeps |
+| **Void** spent coins | `A/3'` | also the node, so it can build proofs |
+
+The separations are **hardened**, which makes the tree a one-way street: a parent can compute its children, but a child can reach neither its parent nor its siblings. A node holding the view, speak, and void branches therefore cannot compute the spend branch. It sees everything and can take nothing.
+
+### Two recurring notions
+
+**Secret and public key.** From a secret number `sk` a public number `Pk` can be computed, never the reverse. Lower case means secret (`sk₀`, `ivk`, `op`, `nk`); a capitalised name or a `pubkey` suffix means public (`Pk₀`, `IVPK`, `op_pubkey`). The public half can be printed anywhere.
+
+**Commitment.** A hash of a secret. `nk_commit` is a commitment to `nk`: it can be published, it proves later that the same `nk` is meant, and it reveals nothing about it — a sealed bet.
+
+### The address is two things in one
+
+```
+address = hash( Pk₀ ‖ nk_commit )
+                 │      │
+       "who may spend"  "which serial numbers belong to this account"
+```
+
+`Pk₀` alone would say who may sign. Folding in `nk_commit` also fixes *which* nullifier the account will use to void a coin. Without that second ingredient, a holder could run two accounts with two different `nk` under one address and spend a coin twice. Because both are baked in at account creation, the address is immutable for the life of the account.
+
+Note what is **not** in the address: neither `IVPK` nor `op_pubkey`. Those are joined to it by signature, not by arithmetic — see *Two identities* below.
+
+### Paying someone you have never spoken to
+
+A sender knows only the recipient's public `IVPK`. That is enough to produce a secret only the recipient can reconstruct:
+
+```
+sender draws:     esk                    a throwaway secret, one per coin
+sender computes:  epk = esk·G            published alongside the coin
+sender computes:  ss  = esk × IVPK       a shared secret
+recipient:        ss  = ivk × epk        the same value, by a different route
+```
+
+Two different computations, one result, no interaction. A relay that sees `epk` cannot reach `ss`, because that would take either `esk` or `ivk`.
+
+From `ss` come two separate things:
+
+```
+ss ──┬── K_tx        the key that opens this one coin        SECRET
+     └── detect_tag  a sticker saying "this one is yours"    PUBLIC
+```
+
+The sticker has to be public, or the recipient would have to trial-decrypt every message on the network. Instead it does one small computation per candidate and knows immediately whether the message concerns it. And because the sender draws a fresh `esk` for every coin, every sticker differs — so no observer can group two payments as going to the same recipient.
+
+The two are safe to derive from one `ss` because they are separated by distinct context strings **and** distinct primitives: the public sticker does not lead back to the secret key.
+
+### Why the spend key changes every time
+
+Each time the account moves, a new spend key is used — `sk₀`, then `sk₁`, `sk₂`, and so on. The old public key is spent and written to Bitcoin, which is what marks that state as consumed:
+
+```
+state 0 ──[Pk₀ published]──▶ state 1 ──[Pk₁]──▶ state 2 ──▶ …
+```
+
+A chain observer sees a sequence of unrelated numbers. It cannot attribute `Pk₀` and `Pk₁` to one account, because the next key never appears in the clear — it lives only inside a hashed, off-chain state.
+
+`Pk₀` is the exception: it is fixed in the address. That is why `sk₀` — the very first key — is the one that proves *ownership of this address*. It signs `addr_sig`, `name_sig`, and every OwnershipProof. The rotating `skᵢ` sign only the individual transition.
+
+### Two identities, and the two signatures that join them
+
+An account has two identities, both seed-derived, both immutable, with different jobs:
+
+| | `address` | `op_pubkey` |
+|---|---|---|
+| **Is** | where money goes | the Nostr identity — who speaks, sends, and is found |
+| **Appears in** | proofs, and on Bitcoin | Nostr relays |
+| **Needs** | `sk₀`, on the device | the node may hold `op` |
+
+`op_pubkey` is an ordinary Nostr account of the kind any Nostr client understands. Everything human runs on it: encrypted chat under NIP-17, the kind-0 profile that carries the payment fields, the kind-10050 relay list that says where to reach the account, and the NIP-05 name that resolves to it. It is also what a contact is pinned to.
+
+The two identities are joined by two signatures, both made with `sk₀`:
+
+**`addr_sig`** — *"I, the holder of this address, confirm: encrypt to **this** `IVPK`, reach me on **these** relays, and the Nostr identity is **this** `op_pubkey`."*
+
+It is needed because `Pk₀` and `nk_commit` are public. Without it, an attacker could publish a profile quoting the genuine address but substituting its own `IVPK` and `op_pubkey`; a payer would then encrypt the coin to the attacker. `addr_sig` makes that forgery infeasible, and it is why issuing an `Invoice` requires the wallet.
+
+**`name_sig`** — *"I, the holder of this seed, consent to `user@domain` belonging to **this** `op_pubkey`."*
+
+Without it, the name provider could assert that the name belongs to a key of its own choosing.
+
+Both use `sk₀` rather than `op` because `op` is node-held: an `op` signature over a name would attest only that the node asserted it.
+
+### What a payer actually checks
+
+```
+user@domain
+     │  resolve via NIP-05
+     ▼
+op_pubkey                                    the Nostr identity
+     │  fetch the profile authored by it
+     ▼
+profile { address, Pk₀, nk_commit, IVPK, relays }
+     │
+     ├── hash(Pk₀ ‖ nk_commit) == address ?      the parts match the address
+     ├── addr_sig valid under Pk₀ ?              the holder authorised these fields
+     ├── event signature valid under op_pubkey ? it came from this identity
+     └── name_sig valid under Pk₀ ?              the name really belongs to it
+     │
+     ▼
+pin op_pubkey and {address, Pk₀, nk_commit, IVPK}, then encrypt to IVPK
+```
+
+If any check fails, the profile is not payable. What gets pinned is the **key**, never the name: a contact who changes name keeps the conversation, and the same name under a different key is a different contact.
+
+The rest of this page is the inventory.
 
 ## 1 · Seed and roots
 
