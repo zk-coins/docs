@@ -5,7 +5,7 @@ title: Mail Bridge
 # Mail Bridge
 
 :::info Optional operator service
-The SMTP/email bridge is an **optional operator service**, **off by default**, and independent of both the optional Lightning bridge and mandatory NIP-17 messaging. It moves messages, never zkCoins value.
+The SMTP/email bridge is an **API-layer feature**, **off by default**, and independent of both the Lightning bridge and mandatory NIP-17 messaging. An operator enables it as `mail_bridge` in the closed `features` set of [spec §6.1](/specification#61-components-and-responsibilities). It moves messages, never zkCoins value.
 :::
 
 ## One identifier, two independent message transports
@@ -28,7 +28,7 @@ For a recipient entered as `bob@example.com`, the sender follows the standard §
 3. If Bob has a valid kind-10050 event, send through standard NIP-17 to exactly those DM relays.
 4. If Bob is not ready for NIP-17, SMTP may be offered only when the sender's operator has enabled the email bridge and the user explicitly chooses email.
 
-Whether the sender's own operator has enabled the email bridge is not something the client learns from a spec-defined advertisement mechanism — the mail bridge sits outside the closed `roles` set ([spec §6.4](/specification#64-external-interfaces-abstract), *Core surface vs optional roles*) and is known only out of band, from the operator's own configuration or service description. A client that has not been told the bridge is enabled **MUST** treat it as absent.
+A client learns whether its own operator runs the bridge from `mail_bridge` in the `features` array of `GET /v1/info` ([spec §6.1](/specification#61-components-and-responsibilities)). Absent from that array, the bridge is absent and an SMTP send is unavailable.
 
 The absence of a `zkcoins` object does not affect NIP-17.
 
