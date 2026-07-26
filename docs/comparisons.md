@@ -117,7 +117,7 @@ Zcash is the conceptual parent of the commitment/nullifier shield. The key diver
 | **Anonymity set** | All coins | Round participants only |
 | **Amounts hidden** | Yes | No (equal-output) |
 | **Coordinator** | None | Required |
-| **On-chain analysis** | Amount/decoy-based analysis not possible (no decoys, all amounts hidden); per-transition count, inscription timing, and (toward a repeatedly reused publisher) fee-coin transition linkage remain visible ([Risks](/risks)) | Difficult but not impossible |
+| **On-chain analysis** | Amount/decoy-based analysis not possible (no decoys, all amounts hidden); per-transition count, inscription timing, and (toward a repeatedly reused publisher) the pre-anchor `Pkᵢ` of each hand-off remain visible ([Risks](/risks)) | Difficult but not impossible |
 | **Cost** | One ~64-byte nullifier per transition (~16 vB) | Multiple UTXOs (expensive) |
 | **Regulatory risk** | Low (no coordinator) | High (coordinators prosecuted) |
 

@@ -131,7 +131,9 @@ It is needed because `Pk₀` and `nk_commit` are public. Without it, an attacker
 
 **`name_sig`** — *"I, the holder of this seed, consent to `user@domain` belonging to **this** `op_pubkey`."*
 
-Without it, the name provider could assert that the name belongs to a key of its own choosing.
+What it closes: the node holds `op` and signs the profile, so without `name_sig` a hosting provider could attach a name to a payment identity **it does not own** and whose holder never agreed. With it, only the seed holder can.
+
+What it does **not** close, and this matters: it says nothing about who is entitled to the name. A malicious NIP-05 provider — or whoever controls that domain — can point `alice@example.com` at an identity that is wholly its own, sign a perfectly valid `name_sig` with *that* identity's `sk₀`, and every check passes. On first contact, DNS and the name provider are trusted for name ownership; `name_sig` narrows who can bind a name to an *existing* identity, not who may claim a name. Nothing but an out-of-band check of the key itself closes that.
 
 Both use `sk₀` rather than `op` because `op` is node-held: an `op` signature over a name would attest only that the node asserted it.
 

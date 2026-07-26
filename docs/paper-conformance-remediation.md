@@ -96,7 +96,7 @@ offset  size  field
              format 0x01:  m x ( Pk_j (x-only) || R_j (x-only) ) then one shared s_agg (§3.3)
 ```
 
-This is the paper's `Aggregate Nullifier := (Nullifier Public Keys, Aggregate Signature)` with explicit version/format/anchor framing. A one-entry payload (`count = 1`) is valid, so self-publication never depends on finding another participant. The inscription carries **no** on-chain fee field, accumulator root, or transition message: the publisher fee is an ordinary output coin claimed off-chain ([spec §3.8](/specification#38-fees-and-economics)), and network separation is by verifier-data domain, not an on-chain byte.
+This is the paper's `Aggregate Nullifier := (Nullifier Public Keys, Aggregate Signature)` with explicit version/format/anchor framing. A one-entry payload (`count = 1`) is valid, so self-publication never depends on finding another participant. The inscription carries **no** on-chain fee field, accumulator root, or transition message: v1 carries no publisher fee at all, publishing being sponsored, and the deferred fee would be an ordinary output coin claimed off-chain ([spec §3.8](/specification#38-fees-and-economics)), and network separation is by verifier-data domain, not an on-chain byte.
 
 The normative specification reproduces the complete NISSHAC algorithms, completeness argument, and encoding rules (spec §1.7.10); the paper's formal security definition is referenced as the source work and is a non-gating Workstream-2 write-up ([Assurance Roadmap](/assurance)). Ordinary BIP-340 batch verification is not a substitute: the commitment-opening relation and half-aggregate equation are protocol-critical.
 
@@ -183,21 +183,21 @@ PR #97 removed the unanchored `mint-verified` path: a recipient credits issuance
 
 The publisher role remains open and non-custodial:
 
-- the spender picks a publisher from its `op`-signed profile, which specifies a flat `fee` per transition in the publisher's chosen `fee_asset_id`, and includes exactly one fee output coin `{recipient = fee_address, amount >= fee, asset_id = fee_asset_id}` in the transition that publisher will anchor ([spec §3.8]);
-- the fee coin sits under the transition's single `output_coins_root` (`ocr`) and is atomically bound with the payment by the one on-chain nullifier through sign-to-contract, so the publisher cannot collect the fee without anchoring the payment and an un-anchored transition's fee coin never reaches `completed`;
+- **v1 is sponsored**: the spender picks a publisher from its `op`-signed profile and hands off **fee-lessly**; the publisher pays the Bitcoin inscription cost and is not reimbursed ([spec §3.8](/specification#38-fees-and-economics)). The paid variant below is retained as the deferred mechanism of [spec §3.8.1](/specification#381-fee-coin-mechanism-deferred) and is **not** v1 behaviour: there, the profile would specify a flat `fee` per transition in the publisher's chosen `fee_asset_id`, and the spender would include exactly one fee output coin `{recipient = fee_address, amount >= fee, asset_id = fee_asset_id}` in the transition that publisher will anchor ([spec §3.8]);
+- (deferred) the fee coin would sit under the transition's single `output_coins_root` (`ocr`), atomically bound with the payment by the one on-chain nullifier through sign-to-contract, so a paid publisher could not collect without anchoring the payment, and an un-anchored transition's fee coin would never reach `completed`;
 - the fee is an ordinary output coin the sender includes for the publisher, addressed to the publisher's off-chain payout address ([spec §3.8](/specification#38-fees-and-economics)) — there is no on-chain fee field;
-- if the selected publisher censors, the spender re-picks with a fresh fee coin to a new `fee_address`, or self-publishes; first-occurrence nullifier semantics make competing transitions idempotent, so at most one is anchored and exactly one fee is paid, to the publisher that actually anchors it;
+- if the selected publisher censors, the spender re-picks another publisher — in v1 at no cost, since nothing was paid — or self-publishes; first-occurrence nullifier semantics make competing transitions idempotent, so at most one is anchored and exactly one fee is paid, to the publisher that actually anchors it;
 - a wallet may publish a one-entry aggregate itself;
 - no publisher signature, registry, sequencer, exclusive root lease or coordinator is required;
 - the paper's first-to-publish-wins gossip race, in which multiple publishers compete without being selected in advance, is deferred as a forward-compatible privacy upgrade because it requires a two-step payment structure that v1 does not fix.
 
-Publisher economics, front-running resistance and fee-claim privacy are closed by the [Risks](/risks) verdict table (publisher censorship/delay: holds; fee mismatch: holds under stated assumptions) plus the Gate-B fee-path tests. “Permissionless” does not by itself prove that the market remains decentralized.
+Publisher economics, front-running resistance and hand-off privacy are closed by the [Risks](/risks) verdict table (publisher censorship/delay: holds; sponsorship sustainability and unmetered admission: holds under stated assumptions) plus the Gate-B fee-path tests. “Permissionless” does not by itself prove that the market remains decentralized.
 
 ## 6. Data availability and recovery boundary
 
 ### Public ledger data
 
-Keys, commitments, aggregate signatures, order and publisher fee addresses are Bitcoin data. A clean node reconstructs first occurrence and every historical NAV from Bitcoin witness history alone. A pruned node may retrieve old blocks from an untrusted source but must verify them against its header chain.
+Keys, commitments, aggregate signatures and order are Bitcoin data. A clean node reconstructs first occurrence and every historical NAV from Bitcoin witness history alone. A pruned node may retrieve old blocks from an untrusted source but must verify them against its header chain.
 
 ### Private bearer data
 
