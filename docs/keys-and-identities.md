@@ -270,8 +270,7 @@ Fresh for every output coin, so one per-coin capability discloses one coin and n
 | **`op_pubkey`** = `op·G` | seed-derived | the Nostr identity, and what a contact is pinned to |
 | **Name** `user@domain` | **not** seed-derived; issued by the API and app layers | the public label; exactly one in force, attested by `name_sig` |
 | **`nprofile`** | `op_pubkey` plus relay hints | the NIP-19 identifier, the DNS-free route to a contact |
-| `publisher_pubkey` | the publisher's `op_pubkey` | the `d` tag of kind 30421; how a spender names a publisher |
-| `fee_address` | an ordinary zkCoins `address` the publisher controls | the fee destination |
+| `publisher_pubkey` | the publisher's `op_pubkey` — a role of that identity, not a separate one | the author of kind 30421; how a spender names a publisher |
 | `operator_id` | the operator's own identifier in `OperatorEndpointV1` | endpoint gossip; global infrastructure only, never account- or blob-specific |
 
 Binding `nk_commit` into the address preimage makes the nullifier key part of the payment identity, so a coin sent to an address has exactly one valid nullifier and a holder cannot equivocate two accounts under one address ([§1.4](/specification#14-identifiers-and-hashes)). Accounts and addresses are one-to-one: there are no diversified addresses, sub-addresses, or change addresses, so the **account** is the unit of every isolation boundary ([§1.2](/specification#12-key-hierarchy)).
@@ -343,7 +342,7 @@ name_sig     = BIP-340(sk₀, name_message)
 
 `bootstrap_pubkey` is the only authority permitted to sign a `BootstrapManifestV1`; a manifest that does not verify under the pinned key is rejected, and there is no other trust root for bootstrap ([§3.6](/specification#36-chain-scanning), [§4.3](/specification#43-addressing-for-delivery)).
 
-The publisher has no protocol key material of its own beyond an ordinary account: its Bitcoin identity is the reveal-transaction key, and its zkCoins side is the `{fee_address, fee_asset_id, fee, relays, pk0, nk_commit, ivpk, addr_sig}` of its `op`-signed kind-30421 profile. Running a publisher therefore takes a key and a relay — never a domain, a name, or a certificate authority ([§3.4](/specification#34-the-publisher), [§3.8](/specification#38-fees-and-economics)).
+The publisher has no protocol key material of its own. Because v1 publishing is sponsored and carries no fee ([§3.8](/specification#38-fees-and-economics)), there is no fee address to bind and therefore no payment-identity block to sign: its kind-30421 profile is `{version, relays}` under its `op` key, and its Bitcoin identity is the reveal-transaction key. Running a publisher takes a key and a relay — no account, no address, no `sk₀`, no wallet. The deferred paid variant would need all four ([§3.8.1](/specification#381-fee-coin-mechanism-deferred)).
 
 ## 10 · Derived values that are not keys
 
