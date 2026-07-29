@@ -1,10 +1,28 @@
 name: CI
 
 on:
-  pull_request:
-    branches: [develop, main]
+  # ---------------------------------------------------------------------
+  # PAUSED on pull requests — on purpose.
+  #
+  # The v1 work is being developed and verified locally; hosted CI is
+  # deliberately out of the loop until it is finished, and is then switched
+  # back on as the last step before the branch is offered for review.
+  #
+  # To bring it back: delete this block and uncomment the two
+  # `pull_request:` lines below, which are left verbatim so re-enabling is a
+  # deletion rather than a rewrite. Nothing else changed — every job and
+  # step is untouched.
+  #
+  # `push` on develop is left active: that branch is not touched by the
+  # feature work, so it costs nothing and keeps the release path honest.
+  # `workflow_dispatch` is added so a run can still be started by hand,
+  # which this workflow previously had no way to do.
+  # ---------------------------------------------------------------------
+  # pull_request:
+  #   branches: [develop, main]
   push:
     branches: [develop]
+  workflow_dispatch:
 
 permissions:
   contents: read
