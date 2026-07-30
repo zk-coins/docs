@@ -305,7 +305,7 @@ Target properties must never be labelled implemented without a code commit and p
 
 ² Reorg-finality claims checked separately: RFC-6962 host log + in-circuit gadget + hard 6-confirmation bound + ≥6 fail-stop are present on the open review branch; paper `DistinctElement` no-op is intentionally absent (D-16). None of this is on `develop`.
 
-³ The Evidence column's build-report link targets a normative node artefact that does not yet exist; do not treat benchmarks as published.
+³ Three layers stay distinct: (1) the crates.io pin `plonky2 = "1.1.0"` is on `develop` ([`937925a`](https://github.com/zk-coins/node/commit/937925a)); (2) the per-network digests ([`f189c20`](https://github.com/zk-coins/node/commit/f189c20)) and the build report ([`5009f62`](https://github.com/zk-coins/node/commit/5009f62)/[`docs/build-report.md`](https://github.com/zk-coins/node/blob/5009f62/docs/build-report.md)) are on open [`node#231`](https://github.com/zk-coins/node/pull/231) only — **not** on `develop` (`git merge-base --is-ancestor` fails for both); (3) the report is single-run measurement evidence (gate counts, `degree_bits`, six digest-checked builds, one end-to-end proof, first full circuit-suite pass), **not** a benchmark publication — it explicitly omits proof size, verification time, single-proof memory isolated from circuit build, and any distribution (no repeats, variance, or percentiles). Circuit-suite figures cited from that report are offline: CI does not run the `program-plonky2` suite.
 
 ## 12. Consequences accepted
 
