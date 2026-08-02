@@ -15,6 +15,7 @@ const sidebars = {
     'assurance',
     'paper-conformance-analysis',
     'paper-conformance-remediation',
+    'proposals-v1.3-bootstrap-seeds',
   ],
 };
 
