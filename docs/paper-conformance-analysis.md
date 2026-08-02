@@ -205,7 +205,7 @@ The research repository already contains a Plonky3 migration investigation, whil
 
 1. Decide whether v1 intentionally ships on deprecated Plonky2. *(Closed for v1: project decision 2026-07-22 pins `plonky2 = "1.1.0"`; see [Paper-Conformance Remediation](/paper-conformance-remediation) F-05.)*
 2. If yes, vendor and maintain the full trusted code base and obtain an external audit. *(Audit is not a v1 release gate by the same decision.)*
-3. Benchmark the exact `C` and `C_balance` circuits, not proxy circuits, and publish the node `build-report.md` ([Implementation Mandate §4](/implementation-mandate)) — still open; the artefact is not in the node repository.
+3. Benchmark the exact `C` and `C_balance` circuits, not proxy circuits, and publish the node `build-report.md` ([Implementation Mandate §4](/implementation-mandate)) — still open; the artefact exists on the open node PR, but is not merged to `develop` and is not yet a benchmark publication.
 4. Publish proof-size/proving-time distributions at maximum supported bounds. *(Verifier-data digests for `C` and `C_balance` per network are already pinned in V.4 from the reference implementation on open [`node#231`](https://github.com/zk-coins/node/pull/231); that branch is not merged to `develop`.)*
 
 ### Perspective 4 — Bitcoin protocol and finality
