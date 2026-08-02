@@ -1590,7 +1590,7 @@ An account served by the app or API layers publishes its delivery data as an add
 
 `op_pubkey` is the kind-0 event author and **MUST NOT** be duplicated inside `zkcoins`. The `lud16` field is present only when the same name supports the optional Lightning bridge; when it is present it **MUST** equal the normalized `nip05` value of the same profile, so one profile can never resolve to two different Lightning endpoints ([Lightning bridge](/lightning-bridge)). A profile whose `zkcoins` object is absent or invalid is not payable through that profile — the account remains payable by an `Invoice` it issues directly — and this **MUST NOT** disable NIP-17 messaging. An ordinary Nostr account that is not a zkCoins wallet simply has no such object.
 
-For a profile, `addr_sig` uses the existing `invoice_message` with the profile-fixed values `amount = 0`, `asset_id` = the all-zero 32-byte value, and `memo` = empty; `recipient` is `zkcoins.address`, `op_pubkey` is the kind-0 author, and `pk0`, `nk_commit`, `ivpk`, and `relays` come from the `zkcoins` object. A sender **MUST** verify, in order: (i) `H(pk0 ‖ nk_commit) == address`; (ii) `addr_sig` under `pk0` over that profile-fixed `invoice_message`; (iii) the kind-0 event signature under its author `op_pubkey`; and, whenever the profile was reached by resolving a name, (iv) `name_sig` under `pk0` over `name_message` for that name (*Name consent* above). It **MUST** additionally require `version = 1`, the expected `network`, lowercase-hex fields of the stated widths, and at least one valid relay URL. Failing any profile check disables payment through that profile. Resolution by a raw `address` alone, with neither a valid `Invoice` nor a verified kind-0 `zkcoins` object, is not supported.
+For a profile, `addr_sig` uses the existing `invoice_message` with the profile-fixed values `amount = 0`, `asset_id` = the all-zero 32-byte value, and `memo` = empty; `recipient` is `zkcoins.address`, `op_pubkey` is the kind-0 author, and `pk0`, `nk_commit`, `ivpk`, and `relays` come from the `zkcoins` object. A sender **MUST** verify, in order: (i) `H(pk0 ‖ nk_commit) == address`; (ii) `addr_sig` under `pk0` over that profile-fixed `invoice_message`; (iii) the kind-0 event signature under its author `op_pubkey`; and, whenever the profile was reached by resolving a name, (iv) `name_sig` under `pk0` over `name_message` for that name (*Name consent* above). It **MUST** additionally require `version = 1`, the expected `network`, lowercase-hex fields of the stated widths, and at least one valid relay URL. Failing any profile check disables payment through that profile. Resolution by a raw `address` alone, with neither a valid `Invoice` nor a verified kind-0 `zkcoins` object, is not supported. The wire carrier that places a verified `Invoice` or a verified kind-0 event at the node for every non-self output is `OutputTemplate.delivery` ([§7.5](#75-node-rest-api-normative), [§7.8](#78-kernel-rpc--the-internal-interface-normative)); without it the node has no path from a bare address to `{ivpk, op_pubkey, relays}` and **MUST NOT** invent one. Delivery proceeds only through that credential, which the kernel alone verifies.
 
 **Payment readiness and messaging readiness are separate (normative).** Payment resolution through a profile requires exactly the checks above plus the payment-identity pin check below — and **nothing else**. It **MUST NOT** be gated on a valid kind-10050 event, on NIP-17 readiness, or on any name resolving. Messaging readiness is the separate condition of [§7.3](#73-nostr-event-kinds-normative): a valid kind-10050 event with at least one retained endpoint. A recipient with a verified `zkcoins` object and no kind 10050 is payable and not yet messageable; a recipient with a valid kind 10050 and no `zkcoins` object is messageable and not payable through its profile.
 
@@ -2893,9 +2893,37 @@ TransitionRequest = {
 OutputTemplate = {
   recipient : <zk-address>,
   asset_id  : <hex32>,
-  amount    : <decimal-string u128>                  // range-checked to [0, 2^128 − 1] (§1.7.3)
+  amount    : <decimal-string u128>,                 // range-checked to [0, 2^128 − 1] (§1.7.3)
+  delivery  : DeliveryCredential                     // optional; required for every non-self output
+                                                     //   (presence rule below)
 }
+
+// Closed tagged union. Any other `type` is 400 malformed_request.
+// The two variants have separate, complete check-lists: a kind-0 event
+// carries no Invoice `sig` under `op_pubkey`, and an Invoice carries no
+// kind-0 event signature — routing either through the other's list is
+// structurally unsatisfiable.
+DeliveryCredential =
+  | { type: "invoice", invoice: Invoice }            // full §1.5 / §4.3 Invoice
+  | { type: "profile", event: <kind-0 event> }       // full canonical kind-0 event
+                                                     //   (author, created_at, Nostr signature)
 ```
+
+**`delivery` — the delivery credential (normative).** This field is the wire carrier that closes the §4.3 gap: the node needs the recipient's `{ivpk, op_pubkey, relays}` to deliver (§4.2), and a bare address is not resolvable. It is a [§1.7.8](#178-reference-instantiation-status-final-for-v1) **between-step-3-and-step-7** wire addition: it touches **neither** a circuit element **nor** a pinned vector **nor** a digest, and therefore is **not** a new protocol version under that clause. Verification is **kernel-only** ([§6.1](#61-components-and-responsibilities)): the API layer forwards `delivery` **unchanged**, **MUST NOT** mark it verified, and **MUST NOT** log it (retention rule below).
+
+**Check-list `type: "invoice"` (normative).** The kernel **MUST** verify, in order: the three [§4.3](#43-addressing-for-delivery) checks — (i) `H(pk0 ‖ nk_commit) == invoice.recipient`; (ii) `addr_sig` valid under `pk0` over `invoice_message`; (iii) `sig` valid under `op_pubkey` over `invoice_message` — **and** byte-exact equality of `invoice.recipient`, `invoice.asset_id`, and `invoice.amount` with the enclosing `OutputTemplate`'s `recipient`, `asset_id`, and `amount`. Any failure is `400 malformed_request`.
+
+**Check-list `type: "profile"` (normative).** The kernel **MUST** verify the [§4.3](#43-addressing-for-delivery) profile chain: (i) the kind-0 event signature under its author; (ii) `H(pk0 ‖ nk_commit) == zkcoins.address`; (iii) `addr_sig` under `pk0` over the profile-fixed `invoice_message`; (iv) `version = 1`, the expected `network`, lowercase-hex fields of the stated widths, and at least one valid relay URL — **and** `zkcoins.address == output.recipient`. Amount and asset are **not** compared: a profile is an **addressing credential**, not a payment authorisation. Any failure is `400 malformed_request`.
+
+**Profile freshness is relay-relative (normative property, not a guarantee).** Against replay the profile variant additionally requires that the node know **no newer** kind-0 of the same author (NIP-01 replaceable; on a `(created_at, id)` tie the lower `id` wins) and that `created_at` fall inside an implementation-defined window relative to the kernel clock. That freshness is **only as good as the node's relay view**: a relay that withholds a newer profile is an availability limit **no signature closes** — the same formulation discipline [§4.3](#43-addressing-for-delivery) already applies to name-consent currency (*What `name_sig` proves, and what it does not*). Implementations **MUST** state this as a property of the responding relays and of any local high-water mark they retain, never as a global "latest event" guarantee.
+
+**`delivery` presence rule (normative).** `delivery` is **required** on every `OutputTemplate` that is **not** a self-output — for `kind == "send"` **and** for `kind == "mint"` with outputs to third parties ([§6.5](#token-standard-2--auditable-capped-supply) token standard 2 forbids self-credit in the creating transition, so third-party mint outputs are the normal case). Absent there: `400 malformed_request` (no deferred failure at delivery time). For `kind == "receive"` there are no `output_templates`, and therefore no `delivery`. A self-output **MAY** omit `delivery`; a present `delivery` on a self-output **MUST** still satisfy the matching check-list if supplied, but is not required for delivery (the node already holds the subject's operational bundle).
+
+**Self-output (normative, narrow).** An output is a self-output **if and only if** `decoded(output.recipient) == decoded(request.subject) == persisted AccountState.owner` **and** the active operational bundle is held under **exactly** that subject. Neither a hit in any delivery-target store nor "the node already knows this `ivpk`" discharges the exception — on a node that holds bundles for many accounts that would open a cross-account gap. Bech32m spelling variants are compared on the decoded 32-byte address, not the string.
+
+**Per-output binding (normative).** Each `delivery` belongs to **exactly** its enclosing `OutputTemplate`, never to the transition as a whole. When two or more `output_templates` of the same transition share the same `recipient`, `asset_id`, and `amount`, field equality alone does not uniquely pair a credential with an output instance: the kernel **MUST** bind each `delivery` by **array position** — `output_templates[i].delivery` authorises only `output_templates[i]` — and **MUST NOT** re-resolve a verified target through a shared address-keyed store that a later insert could overwrite. A verified credential is therefore an amount-specific, reusable recipient credential bound to one output slot of one job, not a one-shot payment authorisation and not a transition-wide token.
+
+**What the node retains after a successful check (implementation mandate, not a technical enforcement).** After a successful check the kernel **MUST** retain **only** `{ivpk, op_pubkey, relays}` and the target's local validity window; `pk0`, `nk_commit`, `memo`, and the signatures **MUST** be discarded and **MUST NOT** be persisted or logged. The API layer forwards `delivery` unchanged, **MUST NOT** verify it, and **MUST NOT** log it. This is an **implementation mandate**, not a technical enforcement: what a process may observe in working memory, a trace, or a crash dump is not closed by a MUST sentence. The mandate exists because `pk0` is the account's genesis on-chain nullifier key and links the recipient to its first Bitcoin appearance ([§4.3](#43-addressing-for-delivery) already names this D-19 linkage class).
 
 **Publisher / fee-address presence matrix (normative, closed).** Exactly one of the following cases holds; any other combination is **malformed** (`400 malformed_request`). **In v1 only (a) and (c) are admissible** — publishing is sponsored and there is no fee coin ([§3.8](#38-fees-and-economics)), so `fee_address` **MUST** be absent from every request and a request carrying it is malformed. Case (b) is specified for the deferred fee mechanism of [§3.8.1](#381-fee-coin-mechanism-deferred) and **MUST NOT** be implemented in v1:
 
@@ -2982,7 +3010,7 @@ Additional codes (closing the enumeration across §7.4–§7.7 surfaces):
 
 | `machine_code` | HTTP | Meaning |
 |---|---|---|
-| `malformed_request` | 400 | body violates a normative shape of this section (`TransitionRequest` presence rules, §7.1 JSON rules, wrong-HRP Bech32m, non-hex where hex is required) |
+| `malformed_request` | 400 | body violates a normative shape of this section (`TransitionRequest` presence rules, missing or failed `OutputTemplate.delivery` credential check, unknown `delivery.type`, §7.1 JSON rules, wrong-HRP Bech32m, non-hex where hex is required) |
 | `idempotency_conflict` | 409 | the same `Idempotency-Key` was replayed with a different body (mapping retained indefinitely; a known key never expires or is forgotten) |
 | `unauthorized` | 401 | §5.1 capability invalid (bad signature/`chal`/grant), action-bound OwnershipProof missing/invalid/wrong-domain on `/v1/attest/balance` or `/v1/grants` (including a `GrantProof` presented where only owner auth is accepted — no-escalation), Blossom auth-event rejected, missing/invalid pull-session bearer token (absent or malformed — not merely expired), or a **grant** pull session presented to ownership-only `GET /v1/account/state` |
 | `scope_exceeded` | 403 | §5.1 resolved-scope violation, non-peer PUT |
@@ -3254,7 +3282,51 @@ message NullifierPath {
   //   non-inclusion proof; MUST NOT back a credit (§3.7 Path B).
 }
 
-message OutputTemplate { string recipient = 1; bytes asset_id = 2; string amount = 3; }
+message OutputTemplate {
+  string recipient = 1;
+  bytes asset_id = 2;
+  string amount = 3;
+  DeliveryCredential delivery = 4;         // required for every non-self output; absent on
+                                           //   self-outputs (§7.5 presence rule). Verification
+                                           //   is kernel-only (§6.1, §7.5); the API forwards
+                                           //   the field unchanged and MUST NOT mark it verified.
+}
+// Closed tagged union matching §7.5 DeliveryCredential. Exactly one arm is set;
+// any other shape is malformed_request. The two variants have separate, complete
+// check-lists (§7.5): invoice runs the three §4.3 Invoice checks plus byte-exact
+// equality of recipient/asset_id/amount with this OutputTemplate; profile runs the
+// §4.3 profile chain plus zkcoins.address == output.recipient (amount and asset
+// are not compared — a profile is an addressing credential, not a payment
+// authorisation). This field is a §1.7.8 between-step-3-and-step-7 wire addition
+// (neither circuit nor pinned vector nor digest).
+message DeliveryCredential {
+  oneof body {
+    Invoice invoice = 1;                   // type "invoice" — full §1.5 / §4.3 Invoice
+    Kind0Event profile_event = 2;          // type "profile" — full canonical kind-0 event
+  }
+}
+message Invoice {
+  string amount = 1;
+  string recipient = 2;                    // zk-address (Bech32m string)
+  bytes asset_id = 3;
+  string memo = 4;                         // empty when absent
+  bytes pk0 = 5;                           // 32B x-only
+  bytes nk_commit = 6;                     // 32B
+  bytes ivpk = 7;                          // 32B
+  bytes op_pubkey = 8;                     // 32B x-only
+  repeated string relays = 9;
+  bytes addr_sig = 10;                     // 64B BIP-340 under pk0
+  bytes sig = 11;                          // 64B BIP-340 under op_pubkey
+}
+message Kind0Event {
+  bytes id = 1;                            // 32B event id
+  bytes pubkey = 2;                        // 32B author (op_pubkey)
+  uint64 created_at = 3;
+  uint32 kind = 4;                         // MUST be 0
+  string tags_json = 5;                    // canonical JSON array of tags (NIP-01; typically [])
+  string content = 6;                      // JSON content carrying the zkcoins object
+  bytes sig = 7;                           // 64B Nostr event signature under author
+}
 message Issuance {
   string name = 1; uint32 decimals = 2; uint32 issuance_version = 3;
   string amount = 4;
