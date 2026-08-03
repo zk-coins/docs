@@ -81,9 +81,9 @@ following the model Bitcoin Core uses for its DNS seeds and `chainparams`:
    contact-discovery pattern already defined in [spec §4.3](/specification#43-addressing-for-delivery)
    (register entry D-15, [Paper-Deviation Analysis](/paper-conformance-analysis)) from contact lookup
    to the network bootstrap.
-4. **Acceptance criterion for a PR (normative for this mechanism).** The endpoint MUST return the
-   correct pinned `network-params` from `GET /v1/info` for the network. Note this is a **necessary,
-   not sufficient** check: `/v1/info` is a self-declared response that a non-conforming server can
+4. **Acceptance criterion for a PR (normative for this mechanism).** The endpoint MUST return, from
+   `GET /v1/info`, fields matching the network's pinned `network-params.json`. Note this is a
+   **necessary, not sufficient** check: `/v1/info` is a self-declared response that a non-conforming server can
    mirror, so v1.3 will define a stronger behavioural/liveness check (e.g. serving a known
    inscription or bundle on request). A PR SHOULD also carry an operator identity/contact for
    accountability. A listing conveys *discoverability*, never endorsement.
