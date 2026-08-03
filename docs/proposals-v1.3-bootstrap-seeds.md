@@ -20,7 +20,7 @@ v1 pins **one** `bootstrap_pubkey` per network — "the only authority permitted
 `BootstrapManifestV1` … there is no other trust root for bootstrap"
 ([spec §4.3](/specification#43-addressing-for-delivery)). That key is a member of the pinned
 `network-params.json` tuple ([spec §3.6](/specification#36-chain-scanning)); unlike the network tag
-and `circuit_digest`, it is **not** cryptographically bound into the on-chain data, and it has **no
+and `circuit_digest`, it is **not** cryptographically bound into the verifier data, and it has **no
 rotation procedure**. It shares the character of the `activation_height` parameter — enforced only by
 each node loading the same `network-params.json`, a parameter-agreement assumption rather than a
 chain binding — but note the distinction: only `activation_height` is registered as a D-05 residual
@@ -30,18 +30,19 @@ chain binding — but note the distinction: only `activation_height` is register
 At launch the network's discovery/recovery entry points are operated by the founding team alone
 (`api.zkcoins.com` and `api.zkcoins.app`, both under `api.`). Two domains, but a **single operator**
 — i.e. a single point of control for the bootstrap layer. For the discovery/liveness/recovery plane
-this stands in tension with the project's stated goal of "no central element anywhere in the system"
-(spec Foundations).
+this stands in tension with the specification's own goal of "no central element anywhere in the
+system" ([specification, introductory overview](/specification)).
 
 ## What is — and is not — at stake
 
-The bootstrap layer is relied on **only for discovery and liveness, never for correctness.** Every
-**validating node** re-derives the nullifier accumulator from Bitcoin alone
-([spec §3.6](/specification#36-chain-scanning)) and re-verifies every coin against Bitcoin before
-crediting it; a thin wallet does not do this itself — it delegates verification to its own node (or a
-node it selects), per Requirement 4 ("the receiver, or its own node acting on its behalf",
-[Requirements](/requirements)). A relay or blob store a client is steered to "can withhold a bundle
-but can neither forge nor alter one" ([spec §4.1](/specification#41-roles-and-transport)).
+The bootstrap layer is relied on **only for discovery and liveness, never for correctness.** Any node
+rebuilds the nullifier accumulator from Bitcoin alone ([spec §3.6](/specification#36-chain-scanning))
+and re-verifies every coin against Bitcoin before crediting it. A thin wallet does not do this
+itself: it relies on its **own** node for it ([Requirement 4](/requirements)), and a receiver that
+instead delegates to a **selected foreign** node trusts that node for correctness as a deliberate,
+documented non-trustless trade-off ([spec §6.6](/specification#66-threat-model-and-trust-configurations)).
+A relay or blob store a client is steered to "can withhold a bundle but can neither forge nor alter
+one" ([spec §4.1](/specification#41-roles-and-transport)).
 
 Consequently a compromised or lost bootstrap authority can:
 
@@ -51,8 +52,8 @@ Consequently a compromised or lost bootstrap authority can:
   bundle is `{ivk, ovk, op, nk, op_secret}` ([spec §1.2](/specification#12-key-hierarchy)) — more
   than viewing keys: `nk` links the account's own spends and `op` is its Nostr signing key. An
   operator a user delegates witness-building to also holds the D-17 send-intent power — it can
-  redirect or burn a send's outputs, an effect "the same as theft" on that one transition
-  ([spec §6.6](/specification#66-threat-model-and-trust-configurations),
+  redirect or burn a send's outputs, or freeze the account, an effect "the same as theft" on that
+  one transition ([spec §6.6](/specification#66-threat-model-and-trust-configurations),
   [Paper-Deviation Analysis](/paper-conformance-analysis)),
 
 but it can **never** forge, steal, or double-spend across the protocol as a whole: custody (the SPEND
@@ -80,10 +81,12 @@ following the model Bitcoin Core uses for its DNS seeds and `chainparams`:
    contact-discovery pattern the spec already defines (register entry D-15,
    [Paper-Deviation Analysis](/paper-conformance-analysis)) from contact lookup to the network
    bootstrap.
-4. **Acceptance criterion for a PR (normative for this mechanism).** The endpoint MUST verifiably
-   serve a conforming node — `GET /v1/info` returns the correct pinned `network-params` for the
-   network — and SHOULD carry an operator identity/contact for accountability. A listing conveys
-   *discoverability*, never endorsement.
+4. **Acceptance criterion for a PR (normative for this mechanism).** The endpoint MUST return the
+   correct pinned `network-params` from `GET /v1/info` for the network. Note this is a **necessary,
+   not sufficient** check: `/v1/info` is a self-declared response that a non-conforming server can
+   mirror, so v1.3 will define a stronger behavioural/liveness check (e.g. serving a known
+   inscription or bundle on request). A PR SHOULD also carry an operator identity/contact for
+   accountability. A listing conveys *discoverability*, never endorsement.
 
 ### Operator incentives and trade-offs
 
@@ -96,21 +99,22 @@ Reasons an independent operator would list itself:
 - It makes the operator's **own users and infrastructure directly discoverable** at first contact
   and during recovery.
 
-What listing does **not** do, stated plainly: it does not make the operator trusted. Because
-correctness is enforced by client-side validation against Bitcoin, a listed seed cannot forge, steal,
-or double-spend. It **can**, however, present a hostile operator as a candidate; a user who then
-deliberately entrusts that operator with its operational bundle or its witness-building is exposed to
-the D-17 boundary (send-output redirection, an effect equivalent to theft on that transition). The
-union + cross-check + TOFU-pin + never-auto-entrust rule of point 3 bounds automatic exposure; the
-deliberate-delegation exposure is addressed only by self-hosting or independently vetting the
-operator.
+What listing does **not** do: it does not make the operator trusted. Because correctness is enforced
+by nodes re-deriving state from Bitcoin and re-verifying every coin, a listed seed cannot forge,
+steal, or double-spend. It **can**, however, present a hostile operator as a candidate; a user who
+then deliberately entrusts that operator with its operational bundle or its witness-building is
+exposed to the D-17 boundary (send-output redirection or account freeze, an effect equivalent to
+theft on that transition). The union + cross-check + TOFU-pin + never-auto-entrust rule of point 3
+bounds automatic exposure; the deliberate-delegation exposure is addressed only by self-hosting or
+independently vetting the operator.
 
-## Residual trust (stated honestly)
+## Residual trust
 
-This makes bootstrap **robust, not trustless.** The single point of control is removed, but trust
-does not disappear — it moves to (a) the software-distribution / release process that curates the
-seed list and (b) the set of seed operators. Two residuals remain and are the reason point 3 is
-normative rather than advisory:
+This makes bootstrap **robust, not trustless.** At launch both listed endpoints share one operator,
+so the list provides endpoint redundancy, not operator independence; the single point of control is
+only reduced as independently operated seeds join. Even then, trust does not disappear — it moves to
+(a) the software-distribution / release process that curates the seed list and (b) the set of seed
+operators. Two residuals remain and are the reason point 3 is normative rather than advisory:
 
 - **Cold-start eclipse and metadata** are *reduced* by plurality, not eliminated: a client whose
   seeds all collude, or which is fully eclipsed, still gets a false view (Bitcoin's DNS seeds carry
