@@ -52,8 +52,8 @@ Consequently a compromised or lost bootstrap authority can:
   bundle is `{ivk, ovk, op, nk, op_secret}` ([spec §1.2](/specification#12-key-hierarchy)) — more
   than viewing keys: `nk` links the account's own spends and `op` is its Nostr signing key. An
   operator a user delegates witness-building to also holds the D-17 send-intent power — it can
-  redirect or burn a send's outputs, or freeze the account, an effect "the same as theft" on that
-  one transition ([spec §6.6](/specification#66-threat-model-and-trust-configurations),
+  redirect or burn a send's outputs — an effect "the same as theft" on that one transition — or
+  freeze the account entirely ([spec §6.6](/specification#66-threat-model-and-trust-configurations),
   [Paper-Deviation Analysis](/paper-conformance-analysis)),
 
 but it can **never** forge, steal, or double-spend across the protocol as a whole: custody (the SPEND
@@ -78,9 +78,9 @@ following the model Bitcoin Core uses for its DNS seeds and `chainparams`:
    merely because that operator appears on the list — that delegation is a separate, deliberate trust
    decision the user makes under the [spec §6.6](/specification#66-threat-model-and-trust-configurations)
    model (self-host, or vet the operator). This extends the union + trust-on-first-use
-   contact-discovery pattern the spec already defines (register entry D-15,
-   [Paper-Deviation Analysis](/paper-conformance-analysis)) from contact lookup to the network
-   bootstrap.
+   contact-discovery pattern already defined in [spec §4.3](/specification#43-addressing-for-delivery)
+   (register entry D-15, [Paper-Deviation Analysis](/paper-conformance-analysis)) from contact lookup
+   to the network bootstrap.
 4. **Acceptance criterion for a PR (normative for this mechanism).** The endpoint MUST return the
    correct pinned `network-params` from `GET /v1/info` for the network. Note this is a **necessary,
    not sufficient** check: `/v1/info` is a self-declared response that a non-conforming server can
@@ -103,8 +103,8 @@ What listing does **not** do: it does not make the operator trusted. Because cor
 by nodes re-deriving state from Bitcoin and re-verifying every coin, a listed seed cannot forge,
 steal, or double-spend. It **can**, however, present a hostile operator as a candidate; a user who
 then deliberately entrusts that operator with its operational bundle or its witness-building is
-exposed to the D-17 boundary (send-output redirection or account freeze, an effect equivalent to
-theft on that transition). The union + cross-check + TOFU-pin + never-auto-entrust rule of point 3
+exposed to the D-17 boundary — send-output redirection (an effect equivalent to theft on that
+transition) or account freeze. The union + cross-check + TOFU-pin + never-auto-entrust rule of point 3
 bounds automatic exposure; the deliberate-delegation exposure is addressed only by self-hosting or
 independently vetting the operator.
 
