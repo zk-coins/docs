@@ -2913,6 +2913,10 @@ TransitionRequest = {
   fee_address      : <zk-address>,                   // deferred (§3.8.1): MUST be absent in v1; presence matrix below
   fold_coin_ids    : [ <hex32 coin.identifier> ],    // kind == "receive": required, 1..max_rx_coins
                                                      //   (§2.1 clause 10); MUST be absent otherwise
+  genesis_pubkey   : <hex32, x-only>,                // a genesis receive (the recipient account's
+                                                     //   first transition — §2.6 SHA-256-in-circuit
+                                                     //   list item (d), "the common case"): required;
+                                                     //   MUST be absent otherwise
   issuance         : {                               // kind == "mint": required; MUST be absent otherwise
     name             : <UTF-8 string, ≤ 255 bytes>,  //   (§1.5; name_hash = H(name), §1.4)
     decimals         : <u8>,
@@ -2929,6 +2933,16 @@ OutputTemplate = {
   amount    : <decimal-string u128>                  // range-checked to [0, 2^128 − 1] (§1.7.3)
 }
 ```
+
+**`genesis_pubkey` (normative).** Required exactly for a genesis receive —
+an account's first transition, which need not be a mint ([§2.6](#26-in-circuit-non-native-cryptography-normative)
+item (d), "the common case") — because the InitialProof's owner binding
+`owner == H(txn_pubkey ‖ nk_commit)` ([§2.1 clause 1](#21-the-compliance-predicate))
+needs `Pk₀`, which is otherwise irrecoverable in-circuit from the address once
+the spend key has rotated away from it (the identical reason
+`issuance.creator_pubkey` travels on the wire for a mint,
+[§2.1 clause 3(b)](#21-the-compliance-predicate)). This is a wire-only
+addition: it changes no circuit, no digest, and no pinned test vector.
 
 **Publisher / fee-address presence matrix (normative, closed).** Exactly one of the following cases holds; any other combination is **malformed** (`400 malformed_request`). **In v1 only (a) and (c) are admissible** — publishing is sponsored and there is no fee coin ([§3.8](#38-fees-and-economics)), so `fee_address` **MUST** be absent from every request and a request carrying it is malformed. Case (b) is specified for the deferred fee mechanism of [§3.8.1](#381-fee-coin-mechanism-deferred) and **MUST NOT** be implemented in v1:
 
