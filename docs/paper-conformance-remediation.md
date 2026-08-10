@@ -201,7 +201,7 @@ Keys, commitments, aggregate signatures and order are Bitcoin data. A clean node
 
 ### Private bearer data
 
-`CoinProof`, transition essence, NISSHAC opening, note plaintext and recovery metadata remain encrypted off-chain. Seed recovery alone still cannot reconstruct values chosen by senders. Replication factor `k` is a durability policy for this private bearer data, not a public-ledger consensus assumption.
+`CoinProof`, transition essence, NISSHAC opening, note plaintext and recovery metadata remain encrypted off-chain. Seed recovery alone still cannot reconstruct values chosen by senders. Availability for this private bearer data follows from store-everything retention plus the recovery-discoverable overlap — every delivery published to ≥1 network `seed_relay` and every blob to ≥1 network `blob_store` ([spec §4.3](/specification#43-addressing-for-delivery)) — not a fixed replica count and not a public-ledger consensus assumption.
 
 ## 7. Proof backend and assurance
 

@@ -325,7 +325,6 @@ For an account-wide disclosure, prefer a scoped `zkgrant` over `zkavk` — not b
 | `op_sig` | `op` | that the recipient acknowledged a delivery (kind-1421 ACK) |
 | `op_signature` (in a `ViewGrant`) | `op` | the scope and window of a delegation |
 | `op_sig` (in `OperatorEndpointV1`) | the operator's `op` | endpoint gossip |
-| `receipt_sig` (in `ReplicaReceiptV1`) | the replica holder's `op`, verified under `holder_op_pubkey` | that both the blob and its delivery event are durably committed |
 | `manifest_sig` (in `BootstrapManifestV1`) | `bootstrap_pubkey` | the network's bootstrap infrastructure list |
 
 ```
