@@ -41,7 +41,7 @@ A later coordinator lane may offer optional constant-size batching only if the d
 
 ## Findings and mandatory disposition
 
-**F-01, F-02, F-04 and F-06 are resolved in the normative spec** by PR #97: the on-chain `(Pk_i, R_i)` state nullifier ([spec §3.1](/specification#31-the-on-chain-object), [§1.7.10](/specification#1710-half-aggregation-with-commitments-nisshac-normative)), first-occurrence rebuild from Bitcoin alone ([spec §3.6](/specification#36-chain-scanning)), predecessor-nullifier anchoring of every state-advancing transition including issuance ([spec §2.1](/specification#21-the-compliance-predicate), [§2.3.1](/specification#231-mint--issuance), [§3.10](/specification#310-transaction-states)), and replication reserved for private bearer data ([spec §4.6](/specification#46-data-availability--replication-factor-k)). What remains open is the executable-conformance evidence (canonical vectors, Gate B) and F-08's commit-pinned status matrix; F-05 and F-07 are closed by project decision (see the table below), and Gate C contains no external-review step (project decision 2026-07-22). The **selected disposition** column records the design decision each finding drove; the **release gate** column records what still gates mainnet.
+**F-01, F-02, F-04 and F-06 are resolved in the normative spec** by PR #97: the on-chain `(Pk_i, R_i)` state nullifier ([spec §3.1](/specification#31-the-on-chain-object), [§1.7.10](/specification#1710-half-aggregation-with-commitments-nisshac-normative)), first-occurrence rebuild from Bitcoin alone ([spec §3.6](/specification#36-chain-scanning)), predecessor-nullifier anchoring of every state-advancing transition including issuance ([spec §2.1](/specification#21-the-compliance-predicate), [§2.3.1](/specification#231-mint--issuance), [§3.10](/specification#310-transaction-states)), and replication reserved for private bearer data ([spec §4.6](/specification#46-data-availability)). What remains open is the executable-conformance evidence (canonical vectors, Gate B) and F-08's commit-pinned status matrix; F-05 and F-07 are closed by project decision (see the table below), and Gate C contains no external-review step (project decision 2026-07-22). The **selected disposition** column records the design decision each finding drove; the **release gate** column records what still gates mainnet.
 
 | ID | Severity | Problem | Selected disposition | Release gate |
 |---|---:|---|---|---|
@@ -201,7 +201,7 @@ Keys, commitments, aggregate signatures and order are Bitcoin data. A clean node
 
 ### Private bearer data
 
-`CoinProof`, transition essence, NISSHAC opening, note plaintext and recovery metadata remain encrypted off-chain. Seed recovery alone still cannot reconstruct values chosen by senders. Replication factor `k` is a durability policy for this private bearer data, not a public-ledger consensus assumption.
+`CoinProof`, transition essence, NISSHAC opening, note plaintext and recovery metadata remain encrypted off-chain. Seed recovery alone still cannot reconstruct values chosen by senders. Availability for this private bearer data follows from store-everything retention plus the recovery-discoverable overlap — every delivery published to ≥1 network `seed_relay` and every blob to ≥1 network `blob_store` ([spec §4.3](/specification#43-addressing-for-delivery)) — not a fixed replica count and not a public-ledger consensus assumption.
 
 ## 7. Proof backend and assurance
 
@@ -271,11 +271,11 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 - a clean node reconstructs state from Bitcoin without Nostr, Blossom or a zkCoins index;
 - mutation, duplicate, malformed-encoding, wrong-network and proof-substitution vectors fail;
 - ≤5-block reorg-replay tests converge across two nodes, and a ≥6-block reorg is surfaced as the accepted break boundary (§3.9);
-- private zero-local-state recovery is tested with stated replica failures.
+- private zero-local-state recovery is tested after loss of both the node's database and its own paired relay, restoring from the seed and Bitcoin plus the Bootstrap Manifest's seed-discoverable `seed_relay`s (delivery events) and `blob_store`s (blob bytes) — the two-plane recovery-discoverable overlap (Requirement 13, [spec §4.3](/specification#43-addressing-for-delivery)).
 
 ### Gate C — assurance
 
-- the specification's soundness summary ([spec §2.4](/specification#24-soundness-summary)) and security-properties summary ([spec §6.7](/specification#67-security-properties-summary)) exist, every clause reference they cite resolves, every Requirement 1–11 has a row, and D-17–D-19 appear in the [§6.7 precise privacy statement](/specification#67-security-properties-summary), D-16 is stated in [spec §3.9](/specification#39-finality-and-reorg-handling), and D-20 has its row in the [Risks](/risks) verdict table (machine-checkable link/row checks);
+- the specification's soundness summary ([spec §2.4](/specification#24-soundness-summary)) and security-properties summary ([spec §6.7](/specification#67-security-properties-summary)) exist, every clause reference they cite resolves, every Requirement 1–13 has a row, and D-17–D-19 appear in the [§6.7 precise privacy statement](/specification#67-security-properties-summary), D-16 is stated in [spec §3.9](/specification#39-finality-and-reorg-handling), and D-20 has its row in the [Risks](/risks) verdict table (machine-checkable link/row checks);
 - **D-05** passes its release gate: the **V.11 differential-test** of the in-circuit RFC-6962 log-consistency/inclusion arithmetization against an independent reference ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1), V.11) — executed at the negative-controls / conformance step ([Implementation Mandate](/implementation-mandate) step 5/6) as part of the executable gate, not a separate human review — alongside the existing D-16/D-17–D-20 checks above;
 - **D-05 network-parameter agreement gate:** `network-params.json` is a byte-exact canonical artefact (spec §3.6); every node MUST load the pinned per-network `activation_height` and refuse readiness (`/health/ready` `503`) on mismatch; and a conformance test MUST confirm two independent nodes scanning the same tip from the **same** pinned `activation_height` produce the identical `(size, mth)` / `nav_root`, while a **differing** `activation_height` diverges them **whenever a valid nullifier is admitted in the interval between the two heights** — the conformance fixture **MUST** include at least one such nullifier so the divergence is observably guaranteed — the executable check for the parameter-agreement residual (D-05 (iv)).
 - the [Risks](/risks) verdict table has no open and no broken row;
@@ -295,7 +295,7 @@ Every release must distinguish:
 | nullifier | rotating state key + NISSHAC commitment | v3 paper-model port | commit/link | vectors/proof |
 | ordering | Bitcoin first occurrence | canonical scan/reorg replay | commit/link | two-node test |
 | reorg finality | ToS accumulator, `IsPrefix`/`DistinctElement` exactly-one-of, arbitrary-depth conditional-NAV no-op (paper §3.2/§3.6/§4.2) | RFC-6962 append-only Merkle-log accumulator + hard 6-confirmation finality, no DistinctElement no-op (D-05 succinctness fixed; D-16 unchanged) | commit/link | replay + bound test |
-| recovery | private coin proof required | encrypted replicated bearer data | commit/link | restore test |
+| recovery | private coin proof required | encrypted bearer data retained by seed-discoverable relays + blob stores | commit/link | restore test |
 | issuance | application-defined | creator-bound, unlimited, anchored | commit/link | issuance tests |
 | proof backend | abstract PCD | named frozen backend | commit/link | benchmarks (build report, [Implementation Mandate §4](/implementation-mandate)) |
 

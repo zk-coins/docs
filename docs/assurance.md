@@ -21,7 +21,7 @@ The [paper-deviation analysis](/paper-conformance-analysis) documents how an ear
 
 ## Workstream 1 — Incentive analysis
 
-Scope: every mechanism whose correctness or liveness depends on actor behaviour rather than cryptography. [Risks](/risks) is the maintained catalog; the analysis must use the current on-chain-nullifier model, in which publishing is contention-free and the public accumulator is rebuilt from Bitcoin alone, while private `CoinProof` availability remains a replicated off-chain liveness requirement ([spec §3.4](/specification#34-the-publisher), [§3.6](/specification#36-chain-scanning), [§4.6](/specification#46-data-availability--replication-factor-k)).
+Scope: every mechanism whose correctness or liveness depends on actor behaviour rather than cryptography. [Risks](/risks) is the maintained catalog; the analysis must use the current on-chain-nullifier model, in which publishing is contention-free and the public accumulator is rebuilt from Bitcoin alone, while private `CoinProof` availability remains a replicated off-chain liveness requirement ([spec §3.4](/specification#34-the-publisher), [§3.6](/specification#36-chain-scanning), [§4.6](/specification#46-data-availability)).
 
 Method — for each mechanism:
 
