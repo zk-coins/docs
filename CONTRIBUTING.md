@@ -50,7 +50,7 @@ docs/
 ├── docs/                         # Markdown content
 │   ├── intro.md                  # Landing page (slug: /)
 │   ├── architecture.md           # Components, repositories, boundaries, deployments
-│   ├── requirements.md           # The eleven protocol requirements
+│   ├── requirements.md           # The thirteen protocol requirements
 │   ├── specification.md          # The normative protocol specification (single source of truth)
 │   ├── implementation-mandate.md # Standing instruction to every implementor
 │   ├── protocol.md               # Shielded CSV protocol reference

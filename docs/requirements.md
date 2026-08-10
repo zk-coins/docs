@@ -28,7 +28,7 @@ The key that authorizes spending exists only on the user's wallet and is never t
 
 ### 6. Recovery
 
-The seed is the root from which all keys are deterministically derived. The complete state must be recoverable: normally from the node operator's own backup, and — as an emergency fallback after total loss of local data — from the seed, the public Bitcoin chain, and the coin data replicated across other nodes.
+The seed is the root from which all keys are deterministically derived. The complete state must be recoverable: normally from the node operator's own backup, and — as an emergency fallback after total loss of local data — from the seed, the public Bitcoin chain, and the coin data retained by the network's seed-discoverable relays and blob stores ([spec §4.3](/specification#43-addressing-for-delivery)).
 
 ### 7. Self-hostable
 
