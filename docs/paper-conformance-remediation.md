@@ -271,7 +271,7 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 - a clean node reconstructs state from Bitcoin without Nostr, Blossom or a zkCoins index;
 - mutation, duplicate, malformed-encoding, wrong-network and proof-substitution vectors fail;
 - ≤5-block reorg-replay tests converge across two nodes, and a ≥6-block reorg is surfaced as the accepted break boundary (§3.9);
-- private zero-local-state recovery is tested with stated replica failures.
+- private zero-local-state recovery is tested after loss of both the node's database and its own paired relay, restoring only from the Bootstrap Manifest's seed-discoverable `seed_relay`s (delivery events) and `blob_store`s (blob bytes) — the two-plane recovery-discoverable overlap (Requirement 13, [spec §4.3](/specification#43-addressing-for-delivery)).
 
 ### Gate C — assurance
 
