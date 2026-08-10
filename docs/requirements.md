@@ -4,7 +4,7 @@ title: Requirements
 
 # Protocol Requirements
 
-The non-negotiable requirements zkCoins must satisfy. Each is a property of the protocol, independent of how it is implemented; implementation choices (commitment batching, the off-chain bundle transport mechanism, the concrete key-derivation scheme, the replication factor, and similar) are not requirements.
+The non-negotiable requirements zkCoins must satisfy. Each is a property of the protocol, independent of how it is implemented; implementation choices (commitment batching, the off-chain bundle transport mechanism, the concrete key-derivation scheme, the concrete operator-backup mechanism, and similar) are not requirements.
 
 ### 1. Bitcoin L1 as the only base
 
