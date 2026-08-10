@@ -43,7 +43,7 @@ Three kinds of arrow, and the difference between them is the whole point. **Soli
 
 ### One seed, one tree, five jobs
 
-A user writes down twelve words. Those become one long secret number, the seed, and every other key is computed from it by a fixed recipe. That is why the twelve words are enough to restore an account: whoever holds the seed can recompute every long-term key it owns. What the seed does **not** cover is the name, the fresh per-transition randomness `esk` and `npk_rand`, and any key belonging to someone else — a grantee, a replica holder, a network trust root. `nav_rand` is the one piece of randomness that *is* reproducible from the seed, which is why it has a branch of its own.
+A user writes down twelve words. Those become one long secret number, the seed, and every other key is computed from it by a fixed recipe. That is why the twelve words are enough to restore an account: whoever holds the seed can recompute every long-term key it owns. What the seed does **not** cover is the name, the fresh per-transition randomness `esk` and `npk_rand`, and any key belonging to someone else — a grantee or a network trust root. `nav_rand` is the one piece of randomness that *is* reproducible from the seed, which is why it has a branch of its own.
 
 The tree exists because an account does five separable jobs, and only the first of them must stay on the user's own device:
 
