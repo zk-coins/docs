@@ -412,7 +412,7 @@ CoinProof    = {                            // the value-bearing off-chain bundl
                                              // creating_proof.nav_commitment and check prefix(nav, own nav)
                                              // in clause 10c
   asset_terms? = { creator_pubkey, name,     // OPTIONAL plaintext IssuanceTerms of coin.asset_id
-                   decimals,                 // (§6.5, §2.3.2). v1 ends after issuance_version; a
+                   decimals,                 // (§6.5, §2.3.2). token standard 1 ends after issuance_version; a
                    issuance_version,         // token-standard-2 asset additionally carries cap_total and
                    cap_total?, terms_salt? }, // terms_salt (§6.5). The version-dispatched fields
                                              // determine exactly the non-constant asset_id preimage
@@ -736,8 +736,8 @@ w = {
 
    - (a) `asset_issuance.issuance_version == 1` (this branch accepts only token-standard-1 mints);
    - (b) `H(asset_issuance.creator_pubkey ‖ prev_account_state.nk_commit) == prev_account_state.owner` (binds the issuance to the asset's creator account, using the account's own committed `nk_commit`, since `owner = H(Pk₀ ‖ nk_commit)`, §1.4; the witness carries `creator_pubkey = Pk₀` because the SPEND key rotates per transition and `Pk₀` is otherwise irrecoverable in-circuit from the address);
-   - (c) `asset_issuance.asset_id == Hc("AssetId", genesis_tag ‖ asset_issuance.creator_pubkey ‖ asset_issuance.name_hash ‖ asset_issuance.decimals ‖ asset_issuance.issuance_version)` (the v1 `IssuanceTerms.asset_id` derivation of [Foundations §1.4](#14-identifiers-and-hashes));
-   - (d) `terms_hash == Hc("IssuanceTerms", asset_issuance.asset_id ‖ asset_issuance.issuance_version)` (the v1 `IssuanceTerms.terms_hash` recomputation).
+   - (c) `asset_issuance.asset_id == Hc("AssetId", genesis_tag ‖ asset_issuance.creator_pubkey ‖ asset_issuance.name_hash ‖ asset_issuance.decimals ‖ asset_issuance.issuance_version)` (the token-standard-1 `IssuanceTerms.asset_id` derivation of [Foundations §1.4](#14-identifiers-and-hashes));
+   - (d) `terms_hash == Hc("IssuanceTerms", asset_issuance.asset_id ‖ asset_issuance.issuance_version)` (the token-standard-1 `IssuanceTerms.terms_hash` recomputation).
 
    When `asset_issuance.issuance_version == 2` the **token-standard-2** mint clauses (a)–(g) of [Architecture §6.5](#token-standard-2--auditable-capped-supply) **MUST** hold **instead**: the same creator binding as (b); the `AssetIdV2` and `IssuanceTermsV2` derivations (which additionally bind `cap_total`/`terms_salt`); the cap check `asset_issuance.amount ≤ asset_issuance.cap_total` as an exact wide-integer comparison over `[0, 2^128 − 1]` (§2.6); the **genesis binding** `prev_account_state.send_counter == 0` **and** `prev_account_state.current_pubkey == asset_issuance.creator_pubkey` (`= Pk₀`), which forces the mint to consume `Pk₀` so that `Pk₀` first-occurrence (§3.6) admits the asset's single mint at most once **globally** across every account sharing `Pk₀`; and explicit-output emission with no self-credit in the creating transition. Together these make a token-standard-2 asset's total supply provably `≤ cap_total` (§6.5).
 
@@ -1018,7 +1018,7 @@ Receiver / node:
   6. amount/asset sanity & issuance terms: confirm coin.recipient = receiver's address and
      asset_id is well-formed. If the bundle carries asset_terms (§1.5), the receiver MUST
      dispatch on issuance_version and recompute the matching asset_id from the supplied
-     terms: for version 1, asset_id == Hc("AssetId", genesis_tag ‖ creator_pubkey ‖ H(name)
+     terms: for token standard 1, asset_id == Hc("AssetId", genesis_tag ‖ creator_pubkey ‖ H(name)
      ‖ decimals ‖ issuance_version); for token standard 2, asset_id == Hc("AssetIdV2", genesis_tag
      ‖ creator_pubkey ‖ H(name) ‖ decimals ‖ issuance_version ‖ cap_total ‖ terms_salt)
      (§1.4, §6.5) — then compare against coin.asset_id; a mismatch MUST reject the whole
@@ -2554,7 +2554,7 @@ IssuanceTerms_v1 = {
   name_hash         : digest,       // = H(name); the human-readable name is NEVER on-chain
   decimals          : u8,           // display precision; bound into asset_id, no in-circuit effect
   terms_hash        : field         // = Hc("IssuanceTerms", asset_id ‖ issuance_version)
-                                    //   (v1 has no fields beyond what asset_id already binds;
+                                    //   (token standard 1 has no fields beyond what asset_id already binds;
                                     //   issuance_version is re-absorbed here as belt-and-
                                     //   suspenders explicit version-binding — redundant with
                                     //   asset_id but harmless; later versions extend this list)
@@ -2596,7 +2596,7 @@ IssuanceTerms_v2 = {
 The token-standard-2 mint proof **MUST** verify, in-circuit, that:
 
 - (a) `issuance_version == 2` — this branch accepts only token-standard-2 mints;
-- (b) `H(creator_pubkey ‖ prev_account_state.nk_commit) == prev_account_state.owner` — the same creator binding as v1: only the holder of `sk₀` can supply a witnessed `creator_pubkey` whose SHA-256 image with the account's committed `nk_commit` equals `owner`;
+- (b) `H(creator_pubkey ‖ prev_account_state.nk_commit) == prev_account_state.owner` — the same creator binding as token standard 1: only the holder of `sk₀` can supply a witnessed `creator_pubkey` whose SHA-256 image with the account's committed `nk_commit` equals `owner`;
 - (c) `asset_id == Hc("AssetIdV2", genesis_tag ‖ creator_pubkey ‖ name_hash ‖ decimals ‖ issuance_version ‖ cap_total ‖ terms_salt)` — the token-standard-2 `asset_id` derivation of [Foundations §1.4](#14-identifiers-and-hashes), including `cap_total` and `terms_salt` in the committed preimage;
 - (d) `terms_hash == Hc("IssuanceTermsV2", asset_id ‖ issuance_version ‖ cap_total ‖ terms_salt)` — the `terms_hash` recomputation;
 - (e) **cap enforcement.** `amount ≤ cap_total`, with both values range-checked to `[0, 2^128 − 1]` and compared as exact non-negative integers via the wide-integer gadgets of [§2.6](#26-in-circuit-non-native-cryptography-normative), never as field elements or by a modular comparison;
@@ -3051,7 +3051,7 @@ The `GET /v1/jobs/<job_id>/stream` `complete`/`error` frames (above) carry the s
 
 | Method | Path | Body / Returns |
 |---|---|---|
-| `GET` | `/v1/token/<asset_id>/provenance` | **Open — no capability, no authentication** (kernel `GetTokenProvenance`, [§7.8](#78-kernel-rpc--the-internal-interface-normative)). Returns the issuer-originated `IssuanceTerms` preimage the node captured for `asset_id`, in the schema of its `issuance_version`: v1 → `{ asset_id: <hex32>, issuance_version: 1, creator_pubkey: <hex32>, name: <hex — raw `name` bytes; `H(name)` is what binds into `asset_id`, so bytes are returned rather than a JSON string, which cannot round-trip a UTF-8-invalid `name`>, decimals: <u8> }`; v2 → the same plus `{ cap_total: <decimal-string u128>, terms_salt: <hex32> }`. The client **MUST** re-derive `asset_id` from the returned preimage exactly as [Foundations §1.4](#14-identifiers-and-hashes) / [§6.5](#65-issuance--token-standards) mint clause (c) specify — v1: `Hc("AssetId", genesis_tag ‖ creator_pubkey ‖ H(name) ‖ decimals ‖ 1)`; v2: `Hc("AssetIdV2", genesis_tag ‖ creator_pubkey ‖ H(name) ‖ decimals ‖ 2 ‖ cap_total ‖ terms_salt)` — and **MUST** reject a response whose recomputed id ≠ the requested `asset_id`. The response is therefore **self-verifying against the public `asset_id`** and is never trusted on the server's word; a lying holder cannot serve false terms. Returns `404 not_found` when the node holds no terms for `asset_id`. Serving is **best-effort availability, not consensus** — it carries only issuer-originated definition data, **never** any transfer record, holder, amount, or foreign `CoinProof` plaintext ([§4.6](#46-data-availability) Class-B bound) |
+| `GET` | `/v1/token/<asset_id>/provenance` | **Open — no capability, no authentication** (kernel `GetTokenProvenance`, [§7.8](#78-kernel-rpc--the-internal-interface-normative)). Returns the issuer-originated `IssuanceTerms` preimage the node captured for `asset_id`, in the schema of its `issuance_version`: token standard 1 → `{ asset_id: <hex32>, issuance_version: 1, creator_pubkey: <hex32>, name: <hex — raw `name` bytes; `H(name)` is what binds into `asset_id`, so bytes are returned rather than a JSON string, which cannot round-trip a UTF-8-invalid `name`>, decimals: <u8> }`; token standard 2 → the same plus `{ cap_total: <decimal-string u128>, terms_salt: <hex32> }`. The client **MUST** re-derive `asset_id` from the returned preimage exactly as [Foundations §1.4](#14-identifiers-and-hashes) / [§6.5](#65-issuance--token-standards) mint clause (c) specify — token standard 1: `Hc("AssetId", genesis_tag ‖ creator_pubkey ‖ H(name) ‖ decimals ‖ 1)`; token standard 2: `Hc("AssetIdV2", genesis_tag ‖ creator_pubkey ‖ H(name) ‖ decimals ‖ 2 ‖ cap_total ‖ terms_salt)` — and **MUST** reject a response whose recomputed id ≠ the requested `asset_id`. The response is therefore **self-verifying against the public `asset_id`** and is never trusted on the server's word; a lying holder cannot serve false terms. Returns `404 not_found` when the node holds no terms for `asset_id`. Serving is **best-effort availability, not consensus** — it carries only issuer-originated definition data, **never** any transfer record, holder, amount, or foreign `CoinProof` plaintext ([§4.6](#46-data-availability) Class-B bound) |
 
 `GET /v1/token/<asset_id>/provenance` is the **sole** endpoint in this API that is served fully **unauthenticated and open** outside the Public projection above — no capability, no `OwnershipProof`, and no `GrantProof` ([§4.6](#46-data-availability) Class B) — and uses the existing `200`/`404` status codes, plus `400 malformed_request` for a malformed `asset_id` (not 32-byte hex), introducing no new `machine_code`.
 
