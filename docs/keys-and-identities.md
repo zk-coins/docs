@@ -43,7 +43,7 @@ Three kinds of arrow, and the difference between them is the whole point. **Soli
 
 ### One seed, one tree, five jobs
 
-A user writes down twelve words. Those become one long secret number, the seed, and every other key is computed from it by a fixed recipe. That is why the twelve words are enough to restore an account: whoever holds the seed can recompute every long-term key it owns. What the seed does **not** cover is the name, the fresh per-transition randomness `esk` and `npk_rand`, and any key belonging to someone else — a grantee, a replica holder, a network trust root. `nav_rand` is the one piece of randomness that *is* reproducible from the seed, which is why it has a branch of its own.
+A user writes down twelve words. Those become one long secret number, the seed, and every other key is computed from it by a fixed recipe. That is why the twelve words are enough to restore an account: whoever holds the seed can recompute every long-term key it owns. What the seed does **not** cover is the name, the fresh per-transition randomness `esk` and `npk_rand`, and any key belonging to someone else — a grantee or a network trust root. `nav_rand` is the one piece of randomness that *is* reproducible from the seed, which is why it has a branch of its own.
 
 The tree exists because an account does five separable jobs, and only the first of them must stay on the user's own device:
 
@@ -325,7 +325,6 @@ For an account-wide disclosure, prefer a scoped `zkgrant` over `zkavk` — not b
 | `op_sig` | `op` | that the recipient acknowledged a delivery (kind-1421 ACK) |
 | `op_signature` (in a `ViewGrant`) | `op` | the scope and window of a delegation |
 | `op_sig` (in `OperatorEndpointV1`) | the operator's `op` | endpoint gossip |
-| `receipt_sig` (in `ReplicaReceiptV1`) | the replica holder's `op`, verified under `holder_op_pubkey` | that both the blob and its delivery event are durably committed |
 | `manifest_sig` (in `BootstrapManifestV1`) | `bootstrap_pubkey` | the network's bootstrap infrastructure list |
 
 ```

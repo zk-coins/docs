@@ -21,7 +21,7 @@ The [paper-deviation analysis](/paper-conformance-analysis) documents how an ear
 
 ## Workstream 1 — Incentive analysis
 
-Scope: every mechanism whose correctness or liveness depends on actor behaviour rather than cryptography. [Risks](/risks) is the maintained catalog; the analysis must use the current on-chain-nullifier model, in which publishing is contention-free and the public accumulator is rebuilt from Bitcoin alone, while private `CoinProof` availability remains a replicated off-chain liveness requirement ([spec §3.4](/specification#34-the-publisher), [§3.6](/specification#36-chain-scanning), [§4.6](/specification#46-data-availability--replication-factor-k)).
+Scope: every mechanism whose correctness or liveness depends on actor behaviour rather than cryptography. [Risks](/risks) is the maintained catalog; the analysis must use the current on-chain-nullifier model, in which publishing is contention-free and the public accumulator is rebuilt from Bitcoin alone, while private `CoinProof` availability remains a replicated off-chain liveness requirement ([spec §3.4](/specification#34-the-publisher), [§3.6](/specification#36-chain-scanning), [§4.6](/specification#46-data-availability)).
 
 Method — for each mechanism:
 
@@ -48,7 +48,7 @@ A security proof establishes that the *specified* protocol is sound. That the *r
 
 | Gate | What must hold |
 |---|---|
-| **Public testnet** | Paper-conformance remediation Gate A (specification completeness) is closed; zero `<REGEN>` placeholders outside the explicitly non-byte-pinned cells (the V.5/V.6 signature values, locked by verification, and the deployment-specific V.6 `block_anchor`); zero open rows in the [Risks](/risks) verdict table; conformance vectors generated and pinned; the A-to-Z suite passes across node, SDK, and app. Steps 1–7 of the [implementation-mandate runbook](/implementation-mandate) are the executable form of this gate. |
+| **Public testnet** | Paper-conformance remediation Gate A (specification completeness) is closed; zero `<REGEN>` placeholders outside the explicitly non-byte-pinned cells (V.5/V.6 signature values and V.12 `name_sig` — locked by verification; the deployment-specific V.6 `block_anchor`; and harness-generated V.11 boundary-suite fixtures, which mark runtime roots rather than byte-pinnable cells); zero open rows in the [Risks](/risks) verdict table; conformance vectors generated and pinned; the A-to-Z suite passes across node, SDK, and app. Steps 1–7 of the [implementation-mandate runbook](/implementation-mandate) are the executable form of this gate. |
 | **Real value (mainnet)** | Paper-conformance remediation Gates A–C are closed ([their definitions](/paper-conformance-remediation)); the [Risks](/risks) verdict table has no open and no **broken** row (Workstream 1); the specification's soundness summary ([spec §2.4](/specification#24-soundness-summary)) and security-properties summary ([spec §6.7](/specification#67-security-properties-summary)) are complete and internally consistent, and the Gate-B negative-control vectors pass; the reference instantiation is final for v1 ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1)); a vulnerability disclosure process is published ([SECURITY.md](https://github.com/zk-coins/docs/blob/develop/SECURITY.md)). |
 
 These gates are ordered stations, not aspirations: a release that has not passed its gate does not ship. Their executable form — ordered steps with hard pass predicates and no human-gated stop — is the [Path to mainnet runbook](/implementation-mandate).

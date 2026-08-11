@@ -4,7 +4,7 @@ title: Requirements
 
 # Protocol Requirements
 
-The non-negotiable requirements zkCoins must satisfy. Each is a property of the protocol, independent of how it is implemented; implementation choices (commitment batching, the off-chain bundle transport mechanism, the concrete key-derivation scheme, the replication factor, and similar) are not requirements.
+The non-negotiable requirements zkCoins must satisfy. Each is a property of the protocol, independent of how it is implemented; implementation choices (commitment batching, the off-chain bundle transport mechanism, the concrete key-derivation scheme, the concrete operator-backup mechanism, and similar) are not requirements.
 
 ### 1. Bitcoin L1 as the only base
 
@@ -24,11 +24,11 @@ A receiver — itself, or its own node acting on its behalf — accepts a coin o
 
 ### 5. Custody only in the wallet
 
-The key that authorizes spending exists only on the user's wallet and is never transmitted to or stored on any node or server.
+The key that authorizes spending exists only on the user's wallet and is never transmitted to or stored on any node or server. The wallet is exclusively a seed custodian — its sole job is holding the seed and the keys derived from it — and must not be relied upon to store any other information, such as coin bundles or account state. Losing the wallet software and the seed backup at the same time makes any funds it controlled permanently and irrecoverably lost; this is not a defect but a direct consequence of self-custody, exactly as with a Bitcoin seed.
 
 ### 6. Recovery
 
-The seed is the root from which all keys are deterministically derived. The complete state must be recoverable: normally from the node operator's own backup, and — as an emergency fallback after total loss of local data — from the seed, the public Bitcoin chain, and the coin data replicated across other nodes.
+The seed is the root from which all keys are deterministically derived. The complete state must be recoverable: normally from the node operator's own backup, and — as an emergency fallback after total loss of local data — from the seed, the public Bitcoin chain, and the coin data retained by the network's seed-discoverable relays and blob stores — recoverable under the §4.10 operational conditions (a reachable bootstrap node, ≥1 live holder per plane, and continuity-preserving manifest rotation) ([spec §4.3](/specification#43-addressing-for-delivery), [spec §4.10](/specification#410-responsibility-boundaries-and-the-availability-model-normative)).
 
 ### 7. Self-hostable
 
@@ -55,3 +55,17 @@ The app and API layers give every account they serve an email-style NIP-05 name 
 An account has one name in force at a time, and the account holder attests it with the wallet-only spend key, so a consumer can establish that the seed holder — not merely whoever holds the node-held Nostr key — put that name on that identity. Every app verifies that attestation before it accepts a name for a counterparty. A name is not derived from the seed, enters no value-bearing structure, and carries no payment authority; it can be replaced without affecting keys, funds, or an established contact, and losing it costs reachability under that name and nothing else. Lightning/LNURL and SMTP/email bridges are independent, optional operator services and are prerequisites for nothing.
 
 *(That end-user applications present names rather than raw identifiers is an application requirement, stated for the `app` layer in the [Implementation Mandate](/implementation-mandate#app-layer-identity-and-contacts-normative).)*
+
+### 12. Data Permanence
+
+A node never deletes data it has received or stored. Every artefact a node takes in — a `CoinProof` bundle, a delivery event, a `SelfDeliveryRecordV1`, a stored blob, any record it persists on an account's behalf — is stored **completely** and retained **indefinitely**. Deletion, dropping, expiry, pruning, garbage collection, retention-policy eviction, and "supersession" clean-up are **not** operations the protocol supports: there is no path by which a conforming node or API discards received data. The same holds for every layer — the kernel, the API, and any relay or blob store a node operates — because a coin's spendability and an account's next-transition credential live entirely in these off-chain artefacts, and losing any of them is losing funds permanently ([spec §4.8](/specification#48-durability--the-store-everything-invariant)).
+
+A sender therefore keeps its own copy of everything it has sent, for good; a recipient and every holder keep everything they receive, for good. Redundancy across independent holders only adds copies — it is never a licence to drop one. An acknowledgement or a durability confirmation tells a sender its data survived elsewhere; it never permits the sender to delete its own.
+
+Access revocation withdraws authorization but erases nothing: it permanently ceases use of the operational bundle while all stored data remains retained. Revoking a node's grant to an account's operational bundle makes that node **immediately and permanently cease all use** of the bundle (proving, discovery, decryption, serving) — a custody/access control, not a deletion of the account's value-bearing records, which remain stored under Data Permanence.
+
+A node is data-retentive by default: everything it can capture, it captures and keeps. At the moment it accepts an incoming coin it takes in the coin's complete token provenance — its `asset_terms`, when the bundle carries them — alongside the bundle itself, so the token remains alive and transferable even if its issuer later disappears ([spec §4.6](/specification#46-data-availability), [spec §4.8](/specification#48-durability--the-store-everything-invariant)). Because losing this data can lose funds, the node operator must maintain a real-time, restorable backup of the node's value-bearing PostgreSQL store and its blob store at all times; the backup mechanism itself is a deployment and hosting concern, deliberately out of scope for the node software, but operating a node without one violates this requirement ([spec §4.8](/specification#48-durability--the-store-everything-invariant) *Operator durability duty*).
+
+### 13. Recovery availability from the seed alone
+
+A wallet that has lost everything except its seed can fully recover its state — every value-bearing artefact addressed to it — as long as it can reach one node to fetch and verify the current signed Bootstrap Manifest (a reachable node base URL) and at least one holder of each plane of that data is still live and reachable: its own node's backup, a self-hosted relay and blob store, or a seed-discoverable relay (for the delivery event) together with a seed-discoverable blob store (for the blob). This is guaranteed by the recovery-discoverable overlap invariant — the publishing node **must** publish every delivery event to at least one of the network's seed-discoverable relays **and** store every value-bearing blob in at least one of the network's seed-discoverable blob stores, so a seed-only scan of that set finds both the locator and the bytes of everything ever addressed to the account, as long as manifest rotation has preserved recovery-discoverability ([spec §4.3](/specification#43-addressing-for-delivery)). Every value-bearing artefact is additionally published, encrypted, to the Nostr relay plane (its event) and the Blossom blob plane (its blob) as a second redundancy layer, and any participant may run and sync their own relay and blob store rather than depend on any one node ([spec §4.6](/specification#46-data-availability)). A token survives the loss of its issuer: it remains transferable from its own `CoinProof` bundle and the chain alone, and its display terms are openly resolvable by `asset_id` from any holder that has retained them, as long as ≥1 such holder exists ([spec §4.5](/specification#45-recovery), [spec §4.10](/specification#410-responsibility-boundaries-and-the-availability-model-normative)).
