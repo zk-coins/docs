@@ -2890,7 +2890,14 @@ TransitionRequest = {
   fee_address      : <zk-address>,                   // deferred (§3.8.1): MUST be absent in v1; presence matrix below
   fold_coin_ids    : [ <hex32 coin.identifier> ],    // kind == "receive": required, 1..max_rx_coins
                                                      //   (§2.1 clause 10); MUST be absent otherwise
+  genesis_pubkey   : <hex32, x-only>,                // kind == "receive" only: required for a genesis
+                                                     //   receive (the account's first transition on this
+                                                     //   node); MUST be absent for a registered account and
+                                                     //   for kind ∈ {"mint","send"} (§2.3.3)
   issuance         : {                               // kind == "mint": required; MUST be absent otherwise
+    creator_pubkey   : <hex32, x-only>,              //   required; the creator's base pubkey Pk₀ — a
+                                                     //     domain-separated input to asset_id (§6.5); the
+                                                     //     node returns it from GET /v1/token/<asset_id>/provenance
     name             : <UTF-8 string, ≤ 255 bytes>,  //   (§1.5; name_hash = H(name), §1.4)
     decimals         : <u8>,
     issuance_version : 1 | 2,                        //   any other value is malformed (§2.1 clause 3)
@@ -2918,6 +2925,8 @@ DeliveryCredential =
   | { type: "profile", event: <kind-0 event> }       // full canonical kind-0 event
                                                      //   (author, created_at, Nostr signature)
 ```
+
+**`creator_pubkey` and `genesis_pubkey` — base-pubkey carriers (normative).** `issuance.creator_pubkey` is **required** for every `kind == "mint"`; it carries the creator's base pubkey Pk₀, which hashes into `asset_id` as a domain-separated input ([§6.5](#65-issuance--token-standards)) and which the open `GET /v1/token/<asset_id>/provenance` read later returns to a caller. `genesis_pubkey` is **required** for a genesis receive — a `kind == "receive"` transition that is the account's first transition on this node ([§2.3.3](#233-receive)) — and supplies the genesis account's initial `txn_pubkey`; it **MUST be absent** for a registered account and for `kind ∈ {"mint","send"}`. A missing required field, a field present where forbidden, or a value not exactly 32 bytes is malformed: the node **MUST** reject the request with `400 malformed_request` and **MUST NOT** start a job, as for every other `TransitionRequest` presence-rule violation below. These fields are [§1.7.8](#178-reference-instantiation-status-final-for-v1) **between-step-3-and-step-7** additive §7 wire changes: `creator_pubkey` is already a bound circuit input that hashes into `asset_id`, so its wire field only transports a value the circuit already consumes; `genesis_pubkey` transports the initial `txn_pubkey` the account model already binds rather than introducing a new circuit input. Neither field changes a circuit element, a pinned vector, or a digest, and neither moves a trust boundary. The same clause names the open `GET /v1/token/<asset_id>/provenance` read as the stated precedent for this class of addition, so neither field creates a new protocol version.
 
 **`delivery` — the delivery credential (normative).** This field is the wire carrier that closes the §4.3 gap: the node needs the recipient's `{ivpk, op_pubkey, relays}` to deliver (§4.2), and a bare address is not resolvable. It is a [§1.7.8](#178-reference-instantiation-status-final-for-v1) **between-step-3-and-step-7** wire addition: it touches **neither** a circuit element **nor** a pinned vector **nor** a digest, and therefore is **not** a new protocol version under that clause. Verification is **kernel-only** ([§6.1](#61-components-and-responsibilities)): the API layer forwards `delivery` **unchanged**, **MUST NOT** mark it verified, and **MUST NOT** log it (retention rule below).
 
@@ -3342,6 +3351,7 @@ message Issuance {
   string amount = 4;
   string cap_total = 5;                    // set iff issuance_version == 2
   bytes terms_salt = 6;                    // set iff issuance_version == 2
+  bytes creator_pubkey = 7;                // Pk₀ (32B x-only); required — binds into asset_id (§6.5)
 }
 message TransitionRequest {
   string kind = 1;                         // "mint" | "send" | "receive"
@@ -3353,6 +3363,7 @@ message TransitionRequest {
   bytes publisher_pubkey = 6;              // empty ⇒ self-publish (case a); set ⇒ case (b) or (c)
   string fee_address = 7;                  // deferred (§3.8.1): MUST be empty in v1 (§7.5 matrix cases (a)/(c))
   repeated bytes fold_coin_ids = 8;
+  bytes genesis_pubkey = 12;               // recipient's Pk₀ (32B x-only); required for a genesis receive, absent otherwise (§2.3.3)
   Issuance issuance = 9;
   string idempotency_key = 10;             // §7.5 Idempotency-Key pass-through
 }
@@ -3411,6 +3422,10 @@ message PullRequest {
   Scope resolved_scope = 3;                 // the already-intersected scope (§5.1) — the kernel
                                             //   trusts the API layer for ACCESS, never widens
   bytes chan_bind = 4;                      // opaque 32B equality token for session binding (§5.1)
+  string authority = 5;                     // closed: "ownership" | "grant"; which capability the API layer
+                                            //   verified at §5.1 — the kernel records it on the session so
+                                            //   GetAccountState can admit ownership only; retires the
+                                            //   x-zkcoins-session-authority metadata key
 }
 message RecordRef {
   bytes record_id = 1;                     // opaque 32B id of this Private record
@@ -3501,6 +3516,8 @@ message TokenProvenance {
   bytes terms_salt = 6;                    // 32B; set iff issuance_version == 2
 }
 ```
+
+**Wire-completeness fields (normative).** `Issuance.creator_pubkey = 7` and `TransitionRequest.genesis_pubkey = 12` ratify the base-pubkey values the reference node proto already carries, with the same presence rules as [§7.5](#75-node-rest-api-normative): `creator_pubkey` is required for a mint, while `genesis_pubkey` is required for a genesis receive and absent otherwise. A presence-rule violation, including the genesis-receive case, is `INVALID_ARGUMENT` / `malformed_request` / `400` under the `SubmitTransition` row of the per-procedure error table. `PullRequest.authority` is a closed string, `"ownership"` or `"grant"`, that carries which capability the API layer verified at [§5.1](#51-capability-gated-pull); the kernel records it on the pull session so `GetAccountState` can admit an ownership session only, as stated above under **Who enforces the capability gate.** Its absence or any other value is `INVALID_ARGUMENT` / `malformed_request` / `400` under the `Pull` row of the per-procedure error table. The field retires the out-of-contract `x-zkcoins-session-authority` gRPC metadata key: the discriminator is now a first-class part of the `kernel.v1` contract, so a client built from the `.proto` alone can open a session the kernel accepts. [§1.7.8](#178-reference-instantiation-status-final-for-v1) makes an addition to the §7 wire formats between runbook step 3 and step 7 — spanning both the §7.5 REST body and the §7.8 gRPC messages — not a new protocol version when it touches no circuit element, pinned vector, or digest, provided a specification PR states why; this amendment supplies that statement. `authority` has no circuit involvement, and the two pubkey fields transport values the circuit or account model already binds, as the §7.5 paragraph above explains. None changes a circuit element, a pinned vector, or a digest, and the API layer continues to perform the entire capability gate, so none moves a trust boundary.
 
 A breaking change to any message or procedure is a new package (`kernel.v2`), never an in-place edit ([§1.7.8 v1 freeze](#178-reference-instantiation-status-final-for-v1)).
 
