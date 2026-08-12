@@ -16,6 +16,7 @@ const sidebars = {
     'paper-conformance-analysis',
     'paper-conformance-remediation',
     'proposals-v1.3-bootstrap-seeds',
+    'proposals-kernel-v1-wire-completeness',
   ],
 };
 
