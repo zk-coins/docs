@@ -210,7 +210,7 @@ When `group_chat` is on, the node that holds the operational bundle also holds t
 
 **Risk: Switching nodes or losing the MLS credential store drops group membership and history.**
 
-MLS state is non-value-bearing operational state. It is not seed- or chain-derived and is listed as a [spec §6.3](/specification#63-node-portability-and-multi-node-operation) residual. [Requirement 12](/requirements#12-data-permanence) does not apply to Marmot application messages.
+MLS state is non-value-bearing operational state. It is not seed- or chain-derived and is listed as a [spec §6.3](/specification#63-node-portability-and-multi-node-operation) residual. [Requirement 12](/requirements#12-data-permanence) still applies; its sole carve-out is Marmot application-message expiry when `group_chat` is on. Lost credentials are a portability residual, not a retention rule.
 
 **Mitigation:** Transfer the credential store when switching nodes if group continuity is required. Losing it cannot spend, forge, or destroy coins.
 

@@ -99,7 +99,7 @@ Exactly one `h` tag whose value is the lowercase hex 32-byte `nostr_group_id`. T
 
 The event `pubkey` **MUST** be a fresh ephemeral Nostr public key generated for that event, signed by the matching ephemeral key. It **MUST NOT** be `op` and **MUST NOT** be reused (G-04).
 
-```
+```text
 group_event_key = MLS-Exporter("marmot", "group-event", 32)
 nonce           = CSPRNG(12)
 aad             = ""
@@ -157,6 +157,7 @@ Closed paths, JSON, fail-closed. A request when API `group_chat` is off, when `w
 | `POST` | `/v1/groups/:group_id/messages` | body `{ content }` — a plaintext UTF-8 string → `{ message_id }` — the recovered MLS message id after the node processes the send |
 | `GET` | `/v1/groups/:group_id/messages` | `{ messages: [ { message_id, sender_op_pubkey, content, created_at } ] }` — decrypted application texts the node has already processed |
 | `POST` | `/v1/groups/:group_id/invites` | body `{ op_pubkey }` — invitee identity; the node fetches a valid kind `30443` and publishes a Welcome |
+| `POST` | `/v1/groups/:group_id/members/remove` | body `{ op_pubkey }` — admin-only MLS remove commit; a non-admin **MUST** get `403` and **MUST NOT** mutate group state |
 | `POST` | `/v1/groups/:group_id/leave` | `{ left: true }` |
 | `POST` | `/v1/groups/keypackages` | publish or rotate a KeyPackage slot → `{ d, i }` — slot id and KeyPackageRef, both lowercase hex |
 
