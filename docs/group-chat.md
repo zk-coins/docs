@@ -143,7 +143,7 @@ V.12, A-to-Z, and payment conformance **MUST NOT** depend on this overlay. A rel
 
 The API **MUST NOT** advertise `group_chat` in `GET /v1/info` unless `wallet` is also advertised. When both are on and the kernel `group_chat` part is on, the API exposes the routes below. Crypto stays node-side. The SDK and app **MUST NOT** implement MLS; they call these routes.
 
-Auth is the same as other `/v1` wallet reads: a still-valid **ownership** pull session (`Authorization: Bearer <token>`, [spec §7.5](/specification#75-node-rest-api-normative)). A GrantProof session **MUST** be rejected. No SPEND material is involved.
+Auth is the same as `GET /v1/account/state`: a still-valid **ownership** pull session (`Authorization: Bearer <token>`, [spec §5.1](/specification#51-capability-gated-pull), [§7.5](/specification#75-node-rest-api-normative)). A GrantProof session **MUST** be rejected as HTTP `401` `{ "error": "unauthorized" }`. An expired, unknown, or `chan_bind`-mismatching token **MUST** be HTTP `410` `{ "error": "session_expired" }`. No SPEND material is involved. The kernel procedures take `session` + `chan_bind`; the subject comes from the server-side session, never from a client-supplied field.
 
 Closed paths, JSON, fail-closed. A request when API `group_chat` is off, when `wallet` is off, or when the kernel `group_chat` part is off, **MUST** be answered `404 feature_disabled` (G-09). The MLS group id **MUST NOT** appear on the public REST surface.
 

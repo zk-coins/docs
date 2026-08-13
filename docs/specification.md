@@ -1984,11 +1984,11 @@ The node **MUST** (1) verify the grant's `op` signature against the subject's pu
 
 The challenge–response above authorises a **single** `POST /v1/pull` ([§7.5](#75-node-rest-api-normative)): the `nonce` is consumed on use, so it cannot authorise the follow-up `GET /v1/proof/<coin_id>` fetches a client makes after seeing the record list. To bridge those without re-running the challenge per coin, a successful `POST /v1/pull` **also** issues a short-lived **pull session**:
 
-- **Credential.** The node returns an **opaque, node-generated** session token (a bearer secret with no client-parseable structure) alongside the record list. The client presents it on every subsequent `GET /v1/record/<record_id>`, `GET /v1/proof/<coin_id>`, and (when the session was opened by an **OwnershipProof**) `GET /v1/account/state` in an `Authorization: Bearer <token>` header. The token is **not** a capability the client can mint, narrow, or forge — it only references server-side session state.
+- **Credential.** The node returns an **opaque, node-generated** session token (a bearer secret with no client-parseable structure) alongside the record list. The client presents it on every subsequent `GET /v1/record/<record_id>`, `GET /v1/proof/<coin_id>`, (when the session was opened by an **OwnershipProof**) `GET /v1/account/state`, and every `/v1/groups*` route in an `Authorization: Bearer <token>` header. The token is **not** a capability the client can mint, narrow, or forge — it only references server-side session state.
 - **Expiry.** The session carries its **own** expiry, **independent of** the 60-second challenge `nonce` window (§5.1) — RECOMMENDED a few minutes. The node **MUST** reject a token past its session expiry (`410`).
 - **Binding (fail-closed).** The session state records the `chan_bind` ([§5.1](#51-capability-gated-pull)), the authenticated `subject`, and the **resolved (intersected) `scope`** of the `POST /v1/pull` that created it. A follow-up request is served **only** if it arrives over a channel whose recomputed `chan_bind` matches the session's (the same host/onion binding as the original proof — a token captured and replayed against a **different** node fails, exactly as a replayed proof does), and it releases a Private record **only** for a `record_id` / coin whose subject is the authenticated `subject` **and** which falls inside the session's resolved `scope` (including `SelfDeliveryRecordV1` state records, [§4.2](#42-bundle-delivery)). A token whose `chan_bind` does not match, whose `subject`/`scope` would be exceeded, or which is expired or unknown **MUST** be rejected — the node never widens disclosure beyond what the originating `POST /v1/pull` authorised.
 
-The pull session is a transport convenience over the **same** authorisation the challenge–response already established; it grants no access the `OwnershipProof`/`GrantProof` did not, and it is the "still-valid pull session" referenced by `GET /v1/record/<record_id>`, `GET /v1/proof/<coin_id>`, `GET /v1/account/state` (ownership sessions **only**), `GET /v1/receipts/stream` ([§7.5](#75-node-rest-api-normative)), and the `GetRecord` / `GetCoinProof` / `GetAccountState` / `SubscribeReceipts` kernel procedures ([§7.8](#78-kernel-rpc--the-internal-interface-normative)) — ownership **and** grant sessions are both admissible on the receipts stream and on record/proof fetch; `GET /v1/account/state` / `GetAccountState` admit **ownership sessions only** (a grant session is `401 unauthorized` — no full-state disclosure under a scoped grant).
+The pull session is a transport convenience over the **same** authorisation the challenge–response already established; it grants no access the `OwnershipProof`/`GrantProof` did not, and it is the "still-valid pull session" referenced by `GET /v1/record/<record_id>`, `GET /v1/proof/<coin_id>`, `GET /v1/account/state` (ownership sessions **only**), `/v1/groups*` (ownership sessions **only**), `GET /v1/receipts/stream` ([§7.5](#75-node-rest-api-normative)), and the `GetRecord` / `GetCoinProof` / `GetAccountState` / `SubscribeReceipts` / group-chat kernel procedures ([§7.8](#78-kernel-rpc--the-internal-interface-normative)) — ownership **and** grant sessions are both admissible on the receipts stream and on record/proof fetch; `GET /v1/account/state` / `GetAccountState` and every `/v1/groups*` / group-chat procedure admit **ownership sessions only** (a grant session is `401 unauthorized` — no full-state or group-state disclosure under a scoped grant).
 
 ### 5.2 View grant
 
@@ -3044,11 +3044,11 @@ Additional codes (closing the enumeration across §7.4–§7.7 surfaces):
 |---|---|---|
 | `malformed_request` | 400 | body violates a normative shape of this section (`TransitionRequest` presence rules, missing or failed `OutputTemplate.delivery` credential check, unknown `delivery.type`, §7.1 JSON rules, wrong-HRP Bech32m, non-hex where hex is required) |
 | `idempotency_conflict` | 409 | the same `Idempotency-Key` was replayed with a different body (mapping retained indefinitely; a known key never expires or is forgotten) |
-| `unauthorized` | 401 | §5.1 capability invalid (bad signature/`chal`/grant), action-bound OwnershipProof missing/invalid/wrong-domain on `/v1/attest/balance` or `/v1/grants` (including a `GrantProof` presented where only owner auth is accepted — no-escalation), Blossom auth-event rejected, missing/invalid pull-session bearer token (absent or malformed — not merely expired), or a **grant** pull session presented to ownership-only `GET /v1/account/state` |
+| `unauthorized` | 401 | §5.1 capability invalid (bad signature/`chal`/grant), action-bound OwnershipProof missing/invalid/wrong-domain on `/v1/attest/balance` or `/v1/grants` (including a `GrantProof` presented where only owner auth is accepted — no-escalation), Blossom auth-event rejected, missing/invalid pull-session bearer token (absent or malformed — not merely expired), or a **grant** pull session presented to ownership-only `GET /v1/account/state` or any `/v1/groups*` route |
 | `scope_exceeded` | 403 | §5.1 resolved-scope violation, non-peer PUT |
 | `not_group_admin` | 403 | a non-admin called an admin-only group membership route (`invite`, `members/remove`) |
 | `challenge_expired` | 410 | pull/bootstrap/attest/grants `nonce` expired, already consumed, or unknown |
-| `session_expired` | 410 | pull-session token expired, unknown, or presented over a channel whose `chan_bind` does not match (incl. `GET /v1/receipts/stream`, `GET /v1/record/<record_id>`, `GET /v1/proof/<coin_id>`, and `GET /v1/account/state`) |
+| `session_expired` | 410 | pull-session token expired, unknown, or presented over a channel whose `chan_bind` does not match (incl. `GET /v1/receipts/stream`, `GET /v1/record/<record_id>`, `GET /v1/proof/<coin_id>`, `GET /v1/account/state`, and `/v1/groups*`) |
 | `not_found` | 404 | unknown `blob_id`, `record_id`/`coin_id` outside the session's scope-visible set, unknown job (`job_not_found` stays canonical for the jobs family), or unknown `group_id` |
 | `feature_disabled` | 404 | API or kernel `group_chat` part is off (G-09), or `wallet` is off while a `/v1/groups*` route is called |
 | `invitee_not_ready` | 409 | invitee has no valid kind-10050 list; Welcome is not published (G-10) |
@@ -3072,7 +3072,7 @@ The `GET /v1/jobs/<job_id>/stream` `complete`/`error` frames (above) carry the s
 | `GET` | `/v1/account/state` | **ownership-gated** authoritative account-state read (realises the state half of [§6.4](#64-external-interfaces-abstract) `read.account`; kernel `GetAccountState`, [§7.8](#78-kernel-rpc--the-internal-interface-normative)): served **only** within a still-valid [pull session](#pull-session-normative) opened by an **OwnershipProof** (`Authorization: Bearer <token>`; same pull-session pattern as `GET /v1/proof/<coin_id>`). Returns JSON `{ account_state: <hex — serialize(AccountState), §1.7.4>, state_head: <hex32 — ash of the spendable head>, head_record_id?: <hex32 — Private-record locator of the head SelfDeliveryRecordV1 when indexed>, send_counter: <u64>, current_pubkey: <hex32 — Pkᵢ, the key that signs the next transition>, last_nullifier?: { pubkey: <hex32>, r: <hex32> } }` — `send_counter` / `current_pubkey` **MUST** equal the corresponding fields inside `account_state`; `last_nullifier` is the head transition's on-chain nullifier `(Pk, R)` when the account has advanced at least once, else omitted (canonical empty account, [§2.2](#22-proof-types)). **Auth (normative, fail-closed, same split as pull):** missing/invalid bearer (absent `Authorization`, malformed token, or a **grant** session presented here) → `401 unauthorized`; unknown, expired, or `chan_bind`-mismatching session → `410 session_expired`; never collapse expiry/unknown/channel-mismatch into `401` |
 | `GET` | `/v1/receipts/stream` | Server-Sent Events: one receipt event per credited coin inside the pull session's stored `subject` + resolved `scope` (ownership **or** grant session; `Authorization: Bearer <token>`; missing/invalid token → `401`, unknown/expired/`chan_bind`-mismatch → `410 session_expired`) — the public front of `kernel.v1` `SubscribeReceipts` ([§7.8](#78-kernel-rpc--the-internal-interface-normative)) and the [§4.9](#49-real-time-push-delivery) push source |
 
-**Group chat (gated on `group_chat` + `wallet`; [Group chat](/group-chat)).** Crypto stays node-side. Auth is a still-valid **ownership** pull session (`Authorization: Bearer <token>`); a GrantProof session **MUST** be rejected. No SPEND. The API **MUST NOT** advertise `group_chat` unless `wallet` is also advertised. A request when API `group_chat` is off, when `wallet` is off, or when the kernel `group_chat` part is off, **MUST** be answered `404 feature_disabled`. `group_id` is a node-local stable id; the MLS group id **MUST NOT** appear on this surface.
+**Group chat (gated on `group_chat` + `wallet`; [Group chat](/group-chat)).** Crypto stays node-side. Auth is a still-valid **ownership** pull session (`Authorization: Bearer <token>`), exactly as `GET /v1/account/state`; a GrantProof session **MUST** be rejected as `401 unauthorized`. An expired, unknown, or `chan_bind`-mismatching token is `410 session_expired`. No SPEND. The API **MUST NOT** advertise `group_chat` unless `wallet` is also advertised. A request when API `group_chat` is off, when `wallet` is off, or when the kernel `group_chat` part is off, **MUST** be answered `404 feature_disabled`. `group_id` is a node-local stable id; the MLS group id **MUST NOT** appear on this surface.
 
 | Method | Path | Body / Returns |
 |---|---|---|
@@ -3569,10 +3569,11 @@ message TokenProvenance {
   string cap_total = 5;                    // decimal u128; set iff issuance_version == 2
   bytes terms_salt = 6;                    // 32B; set iff issuance_version == 2
 }
-message GroupAccountRequest { string subject = 1; }          // Bech32m address of the authorised owner
-message CreateGroupRequest { string subject = 1; string title = 2; }
+// ownership pull session only — grant sessions are UNAUTHENTICATED/unauthorized (§7.5)
+message GroupAccountRequest { string session = 1; bytes chan_bind = 2; }
+message CreateGroupRequest { string session = 1; bytes chan_bind = 2; string title = 3; }
 message GroupHandle { string group_id = 1; string nostr_group_id = 2; }  // nostr_group_id lowercase hex
-message GroupRequest { string subject = 1; string group_id = 2; }
+message GroupRequest { string session = 1; bytes chan_bind = 2; string group_id = 3; }
 message GroupMember { string op_pubkey = 1; string role = 2; } // role ∈ {"admin","member"}
 message GroupDetail {
   string group_id = 1; string nostr_group_id = 2; uint64 epoch = 3;
@@ -3580,13 +3581,13 @@ message GroupDetail {
   repeated GroupMember members = 6; repeated string relays = 7;
 }
 message GroupList { repeated GroupDetail groups = 1; }
-message SendGroupMessageRequest { string subject = 1; string group_id = 2; string content = 3; }
+message SendGroupMessageRequest { string session = 1; bytes chan_bind = 2; string group_id = 3; string content = 4; }
 message GroupMessageHandle { string message_id = 1; }        // recovered MLS message id, lowercase hex
 message GroupMessage {
   string message_id = 1; string sender_op_pubkey = 2; string content = 3; uint64 created_at = 4;
 }
 message GroupMessageList { repeated GroupMessage messages = 1; }
-message GroupMemberRequest { string subject = 1; string group_id = 2; string op_pubkey = 3; }
+message GroupMemberRequest { string session = 1; bytes chan_bind = 2; string group_id = 3; string op_pubkey = 4; }
 message GroupAck { bool ok = 1; }
 message KeyPackageHandle { string d = 1; string i = 2; }     // slot id and KeyPackageRef, lowercase hex
 ```
@@ -3643,15 +3644,15 @@ An independent API layer **MUST** map each kernel error onto the §7.5 REST surf
 | `AttestBalance` | `malformed_request`/`400` | — | — | `unauthorized`/`401`, `challenge_expired`/`410` | — | `rate_limited`/`429` | `circuit_digest_mismatch`/`503` | `internal_error`/`500` |
 | `IssueViewGrant` | `malformed_request`/`400` | — | — | `unauthorized`/`401`, `challenge_expired`/`410` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
 | `GetTokenProvenance` | `malformed_request`/`400` (asset_id width) | `not_found`/`404` | — | — | — | `rate_limited`/`429` | — | `internal_error`/`500` |
-| `ListGroups` | `malformed_request`/`400` | `feature_disabled`/`404` | — | `unauthorized`/`401` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
-| `CreateGroup` | `malformed_request`/`400` | `feature_disabled`/`404` | — | `unauthorized`/`401` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
-| `GetGroup` | `malformed_request`/`400` | `not_found`/`404`, `feature_disabled`/`404` | — | `unauthorized`/`401` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
-| `SendGroupMessage` | `malformed_request`/`400` | `not_found`/`404`, `feature_disabled`/`404` | — | `unauthorized`/`401` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
-| `ListGroupMessages` | `malformed_request`/`400` | `not_found`/`404`, `feature_disabled`/`404` | — | `unauthorized`/`401` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
-| `InviteGroupMember` | `malformed_request`/`400` | `not_found`/`404`, `feature_disabled`/`404` | `invitee_not_ready`/`409` | `unauthorized`/`401` | `not_group_admin`/`403` | `rate_limited`/`429` | — | `internal_error`/`500` |
-| `RemoveGroupMember` | `malformed_request`/`400` | `not_found`/`404`, `feature_disabled`/`404` | — | `unauthorized`/`401` | `not_group_admin`/`403` | `rate_limited`/`429` | — | `internal_error`/`500` |
-| `LeaveGroup` | `malformed_request`/`400` | `not_found`/`404`, `feature_disabled`/`404` | — | `unauthorized`/`401` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
-| `PublishKeyPackage` | `malformed_request`/`400` | `feature_disabled`/`404` | — | `unauthorized`/`401` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `ListGroups` | `malformed_request`/`400` | `feature_disabled`/`404` | — | `unauthorized`/`401`, `session_expired`/`410` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `CreateGroup` | `malformed_request`/`400` | `feature_disabled`/`404` | — | `unauthorized`/`401`, `session_expired`/`410` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `GetGroup` | `malformed_request`/`400` | `not_found`/`404`, `feature_disabled`/`404` | — | `unauthorized`/`401`, `session_expired`/`410` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `SendGroupMessage` | `malformed_request`/`400` | `not_found`/`404`, `feature_disabled`/`404` | — | `unauthorized`/`401`, `session_expired`/`410` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `ListGroupMessages` | `malformed_request`/`400` | `not_found`/`404`, `feature_disabled`/`404` | — | `unauthorized`/`401`, `session_expired`/`410` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `InviteGroupMember` | `malformed_request`/`400` | `not_found`/`404`, `feature_disabled`/`404` | `invitee_not_ready`/`409` | `unauthorized`/`401`, `session_expired`/`410` | `not_group_admin`/`403` | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `RemoveGroupMember` | `malformed_request`/`400` | `not_found`/`404`, `feature_disabled`/`404` | — | `unauthorized`/`401`, `session_expired`/`410` | `not_group_admin`/`403` | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `LeaveGroup` | `malformed_request`/`400` | `not_found`/`404`, `feature_disabled`/`404` | — | `unauthorized`/`401`, `session_expired`/`410` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `PublishKeyPackage` | `malformed_request`/`400` | `feature_disabled`/`404` | — | `unauthorized`/`401`, `session_expired`/`410` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
 
 (`Publish` policy/crypto rejections remain **successful** RPC responses with `PublishResult.accepted == false` and a closed `reason`, mirroring §7.6 HTTP 200 — they are not gRPC Status failures.)
 
