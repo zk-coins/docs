@@ -20,7 +20,7 @@ flowchart TB
   end
 
   subgraph apil["API layer — the only public surface"]
-    api["<b>api</b><br/>REST /v1/ · capability gate<br/>features: wallet · explorer · publisher<br/>lightning_bridge · mail_bridge"]
+    api["<b>api</b><br/>REST /v1/ · capability gate<br/>features: wallet · explorer · publisher<br/>lightning_bridge · mail_bridge · group_chat"]
     apidb[("postgresql<br/>non-value-bearing")]
   end
 
@@ -78,6 +78,7 @@ Each feature is off until the operator enables it, and `GET /v1/info` advertises
 | `publisher` | The [§7.6](/specification#76-publisher-interface-normative) hand-off, forwarded to a kernel whose publisher part is on |
 | `lightning_bridge` | Lightning ⇄ zkCoins swaps at the operator edge ([Lightning bridge](/lightning-bridge)) |
 | `mail_bridge` | SMTP interop for the account's NIP-05 identifier ([Mail bridge](/mail-bridge)) |
+| `group_chat` | Optional Marmot/MLS group overlay, off by default ([Group chat](/group-chat)) |
 
 Publishing and proving are kernel work in every case; the feature opens the door, the kernel does the job and owns the state.
 

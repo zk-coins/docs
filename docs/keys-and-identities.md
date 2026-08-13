@@ -55,6 +55,8 @@ The tree exists because an account does five separable jobs, and only the first 
 | **Void** spent coins | `A/3'` | also the node, so it can build proofs |
 | **Reproduce** a past proof's randomness | `A/4'` | also the node — `op_secret` keys the `nav_rand` derivation, so a rebuilt node can reopen any prior commitment |
 
+Speak is the Nostr identity job. One-to-one chat stays NIP-17 on `op`. When the operator enables `group_chat`, the same `op` key **MAY** sign Marmot account-identity proofs and kind-30443 KeyPackage events; it still cannot spend and does not derive MLS secrets. MLS leaf secrets, HPKE init keys, and epoch exporter material are **not** part of this branch: the node generates them with a CSPRNG and stores them next to the operational bundle. They cannot be rebuilt from the seed ([Group chat](/group-chat)).
+
 The separations are **hardened**, which makes the tree a one-way street: a parent can compute its children, but a child can reach neither its parent nor its siblings. A node holding the view, speak, void, and reproduce branches therefore cannot compute the spend branch. It sees everything and can take nothing.
 
 ### Two recurring notions
@@ -231,7 +233,7 @@ There is no per-coin signing key. One transition signature authorises the whole 
 | `nk` | wallet and the wallet's **own** node | compute nullifiers | spend; it links the account's own spends, so it goes to no foreign node |
 | `ivk` | wallet and any node it delegates to | detect and decrypt incoming coins | spend |
 | `ovk` | same | recover outgoing plaintext | spend |
-| `op` | the node | act as the Nostr identity, send and read NIP-17, sign profiles, relay lists, grants, and acknowledgements | spend, decrypt others' coins |
+| `op` | the node | act as the Nostr identity, send and read NIP-17, sign profiles, relay lists, grants, and acknowledgements; when `group_chat` is on, sign Marmot identity proofs and kind 30443 | spend, decrypt others' coins, derive MLS secrets |
 | `K_tx` | derived per coin, shareable | decrypt exactly one coin | spend, see any other coin |
 
 The **operational bundle** is `{ivk, ovk, op, nk, op_secret}` — what a wallet entrusts to its own node so the node can receive, prove, and serve on its behalf. None of it can spend. A foreign node receives a scoped view grant instead ([§6.2](/specification#62-wallet--node), [§5.2](/specification#52-view-grant)).
@@ -256,6 +258,7 @@ Fresh for every output coin, so one per-coin capability discloses one coin and n
 
 | Name | Type | Origin | Rule |
 |---|---|---|---|
+| MLS leaf secret / HPKE init key / epoch exporter / `group_event_key` | secret material | CSPRNG, **not** the seed; held by the node that holds the operational bundle | that account's Marmot groups only; never derived from `op`, `op_secret`, `nk`, SPEND, or any §1 HKDF tag; lost on node switch unless the credential store is transferred ([Group chat](/group-chat)) |
 | `npk_rand` | 32 unmodified CSPRNG bytes | drawn **fresh per proving attempt** | never derived deterministically, never reused; fail-closed if no CSPRNG |
 | `npk_commit` | SHA-256 digest, public | `H("zkCoins/v1/NpkCommit" ‖ next_pubkey ‖ npk_rand)` | the sixth `ProofData` field, recomputable by a thin wallet |
 | `nav_rand` | 32 bytes | `HKDF("zkCoins/v1/NavRand", op_secret ‖ u64-be(send_counter))` | deterministic, so a fresh node rebuilds any prior opening; never derived from `nav` |
@@ -320,7 +323,7 @@ For an account-wide disclosure, prefer a scoped `zkgrant` over `zkavk` — not b
 | `addr_sig` | **`sk₀`** | that the address holder authorised exactly these payment fields, including the choice of `ivpk` and `op_pubkey` |
 | `name_sig` | **`sk₀`** | that the seed holder consented to this name |
 | `sig` (on an `Invoice`) | `op` | the per-issuance authorisation by the recipient's online key |
-| Event signatures | `op` | kinds 0, 10050, 30421, and the NIP-59 kind-13 seal |
+| Event signatures | `op` | kinds 0, 10050, 30421, and the NIP-59 kind-13 seal; when `group_chat` is on, kind 30443 and Marmot account-identity proofs |
 | Gift-wrap signature | a **fresh one-time key**, per event | the kind-1059 wrapper — never `op`, which is what keeps the two copies unlinkable |
 | `op_sig` | `op` | that the recipient acknowledged a delivery (kind-1421 ACK) |
 | `op_signature` (in a `ViewGrant`) | `op` | the scope and window of a delegation |

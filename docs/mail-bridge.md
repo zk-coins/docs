@@ -5,7 +5,7 @@ title: Mail Bridge
 # Mail Bridge
 
 :::info Optional operator service
-The SMTP/email bridge is an **API-layer feature**, **off by default**, and independent of both the Lightning bridge and mandatory NIP-17 messaging. An operator enables it as `mail_bridge` in the closed `features` set of [spec §6.1](/specification#61-components-and-responsibilities). It moves messages, never zkCoins value.
+The SMTP/email bridge is an **API-layer feature**, **off by default**, and independent of the Lightning bridge, of the optional Marmot group-chat overlay, and of mandatory NIP-17 messaging. An operator enables it as `mail_bridge` in the closed `features` set of [spec §6.1](/specification#61-components-and-responsibilities). It moves messages, never zkCoins value. Group chat is a third independent overlay ([Group chat](/group-chat)); enabling or disabling it MUST NOT change this bridge.
 :::
 
 ## One identifier, two independent message transports

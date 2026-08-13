@@ -5,7 +5,7 @@ title: Lightning Bridge
 # Lightning Bridge
 
 :::info Optional operator service
-The Lightning bridge is an **API-layer feature**, **off by default**, and **never part of the trustless core**. It is independent of the SMTP/email bridge, of the NIP-05 naming layer, and of mandatory NIP-17 messaging. An operator enables it as `lightning_bridge` in the closed `features` set of ([spec §6.1](/specification#61-components-and-responsibilities)); it touches no kernel part and adds no Nostr event. The bridge service adds no key custody — the operator never sees SPEND material through it — and can never touch settled balances; whether the same operator separately hosts operational bundles as a hosted-wallet provider is an independent trust decision ([spec §6.6](/specification#66-threat-model-and-trust-configurations)).
+The Lightning bridge is an **API-layer feature**, **off by default**, and **never part of the trustless core**. It is independent of the SMTP/email bridge, of the optional Marmot group-chat overlay, of the NIP-05 naming layer, and of mandatory NIP-17 messaging. Group chat is a third independent overlay ([Group chat](/group-chat)); enabling or disabling it MUST NOT change this bridge. An operator enables it as `lightning_bridge` in the closed `features` set of ([spec §6.1](/specification#61-components-and-responsibilities)); it touches no kernel part and adds no Nostr event. The bridge service adds no key custody — the operator never sees SPEND material through it — and can never touch settled balances; whether the same operator separately hosts operational bundles as a hosted-wallet provider is an independent trust decision ([spec §6.6](/specification#66-threat-model-and-trust-configurations)).
 :::
 
 ## What the bridge is
@@ -82,3 +82,4 @@ Operating a Lightning bridge is a **custodial financial service** — the operat
 ## See also
 
 - [Mail bridge](/mail-bridge) — the independent optional operator service that makes the same NIP-05 identifier a working email address.
+- [Group chat](/group-chat) — the independent optional Marmot/MLS group overlay.

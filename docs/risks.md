@@ -35,7 +35,9 @@ Every incentive/residual verdict for v1, closed per the [Assurance Roadmap](/ass
 | Manifest `blob_store` open recovery-overlap upload (Sybil spam) | **accepted operational residual** | per-source admission control bounds but cannot cryptographically prevent Sybil-rotated spam — the same open-acceptance surface as an open `seed_relay`; operator admission policy |
 | Operator backup duty enforced operationally, not by protocol | **holds under stated assumptions** | operator MUST keep a real-time backup of the PostgreSQL database and blob store; deliberately an out-of-repo hosting concern |
 | Unobservable total supply (token standard 1) | **accepted v1 boundary** | documented issuer-trust (register D-13); token standard 2 provides the auditable cap |
-| Carrying real Bitcoin requires a bridge | **holds** (out of core scope) | bridges are explicit, off-by-default operator extensions |
+| Hosted `op` holder reads Marmot groups | **holds under stated assumptions** (same operational-bundle boundary as NIP-17, [spec §6.6](/specification#66-threat-model-and-trust-configurations)) | optional `group_chat` overlay; self-host is the private path |
+| Lost MLS state is not lost funds | **holds** | MLS credentials are non-value-bearing; Requirement 12 does not apply to Marmot application messages |
+| Kind 445 metadata (`h` tag, volume) | **accepted operational residual** | `nostr_group_id` is random, not member-derived; ephemeral pubkey is fresh; plaintext stays under the group-event key |
 | No smart contracts | **holds** (by scope) | deliberate non-goal of v1 |
 | Regulatory uncertainty | **n/a — not a protocol mechanism** | environment risk, catalogued for operators |
 
@@ -194,6 +196,30 @@ Token-standard-1 issuance is bound to the creator's spend key but uncapped. Beca
 This anchoring closes the mint-fork: two mints advancing from the same prior state share the same `current_pubkey = Pkᵢ` and publish the same nullifier key. The global accumulator admits each `Pkᵢ` at most once by first-occurrence ([§3.6](/specification#36-chain-scanning)), so a creator cannot issue two conflicting coins against one state.
 
 **Mitigation:** Holders trust the creator as they would any single-issuer asset. Protocol-enforced, auditable supply is available in `IssuanceTerms_v2`, which bounds total emission with an in-circuit `cap_total` ([spec §6.5](/specification#65-issuance--token-standards)).
+
+## Hosted operator can read Marmot groups
+
+**Risk: A hosted provider who holds `op` can decrypt group application messages and impersonate the account in groups.**
+
+When `group_chat` is on, the node that holds the operational bundle also holds the MLS client credential store ([Group chat](/group-chat), [spec §6.6](/specification#66-threat-model-and-trust-configurations)). That is the existing operational-bundle boundary, not a new one. MLS leaf, HPKE, and epoch secrets are not derived from `op`; the holder of `op` still reads groups because it holds those credentials next to the bundle.
+
+**Mitigation:** Self-host. Wallet-held MLS keys are not a hosted end-to-end exception and **MUST NOT** be presented as one.
+
+## Lost MLS state is not lost funds
+
+**Risk: Switching nodes or losing the MLS credential store drops group membership and history.**
+
+MLS state is non-value-bearing operational state. It is not seed- or chain-derived and is listed as a [spec §6.3](/specification#63-node-portability-and-multi-node-operation) residual. [Requirement 12](/requirements#12-data-permanence) does not apply to Marmot application messages.
+
+**Mitigation:** Transfer the credential store when switching nodes if group continuity is required. Losing it cannot spend, forge, or destroy coins.
+
+## Kind 445 metadata
+
+**Risk: Relays see `nostr_group_id`, a fresh ephemeral pubkey, timing, and volume on every group message.**
+
+Kind `445` carries a public `h` tag equal to the 32-byte `nostr_group_id`. That id is random and is not derived from member keys or the MLS group id, so it does not link members across groups. Welcomes look like NIP-59 DMs to the invitee. KeyPackages are public and authored by `op_pubkey`.
+
+**Mitigation:** This is transport metadata, not plaintext. The residual is volume and group-routing visibility at the relays on the routing list.
 
 ## Carrying real Bitcoin requires a bridge
 
