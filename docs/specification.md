@@ -2530,7 +2530,7 @@ The node exposes six interface families, specified here at an implementation-neu
 
 The `read.account` path is **capability-gated**: a node **MUST** reject a request that does not present a valid ownership proof or `op`-signed view grant. Bearer view secrets (`zkview`/`zkavk`) and balance attestations are **not** node authorisations — the explorer applies them client-side to bundle blobs obtained from a blob store or a holder, so `explorer.read` widens only what the secret-holder can decrypt from already-public material ([Access & Explorer §5.1](#51-capability-gated-pull)). The `submit.tx` path needs no capability because the submitted transition carries its own validity proof and self-authenticating `SpendRecord`; a node **MUST** verify that proof before publishing.
 
-**Which surface belongs to which program.** The families above split cleanly. **relay.\*** is the kernel's own transport plane — the Nostr relay (event delivery, `detect_tag` discovery, NIP-17 messaging by key, contact pinning) and the co-located Blossom blob store (the content-addressed `CoinProof` blob fetch) — and runs whether or not an API exists. Everything else in the table is REST and therefore reaches a client only through the API layer ([§6.1](#61-components-and-responsibilities)): `read.account` and `read.proof` under the `wallet` feature, `submit.tx` under `wallet`, the publisher hand-off ([§7.6](#76-publisher-interface-normative)) under `publisher`, and the public chain projection an explorer reads under `explorer`. `explorer.read` stays what it was — bearer view secrets applied client-side to already-public material, never a node authorisation. `read.provenance` is the one open, unauthenticated REST read (issuer-originated token provenance, [§4.6](#46-data-availability) Class B) — it discloses no Private data and needs no capability, and — unlike the capability-gated REST surfaces — it is **not** gated by a `features` flag: any API instance that has captured a token's `asset_terms` **MUST** serve them to any requester ([§4.6](#46-data-availability)), so this read is never answered `404 feature_disabled` and is served independently of `wallet`/`explorer`. Resolving names, and issuing them for served accounts, is API-layer work under `wallet`. A client learns what an instance serves from the closed `features` array on `GET /v1/info` and **MUST** treat anything absent from it as absent.
+**Which surface belongs to which program.** The families above split cleanly. **relay.\*** is the kernel's own transport plane — the Nostr relay (event delivery, `detect_tag` discovery, NIP-17 messaging by key, contact pinning) and the co-located Blossom blob store (the content-addressed `CoinProof` blob fetch) — and runs whether or not an API exists. Everything else in the table is REST and therefore reaches a client only through the API layer ([§6.1](#61-components-and-responsibilities)): `read.account` and `read.proof` under the `wallet` feature, `submit.tx` under `wallet`, `/v1/groups*` under `group_chat` (requires `wallet`; [Group chat](/group-chat)), the publisher hand-off ([§7.6](#76-publisher-interface-normative)) under `publisher`, and the public chain projection an explorer reads under `explorer`. `explorer.read` stays what it was — bearer view secrets applied client-side to already-public material, never a node authorisation. `read.provenance` is the one open, unauthenticated REST read (issuer-originated token provenance, [§4.6](#46-data-availability) Class B) — it discloses no Private data and needs no capability, and — unlike the capability-gated REST surfaces — it is **not** gated by a `features` flag: any API instance that has captured a token's `asset_terms` **MUST** serve them to any requester ([§4.6](#46-data-availability)), so this read is never answered `404 feature_disabled` and is served independently of `wallet`/`explorer`. Resolving names, and issuing them for served accounts, is API-layer work under `wallet`. A client learns what an instance serves from the closed `features` array on `GET /v1/info` and **MUST** treat anything absent from it as absent.
 
 ### 6.5 Issuance — token standards
 
@@ -3072,11 +3072,11 @@ The `GET /v1/jobs/<job_id>/stream` `complete`/`error` frames (above) carry the s
 | `GET` | `/v1/account/state` | **ownership-gated** authoritative account-state read (realises the state half of [§6.4](#64-external-interfaces-abstract) `read.account`; kernel `GetAccountState`, [§7.8](#78-kernel-rpc--the-internal-interface-normative)): served **only** within a still-valid [pull session](#pull-session-normative) opened by an **OwnershipProof** (`Authorization: Bearer <token>`; same pull-session pattern as `GET /v1/proof/<coin_id>`). Returns JSON `{ account_state: <hex — serialize(AccountState), §1.7.4>, state_head: <hex32 — ash of the spendable head>, head_record_id?: <hex32 — Private-record locator of the head SelfDeliveryRecordV1 when indexed>, send_counter: <u64>, current_pubkey: <hex32 — Pkᵢ, the key that signs the next transition>, last_nullifier?: { pubkey: <hex32>, r: <hex32> } }` — `send_counter` / `current_pubkey` **MUST** equal the corresponding fields inside `account_state`; `last_nullifier` is the head transition's on-chain nullifier `(Pk, R)` when the account has advanced at least once, else omitted (canonical empty account, [§2.2](#22-proof-types)). **Auth (normative, fail-closed, same split as pull):** missing/invalid bearer (absent `Authorization`, malformed token, or a **grant** session presented here) → `401 unauthorized`; unknown, expired, or `chan_bind`-mismatching session → `410 session_expired`; never collapse expiry/unknown/channel-mismatch into `401` |
 | `GET` | `/v1/receipts/stream` | Server-Sent Events: one receipt event per credited coin inside the pull session's stored `subject` + resolved `scope` (ownership **or** grant session; `Authorization: Bearer <token>`; missing/invalid token → `401`, unknown/expired/`chan_bind`-mismatch → `410 session_expired`) — the public front of `kernel.v1` `SubscribeReceipts` ([§7.8](#78-kernel-rpc--the-internal-interface-normative)) and the [§4.9](#49-real-time-push-delivery) push source |
 
-**Group chat (gated on `group_chat` + `wallet`; [Group chat](/group-chat)).** Crypto stays node-side. Auth is a still-valid **ownership** pull session (`Authorization: Bearer <token>`), exactly as `GET /v1/account/state`; a GrantProof session **MUST** be rejected as `401 unauthorized`. An expired, unknown, or `chan_bind`-mismatching token is `410 session_expired`. No SPEND. The API **MUST NOT** advertise `group_chat` unless `wallet` is also advertised. A request when API `group_chat` is off, when `wallet` is off, or when the kernel `group_chat` part is off, **MUST** be answered `404 feature_disabled`. `group_id` is a node-local stable id; the MLS group id **MUST NOT** appear on this surface.
+**Group chat (gated on `group_chat` + `wallet`; [Group chat](/group-chat)).** Crypto stays node-side. Auth is a still-valid **ownership** pull session (`Authorization: Bearer <token>`), exactly as `GET /v1/account/state`; a GrantProof session **MUST** be rejected as `401 unauthorized`. An expired, unknown, or `chan_bind`-mismatching token is `410 session_expired`. No SPEND. The API **MUST NOT** advertise `group_chat` unless `wallet` is also advertised. Check order **MUST** be: (1) API `group_chat` or `wallet` off → `404 feature_disabled` without a kernel call; (2) session checks → `401` / `410`; (3) kernel `group_chat` part off → `404 feature_disabled`. HTTP 200 on a publishing route means durable persist plus the first publication attempt to every snapshotted target, not a relay `OK`. `group_id` is a node-local stable id; the MLS group id **MUST NOT** appear on this surface.
 
 | Method | Path | Body / Returns |
 |---|---|---|
-| `GET` | `/v1/groups` | `{ groups: [ { group_id, nostr_group_id, epoch, role, title } ] }` |
+| `GET` | `/v1/groups` | `{ groups: [ { group_id, nostr_group_id, epoch, role, title } ] }` — `members`/`relays` empty |
 | `POST` | `/v1/groups` | body `{ title }` → `{ group_id, nostr_group_id }` |
 | `GET` | `/v1/groups/:group_id` | members, epoch, routing relays |
 | `POST` | `/v1/groups/:group_id/messages` | body `{ content }` — plaintext UTF-8 string |
@@ -3084,7 +3084,7 @@ The `GET /v1/jobs/<job_id>/stream` `complete`/`error` frames (above) carry the s
 | `POST` | `/v1/groups/:group_id/invites` | body `{ op_pubkey }` of the invitee → `{ invited: true }` |
 | `POST` | `/v1/groups/:group_id/members/remove` | body `{ op_pubkey }` — admin-only remove → `{ removed: true }`; non-admin → `403 not_group_admin` |
 | `POST` | `/v1/groups/:group_id/leave` | leave |
-| `POST` | `/v1/groups/keypackages` | publish or rotate a KeyPackage slot |
+| `POST` | `/v1/groups/keypackages` | body `{ d?: <hex> }` — omit to create, set to rotate → `{ d, i }` |
 
 Shapes, encodings, and fail-closed rules are normative on [Group chat](/group-chat).
 
@@ -3570,7 +3570,7 @@ message TokenProvenance {
   bytes terms_salt = 6;                    // 32B; set iff issuance_version == 2
 }
 // ownership pull session only — grant sessions are UNAUTHENTICATED/unauthorized (§7.5)
-message GroupAccountRequest { string session = 1; bytes chan_bind = 2; }
+message GroupAccountRequest { string session = 1; bytes chan_bind = 2; string d = 3; } // d empty ⇒ new slot; set ⇒ rotate that slot
 message CreateGroupRequest { string session = 1; bytes chan_bind = 2; string title = 3; }
 message GroupHandle { string group_id = 1; string nostr_group_id = 2; }  // nostr_group_id lowercase hex
 message GroupRequest { string session = 1; bytes chan_bind = 2; string group_id = 3; }
@@ -3580,11 +3580,12 @@ message GroupDetail {
   string role = 4; string title = 5;
   repeated GroupMember members = 6; repeated string relays = 7;
 }
-message GroupList { repeated GroupDetail groups = 1; }
+message GroupList { repeated GroupDetail groups = 1; } // ListGroups MUST leave members and relays empty
 message SendGroupMessageRequest { string session = 1; bytes chan_bind = 2; string group_id = 3; string content = 4; }
 message GroupMessageHandle { string message_id = 1; }        // recovered MLS message id, lowercase hex
 message GroupMessage {
-  string message_id = 1; string sender_op_pubkey = 2; string content = 3; uint64 created_at = 4;
+  string message_id = 1; string sender_op_pubkey = 2; string content = 3;
+  uint64 created_at = 4;                   // inner unsigned application event created_at
 }
 message GroupMessageList { repeated GroupMessage messages = 1; }
 message GroupMemberRequest { string session = 1; bytes chan_bind = 2; string group_id = 3; string op_pubkey = 4; }

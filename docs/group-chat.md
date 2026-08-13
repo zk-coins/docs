@@ -145,23 +145,31 @@ The API **MUST NOT** advertise `group_chat` in `GET /v1/info` unless `wallet` is
 
 Auth is the same as `GET /v1/account/state`: a still-valid **ownership** pull session (`Authorization: Bearer <token>`, [spec §5.1](/specification#51-capability-gated-pull), [§7.5](/specification#75-node-rest-api-normative)). A GrantProof session **MUST** be rejected as HTTP `401` `{ "error": "unauthorized" }`. An expired, unknown, or `chan_bind`-mismatching token **MUST** be HTTP `410` `{ "error": "session_expired" }`. No SPEND material is involved. The kernel procedures take `session` + `chan_bind`; the subject comes from the server-side session, never from a client-supplied field.
 
-Closed paths, JSON, fail-closed. A request when API `group_chat` is off, when `wallet` is off, or when the kernel `group_chat` part is off, **MUST** be answered `404 feature_disabled` (G-09). The MLS group id **MUST NOT** appear on the public REST surface.
+**Check order (normative).** For every `/v1/groups*` request the API **MUST** decide in this order and **MUST NOT** continue after the first failure:
+
+1. If API `group_chat` is off or `wallet` is off → `404 feature_disabled` without calling the kernel.
+2. Then the ownership-session checks above → `401 unauthorized` or `410 session_expired`.
+3. Then, if the kernel `group_chat` part is off → `404 feature_disabled` (G-09).
+
+Closed paths, JSON, fail-closed. The MLS group id **MUST NOT** appear on the public REST surface.
 
 `group_id` is a node-local stable id. It is not the secret MLS group id and is not necessarily `nostr_group_id`.
 
 | Method | Path | Body / Returns |
 |---|---|---|
-| `GET` | `/v1/groups` | `{ groups: [ { group_id, nostr_group_id, epoch, role, title } ] }` — local groups this node already holds |
+| `GET` | `/v1/groups` | `{ groups: [ { group_id, nostr_group_id, epoch, role, title } ] }` — local groups this node already holds; `members` and `relays` **MUST** be empty / omitted |
 | `POST` | `/v1/groups` | body `{ title }` → `{ group_id, nostr_group_id }` — create; `nostr_group_id` is lowercase hex of 32 CSPRNG bytes |
 | `GET` | `/v1/groups/:group_id` | `{ group_id, nostr_group_id, epoch, role, title, members: [ { op_pubkey, role } ], relays: [<relay URL>] }` |
 | `POST` | `/v1/groups/:group_id/messages` | body `{ content }` — a plaintext UTF-8 string → `{ message_id }` — the recovered MLS message id after the node processes the send |
-| `GET` | `/v1/groups/:group_id/messages` | `{ messages: [ { message_id, sender_op_pubkey, content, created_at } ] }` — decrypted application texts the node has already processed |
+| `GET` | `/v1/groups/:group_id/messages` | `{ messages: [ { message_id, sender_op_pubkey, content, created_at } ] }` — decrypted application texts the node has already processed; `created_at` **MUST** be the inner unsigned application event's `created_at`; list order **MUST** be ascending `(created_at, message_id)` |
 | `POST` | `/v1/groups/:group_id/invites` | body `{ op_pubkey }` — invitee identity; the node fetches a valid kind `30443` and publishes a Welcome → `{ invited: true }` |
 | `POST` | `/v1/groups/:group_id/members/remove` | body `{ op_pubkey }` — admin-only MLS remove commit → `{ removed: true }`; a non-admin **MUST** get `403` and **MUST NOT** mutate group state |
 | `POST` | `/v1/groups/:group_id/leave` | `{ left: true }` |
-| `POST` | `/v1/groups/keypackages` | publish or rotate a KeyPackage slot → `{ d, i }` — slot id and KeyPackageRef, both lowercase hex |
+| `POST` | `/v1/groups/keypackages` | body `{ d?: <hex> }` — omit `d` to create a new CSPRNG slot; set `d` to rotate that slot (reuse `d`) → `{ d, i }` |
 
-Field encodings: `group_id` is an opaque UTF-8 string local to this node; `nostr_group_id`, `op_pubkey`, `d`, `i`, and `message_id` are lowercase hex; `epoch` is a JSON number (`u64`); `role` is the closed string `"admin"` or `"member"`; `title` and `content` are UTF-8 strings; `created_at` is a `u64` Unix timestamp; `relays` is a JSON array of relay URL strings.
+Field encodings: `group_id` is an opaque UTF-8 string local to this node; `nostr_group_id`, `op_pubkey`, `d`, `i`, and `message_id` are lowercase hex; `epoch` is a JSON number (`u64`); `role` is the closed string `"admin"` or `"member"`; `title` and `content` are UTF-8 strings; `created_at` is a `u64` Unix timestamp taken from the inner unsigned application event; `relays` is a JSON array of relay URL strings.
+
+**Publication success.** For `messages`, `invites`, `members/remove`, `leave`, and `keypackages`, HTTP 200 **MUST** mean: the node durably persisted the local MLS/group mutation and made the required **first** publication attempt to every snapshotted target. It **MUST NOT** wait for a relay `OK`. Remaining first-attempt retries stay outstanding as Marmot transport work and **MUST NOT** undo the HTTP 200. A later relay failure is availability, not a REST error.
 
 An unknown `group_id` **MUST** return `404` `{ "error": "not_found", … }`. Invite and `members/remove` are admin-only: a non-admin **MUST** get HTTP `403` with `{ "error": "not_group_admin", "message": "…" }` and **MUST NOT** mutate group state. `leave` is a self-action and **MUST** succeed for both `admin` and `member`. The API maps `InviteGroupMember` / `RemoveGroupMember` / `LeaveGroup` `GroupAck.ok == true` to `{ "invited": true }`, `{ "removed": true }`, and `{ "left": true }` respectively. A successful RPC **MUST NOT** return `ok == false`; failure uses only the closed machine codes. A Welcome publish **MUST** fail closed with HTTP `409` `{ "error": "invitee_not_ready", … }` when the invitee has no kind `10050`, before every network write.
 
