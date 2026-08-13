@@ -115,7 +115,7 @@ Dedup on the recovered MLS message id, never on the Nostr event id. Relay `creat
 
 Publish each signed kind-`445` event to every relay in the routing relay list. The first accepted acknowledgement does not cancel the remaining first-attempt obligation (Marmot publish lifecycle).
 
-Kinds `444`, `445`, `30443`, and `10002` are **inert** unless API `group_chat` is on. A node that does not advertise the feature **MUST** ignore them for group-chat processing and **MUST NOT** mutate conversation state from them.
+Kinds `444`, `445`, `30443`, and `10002` are **inert** unless the kernel `group_chat` part is on. A kernel that does not run that part **MUST** ignore them for group-chat processing and **MUST NOT** mutate conversation state from them. The API feature only opens the REST door.
 
 ## Membership
 
@@ -163,7 +163,7 @@ Closed paths, JSON, fail-closed. A request when API `group_chat` is off, when `w
 
 Field encodings: `group_id` is an opaque UTF-8 string local to this node; `nostr_group_id`, `op_pubkey`, `d`, `i`, and `message_id` are lowercase hex; `epoch` is a JSON number (`u64`); `role` is the closed string `"admin"` or `"member"`; `title` and `content` are UTF-8 strings; `created_at` is a `u64` Unix timestamp; `relays` is a JSON array of relay URL strings.
 
-An unknown `group_id` **MUST** return `404`. Invite and `members/remove` are admin-only: a non-admin **MUST** get HTTP `403` with `{ "error": "not_group_admin", "message": "…" }` and **MUST NOT** mutate group state. `leave` is a self-action and **MUST** succeed for both `admin` and `member`. A Welcome publish **MUST** fail closed when the invitee has no kind `10050`.
+An unknown `group_id` **MUST** return `404` `{ "error": "not_found", … }`. Invite and `members/remove` are admin-only: a non-admin **MUST** get HTTP `403` with `{ "error": "not_group_admin", "message": "…" }` and **MUST NOT** mutate group state. `leave` is a self-action and **MUST** succeed for both `admin` and `member`. The API maps `LeaveGroup` `GroupAck.ok == true` to `{ "left": true }`. A Welcome publish **MUST** fail closed with HTTP `409` `{ "error": "invitee_not_ready", … }` when the invitee has no kind `10050`, before every network write.
 
 ## Negative controls
 
@@ -180,7 +180,7 @@ Each case **MUST** reject with no conversation mutation:
 | G-07 | signed kind-444 rumor | reject as a non-Marmot rumor |
 | G-08 | silent fallback NIP-17 ↔ Marmot ↔ SMTP | abort; conversations stay separate |
 | G-09 | advertising API `group_chat` without `wallet`, or enabling API `group_chat` without the kernel `group_chat` part | do not advertise `group_chat` without `wallet`; every `/v1/groups*` request answers `404 feature_disabled` |
-| G-10 | publishing a Welcome to a guessed relay when kind 10050 is absent | abort before every network write |
+| G-10 | publishing a Welcome to a guessed relay when kind 10050 is absent | abort before every network write; HTTP `409` `{ "error": "invitee_not_ready" }` |
 
 ## Privacy and trust
 
