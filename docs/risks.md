@@ -36,8 +36,9 @@ Every incentive/residual verdict for v1, closed per the [Assurance Roadmap](/ass
 | Operator backup duty enforced operationally, not by protocol | **holds under stated assumptions** | operator MUST keep a real-time backup of the PostgreSQL database and blob store; deliberately an out-of-repo hosting concern |
 | Unobservable total supply (token standard 1) | **accepted v1 boundary** | documented issuer-trust (register D-13); token standard 2 provides the auditable cap |
 | Hosted `op` holder reads Marmot groups | **holds under stated assumptions** (same operational-bundle boundary as NIP-17, [spec §6.6](/specification#66-threat-model-and-trust-configurations)) | optional `group_chat` overlay; self-host is the private path |
-| Lost MLS state is not lost funds | **holds** | MLS credentials are non-value-bearing; Requirement 12 does not apply to Marmot application messages |
+| Lost MLS state is not lost funds | **holds** | MLS credentials are non-value-bearing; Requirement 12's sole carve-out is Marmot application-message expiry |
 | Kind 445 metadata (`h` tag, volume) | **accepted operational residual** | `nostr_group_id` is random, not member-derived; ephemeral pubkey is fresh; plaintext stays under the group-event key |
+| Carrying real Bitcoin requires a bridge | **holds** (out of core scope) | native assets settle on Bitcoin L1; BTC in/out is a bridge, not a protocol mechanism |
 | No smart contracts | **holds** (by scope) | deliberate non-goal of v1 |
 | Regulatory uncertainty | **n/a — not a protocol mechanism** | environment risk, catalogued for operators |
 

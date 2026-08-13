@@ -55,7 +55,7 @@ The tree exists because an account does five separable jobs, and only the first 
 | **Void** spent coins | `A/3'` | also the node, so it can build proofs |
 | **Reproduce** a past proof's randomness | `A/4'` | also the node — `op_secret` keys the `nav_rand` derivation, so a rebuilt node can reopen any prior commitment |
 
-Speak is the Nostr identity job. One-to-one chat stays NIP-17 on `op`. When the operator enables `group_chat`, the same `op` key **MAY** sign Marmot account-identity proofs and kind-30443 KeyPackage events; it still cannot spend and does not derive MLS secrets. MLS leaf secrets, HPKE init keys, and epoch exporter material are **not** part of this branch: the node generates them with a CSPRNG and stores them next to the operational bundle. They cannot be rebuilt from the seed ([Group chat](/group-chat)).
+Speak is the Nostr identity job. One-to-one chat stays NIP-17 on `op`. When the operator enables `group_chat`, the same `op` key **MAY** sign Marmot account-identity proofs and kind-30443 KeyPackage events; it still cannot spend and does not derive MLS secrets. MLS leaf secrets and HPKE init keys are **not** part of this branch: the node generates them with a CSPRNG. Epoch secrets and `group_event_key` come from the MLS key schedule. None of that material can be rebuilt from the seed ([Group chat](/group-chat)).
 
 The separations are **hardened**, which makes the tree a one-way street: a parent can compute its children, but a child can reach neither its parent nor its siblings. A node holding the view, speak, void, and reproduce branches therefore cannot compute the spend branch. It sees everything and can take nothing.
 
@@ -258,7 +258,8 @@ Fresh for every output coin, so one per-coin capability discloses one coin and n
 
 | Name | Type | Origin | Rule |
 |---|---|---|---|
-| MLS leaf secret / HPKE init key / epoch exporter / `group_event_key` | secret material | CSPRNG, **not** the seed; held by the node that holds the operational bundle | that account's Marmot groups only; never derived from `op`, `op_secret`, `nk`, SPEND, or any §1 HKDF tag; lost on node switch unless the credential store is transferred ([Group chat](/group-chat)) |
+| MLS leaf secret / HPKE init key | secret material | CSPRNG, **not** the seed; held by the node that holds the operational bundle | that account's Marmot groups only; never derived from `op`, `op_secret`, `nk`, SPEND, or any §1 HKDF tag; lost on node switch unless the credential store is transferred ([Group chat](/group-chat)) |
+| MLS epoch / exporter / `group_event_key` | secret material | MLS key schedule / `MLS-Exporter("marmot", "group-event", 32)` | same holder and reach as the leaf secret; never derived from `op`, seed, or §1 HKDF tags |
 | `npk_rand` | 32 unmodified CSPRNG bytes | drawn **fresh per proving attempt** | never derived deterministically, never reused; fail-closed if no CSPRNG |
 | `npk_commit` | SHA-256 digest, public | `H("zkCoins/v1/NpkCommit" ‖ next_pubkey ‖ npk_rand)` | the sixth `ProofData` field, recomputable by a thin wallet |
 | `nav_rand` | 32 bytes | `HKDF("zkCoins/v1/NavRand", op_secret ‖ u64-be(send_counter))` | deterministic, so a fresh node rebuilds any prior opening; never derived from `nav` |
