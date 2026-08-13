@@ -2860,7 +2860,7 @@ All paths are relative to the node base URL and MUST be served over TLS 1.3/1.2 
 
 | Method | Path | Returns |
 |---|---|---|
-| `GET` | `/` | `{ name, version, endpoints }` — `endpoints` is an object mapping each **closed** logical name below to an absolute URL or a root-relative path (UTF-8 string values only; unknown keys ignored on read; a conforming producer emits exactly the closed key set for the surfaces this deployment exposes, and **MUST** omit keys for unadvertised optional roles). **Closed keys** (all §7.4 / §7.5 surfaces): `health`, `health_ready`, `info`, `chain_accumulator`, `chain_inscriptions`, `chain_nullifier`, `tx`, `jobs`, `jobs_stream`, `jobs_sign`, `jobs_cancel`, `attest_balance_challenge`, `attest_balance`, `grants_challenge`, `grants`, `pull_challenge`, `pull`, `record`, `proof`, `account_state`, `receipts_stream`, `publish_spendrecord`, `bootstrap_challenge`, `bootstrap_entrust`, `bootstrap_revoke`, `blossom_get`, `blossom_head`, `blossom_upload`, `token_provenance`, `groups`, `group`, `group_messages`, `group_invites`, `group_leave`, `group_keypackages` |
+| `GET` | `/` | `{ name, version, endpoints }` — `endpoints` is an object mapping each **closed** logical name below to an absolute URL or a root-relative path (UTF-8 string values only; unknown keys ignored on read; a conforming producer emits exactly the closed key set for the surfaces this deployment exposes, and **MUST** omit keys for unadvertised optional roles). **Closed keys** (all §7.4 / §7.5 surfaces): `health`, `health_ready`, `info`, `chain_accumulator`, `chain_inscriptions`, `chain_nullifier`, `tx`, `jobs`, `jobs_stream`, `jobs_sign`, `jobs_cancel`, `attest_balance_challenge`, `attest_balance`, `grants_challenge`, `grants`, `pull_challenge`, `pull`, `record`, `proof`, `account_state`, `receipts_stream`, `publish_spendrecord`, `bootstrap_challenge`, `bootstrap_entrust`, `bootstrap_revoke`, `blossom_get`, `blossom_head`, `blossom_upload`, `token_provenance`, `groups`, `group`, `group_messages`, `group_invites`, `group_members_remove`, `group_leave`, `group_keypackages` |
 | `GET` | `/health` | `200 "ok"` once the process is up |
 | `GET` | `/health/ready` | readiness probe — **both** success and not-ready answers use the **same** object `{ ready: bool, reason?: <closed string> }` (and **MAY** carry diagnostic fields `bitcoin_tip_height`, `root`, `size`, `scanner_lag` when known, where `root = nav_root = Hc("NfLog/Root", size ‖ mth)` (§3.7)). **HTTP 200** with `{ ready: true }` (no `reason`) when the node is ready to serve consensus-dependent reads and credits; **HTTP 503** with `{ ready: false, reason: <one of the closed set> }` otherwise. Closed `reason ∈ {syncing, scanner_lag, circuit_mismatch, deep_reorg, dependency_unavailable}` — a node **MUST** use exactly one of these values and **MUST NOT** invent further codes. This endpoint is **explicitly excluded** from the generic `{ "error", "message" }` error-body shape above |
 | `GET` | `/v1/info` | `{ network, protocol_version: "v1", circuit_digests: { C, C_balance }, bootstrap_pubkey: <hex32 x-only>, relay_url, blossom_url, max_blob_bytes, finality_confirmations: 6, activation_height: <u64>, max_tx_inputs: 8, max_tx_outputs: 8, max_rx_coins: 4, max_account_assets: 32, features: [<closed feature strings>], bootstrap: BootstrapManifestV1 }` — `network ∈ {mainnet, testnet, regtest}` is the sole network tag (v1 pins Bitcoin network 1:1 to this tag; there is **no** separate `bitcoin_network` field). `bootstrap_pubkey` is the network-parameter pin of [§3.6](#36-chain-scanning) / [§4.3](#43-addressing-for-delivery) under which `bootstrap.manifest_sig` **MUST** verify. `features` is the closed advertisement set of [§6.1](#61-components-and-responsibilities): each element ∈ `{wallet, explorer, publisher, lightning_bridge, mail_bridge, group_chat}`, naming exactly what this API instance serves; a feature absent from the array is off and a client **MUST** treat it as absent. `bootstrap` mirrors the per-network signed [§4.3](#43-addressing-for-delivery) manifest (seed relays, blob stores, operator IDs only; **no** account- or blob-specific fields) |
@@ -3046,6 +3046,7 @@ Additional codes (closing the enumeration across §7.4–§7.7 surfaces):
 | `idempotency_conflict` | 409 | the same `Idempotency-Key` was replayed with a different body (mapping retained indefinitely; a known key never expires or is forgotten) |
 | `unauthorized` | 401 | §5.1 capability invalid (bad signature/`chal`/grant), action-bound OwnershipProof missing/invalid/wrong-domain on `/v1/attest/balance` or `/v1/grants` (including a `GrantProof` presented where only owner auth is accepted — no-escalation), Blossom auth-event rejected, missing/invalid pull-session bearer token (absent or malformed — not merely expired), or a **grant** pull session presented to ownership-only `GET /v1/account/state` |
 | `scope_exceeded` | 403 | §5.1 resolved-scope violation, non-peer PUT |
+| `not_group_admin` | 403 | a non-admin called an admin-only group membership route (`invite`, `members/remove`) |
 | `challenge_expired` | 410 | pull/bootstrap/attest/grants `nonce` expired, already consumed, or unknown |
 | `session_expired` | 410 | pull-session token expired, unknown, or presented over a channel whose `chan_bind` does not match (incl. `GET /v1/receipts/stream`, `GET /v1/record/<record_id>`, `GET /v1/proof/<coin_id>`, and `GET /v1/account/state`) |
 | `not_found` | 404 | unknown `blob_id`, `record_id`/`coin_id` outside the session's scope-visible set, unknown job (`job_not_found` stays canonical for the jobs family) |
@@ -3079,7 +3080,7 @@ The `GET /v1/jobs/<job_id>/stream` `complete`/`error` frames (above) carry the s
 | `POST` | `/v1/groups/:group_id/messages` | body `{ content }` — plaintext UTF-8 string |
 | `GET` | `/v1/groups/:group_id/messages` | decrypted application texts the node has already processed |
 | `POST` | `/v1/groups/:group_id/invites` | body `{ op_pubkey }` of the invitee |
-| `POST` | `/v1/groups/:group_id/members/remove` | body `{ op_pubkey }` — admin-only remove; non-admin → `403` |
+| `POST` | `/v1/groups/:group_id/members/remove` | body `{ op_pubkey }` — admin-only remove; non-admin → `403 not_group_admin` |
 | `POST` | `/v1/groups/:group_id/leave` | leave |
 | `POST` | `/v1/groups/keypackages` | publish or rotate a KeyPackage slot |
 
@@ -3210,6 +3211,15 @@ A node MUST verify `chan_bind` and `chal` for these two endpoints exactly as [§
 | `AttestBalance` | unary | start a `C_balance` proving job for a balance attestation for an already-authorised **owner** (the API layer runs the action-bound OwnershipProof gate of [§5.1](#51-capability-gated-pull)/[§7.5](#75-node-rest-api-normative); GrantProof **MUST** be rejected upstream) | `POST /v1/attest/balance` |
 | `IssueViewGrant` | unary | sign a [§5.2](#52-view-grant) grant with the account's `op` key for an already-authorised **owner** (API-layer OwnershipProof gate; **no-escalation** — a grant delegate must not reach this procedure) | `POST /v1/grants` |
 | `GetTokenProvenance` | unary | issuer-originated `IssuanceTerms` for an `asset_id` the node has captured (open — the API layer runs **no** capability gate for this one; [§4.6](#46-data-availability) Class B) | `GET /v1/token/<asset_id>/provenance` (§7.5) |
+| `ListGroups` | unary | local Marmot groups the kernel already holds for the authorised owner | `GET /v1/groups` |
+| `CreateGroup` | unary | create a group; draw `nostr_group_id` | `POST /v1/groups` |
+| `GetGroup` | unary | members, epoch, routing relays | `GET /v1/groups/:group_id` |
+| `SendGroupMessage` | unary | encrypt and publish one application text | `POST /v1/groups/:group_id/messages` |
+| `ListGroupMessages` | unary | decrypted application texts already processed | `GET /v1/groups/:group_id/messages` |
+| `InviteGroupMember` | unary | fetch KeyPackage and publish Welcome (admin) | `POST /v1/groups/:group_id/invites` |
+| `RemoveGroupMember` | unary | MLS remove commit (admin) | `POST /v1/groups/:group_id/members/remove` |
+| `LeaveGroup` | unary | self-leave; allowed for `admin` and `member` | `POST /v1/groups/:group_id/leave` |
+| `PublishKeyPackage` | unary | publish or rotate a kind-30443 slot | `POST /v1/groups/keypackages` |
 
 **`kernel.v1` message contract (normative).** The following Protocol-Buffers definition is the complete, normative `kernel.v1` contract. Conventions: every 32-byte protocol value is `bytes` and its length **MUST** be exactly 32 (a violation is `INVALID_ARGUMENT`); `block_anchor.height` is `uint32`, matching the on-chain 4-byte field ([§1.7.3](#173-fixed-widths)) — a value outside `[0, 2^32−1]` is `INVALID_ARGUMENT`; `u128` amounts are decimal strings (mirroring [§7.1](#71-serialization-conventions-normative)); timestamps are `uint64` Unix seconds; enumerated states use the literal §7.5 strings. The API layer performs the entire §5.1 capability gate ([§7.8 *Who enforces the capability gate*](#78-kernel-rpc--the-internal-interface-normative)); the kernel receives `chan_bind` only as an **opaque 32-byte equality token** to bind sessions — it never derives or interprets it.
 
@@ -3239,6 +3249,15 @@ service Kernel {
   rpc AttestBalance(AttestRequest) returns (JobHandle);
   rpc IssueViewGrant(GrantRequest) returns (GrantResult);
   rpc GetTokenProvenance(GetTokenProvenanceRequest) returns (TokenProvenance);
+  rpc ListGroups(GroupAccountRequest) returns (GroupList);
+  rpc CreateGroup(CreateGroupRequest) returns (GroupHandle);
+  rpc GetGroup(GroupRequest) returns (GroupDetail);
+  rpc SendGroupMessage(SendGroupMessageRequest) returns (GroupMessageHandle);
+  rpc ListGroupMessages(GroupRequest) returns (GroupMessageList);
+  rpc InviteGroupMember(GroupMemberRequest) returns (GroupAck);
+  rpc RemoveGroupMember(GroupMemberRequest) returns (GroupAck);
+  rpc LeaveGroup(GroupRequest) returns (GroupAck);
+  rpc PublishKeyPackage(GroupAccountRequest) returns (KeyPackageHandle);
 }
 
 message GetInfoRequest {}
@@ -3548,11 +3567,31 @@ message TokenProvenance {
   string cap_total = 5;                    // decimal u128; set iff issuance_version == 2
   bytes terms_salt = 6;                    // 32B; set iff issuance_version == 2
 }
+message GroupAccountRequest { string subject = 1; }          // Bech32m address of the authorised owner
+message CreateGroupRequest { string subject = 1; string title = 2; }
+message GroupHandle { string group_id = 1; string nostr_group_id = 2; }  // nostr_group_id lowercase hex
+message GroupRequest { string subject = 1; string group_id = 2; }
+message GroupMember { string op_pubkey = 1; string role = 2; } // role ∈ {"admin","member"}
+message GroupDetail {
+  string group_id = 1; string nostr_group_id = 2; uint64 epoch = 3;
+  string role = 4; string title = 5;
+  repeated GroupMember members = 6; repeated string relays = 7;
+}
+message GroupList { repeated GroupDetail groups = 1; }
+message SendGroupMessageRequest { string subject = 1; string group_id = 2; string content = 3; }
+message GroupMessageHandle { string message_id = 1; }        // recovered MLS message id, lowercase hex
+message GroupMessage {
+  string message_id = 1; string sender_op_pubkey = 2; string content = 3; uint64 created_at = 4;
+}
+message GroupMessageList { repeated GroupMessage messages = 1; }
+message GroupMemberRequest { string subject = 1; string group_id = 2; string op_pubkey = 3; }
+message GroupAck { bool ok = 1; }
+message KeyPackageHandle { string d = 1; string i = 2; }     // slot id and KeyPackageRef, lowercase hex
 ```
 
 **Wire-completeness fields (normative).** `Issuance.creator_pubkey = 7` and `TransitionRequest.genesis_pubkey = 12` ratify the base-pubkey values the reference node proto already carries, with the same presence rules as [§7.5](#75-node-rest-api-normative): `creator_pubkey` is required for a mint, while `genesis_pubkey` is required for a genesis receive and absent otherwise. A presence-rule violation, including the genesis-receive case, is `INVALID_ARGUMENT` / `malformed_request` / `400` under the `SubmitTransition` row of the per-procedure error table. `PullRequest.authority` is a closed string, `"ownership"` or `"grant"`, that carries which capability the API layer verified at [§5.1](#51-capability-gated-pull); the kernel records it on the pull session so `GetAccountState` can admit an ownership session only, as stated above under **Who enforces the capability gate.** Its absence or any other value is `INVALID_ARGUMENT` / `malformed_request` / `400` under the `Pull` row of the per-procedure error table. The field retires the out-of-contract `x-zkcoins-session-authority` gRPC metadata key: the discriminator is now a first-class part of the `kernel.v1` contract, so a client built from the `.proto` alone can open a session the kernel accepts. [§1.7.8](#178-reference-instantiation-status-final-for-v1) makes an addition to the §7 wire formats between runbook step 3 and step 7 — spanning both the §7.5 REST body and the §7.8 gRPC messages — not a new protocol version when it touches no circuit element, pinned vector, or digest, provided a specification PR states why; this amendment supplies that statement. `authority` has no circuit involvement, and the two pubkey fields transport values the circuit or account model already binds, as the §7.5 paragraph above explains. None changes a circuit element, a pinned vector, or a digest, and the API layer continues to perform the entire capability gate, so none moves a trust boundary.
 
-A breaking change to any message or procedure is a new package (`kernel.v2`), never an in-place edit ([§1.7.8 v1 freeze](#178-reference-instantiation-status-final-for-v1)).
+A breaking change to any message or procedure is a new package (`kernel.v2`), never an in-place edit ([§1.7.8 v1 freeze](#178-reference-instantiation-status-final-for-v1)). The `ListGroups` … `PublishKeyPackage` procedures are additive for the optional `group_chat` kernel part: they touch no circuit element, pinned vector, or digest, so they are not `kernel.v2`. A kernel whose `group_chat` part is off **MUST** reject those procedures as `NOT_FOUND` / `not_found` / `404` (the API maps that to `404 feature_disabled` when the API feature is advertised without the kernel part, or omits the REST keys when the feature is off).
 
 **Error contract (normative, closed, deterministic).** Every failed `kernel.v1` procedure returns a `google.rpc.Status` whose primary `code` is one of the eight gRPC codes below and whose `details` **MUST** include exactly one `google.rpc.ErrorInfo` with:
 
@@ -3568,7 +3607,7 @@ The eight admissible gRPC codes and their §7.5 meaning classes:
 | `NOT_FOUND` | unknown job / record / coin / blob outside the authorised set | `job_not_found`, `not_found` |
 | `FAILED_PRECONDITION` | wrong phase, stale S2C, dependency not final, idempotency conflict, invalid signature at `/sign` | `wrong_phase`, `stale_message`, `invalid_signature`, `dependency_not_final`, `idempotency_conflict` |
 | `UNAUTHENTICATED` | missing/invalid capability or session (incl. grant-on-ownership-only) | `unauthorized`, `challenge_expired`, `session_expired` |
-| `PERMISSION_DENIED` | resolved-scope violation | `scope_exceeded` |
+| `PERMISSION_DENIED` | resolved-scope or group-admin violation | `scope_exceeded`, `not_group_admin` |
 | `RESOURCE_EXHAUSTED` | rate limit or payload size | `rate_limited`, `payload_too_large` |
 | `UNAVAILABLE` | not ready / circuit-digest mismatch | `circuit_digest_mismatch` (and not-ready answers that surface as HTTP `503` on `/health/ready` with the readiness body `{ready:false, reason}`, **not** the generic error shape) |
 | `INTERNAL` | **only** conditions not covered by a listed code | `internal_error` |
@@ -3602,6 +3641,15 @@ An independent API layer **MUST** map each kernel error onto the §7.5 REST surf
 | `AttestBalance` | `malformed_request`/`400` | — | — | `unauthorized`/`401`, `challenge_expired`/`410` | — | `rate_limited`/`429` | `circuit_digest_mismatch`/`503` | `internal_error`/`500` |
 | `IssueViewGrant` | `malformed_request`/`400` | — | — | `unauthorized`/`401`, `challenge_expired`/`410` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
 | `GetTokenProvenance` | `malformed_request`/`400` (asset_id width) | `not_found`/`404` | — | — | — | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `ListGroups` | `malformed_request`/`400` | — | — | `unauthorized`/`401` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `CreateGroup` | `malformed_request`/`400` | — | — | `unauthorized`/`401` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `GetGroup` | `malformed_request`/`400` | `not_found`/`404` | — | `unauthorized`/`401` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `SendGroupMessage` | `malformed_request`/`400` | `not_found`/`404` | — | `unauthorized`/`401` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `ListGroupMessages` | `malformed_request`/`400` | `not_found`/`404` | — | `unauthorized`/`401` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `InviteGroupMember` | `malformed_request`/`400` | `not_found`/`404` | — | `unauthorized`/`401` | `not_group_admin`/`403` | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `RemoveGroupMember` | `malformed_request`/`400` | `not_found`/`404` | — | `unauthorized`/`401` | `not_group_admin`/`403` | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `LeaveGroup` | `malformed_request`/`400` | `not_found`/`404` | — | `unauthorized`/`401` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `PublishKeyPackage` | `malformed_request`/`400` | — | — | `unauthorized`/`401` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
 
 (`Publish` policy/crypto rejections remain **successful** RPC responses with `PublishResult.accepted == false` and a closed `reason`, mirroring §7.6 HTTP 200 — they are not gRPC Status failures.)
 

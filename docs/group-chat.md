@@ -163,7 +163,7 @@ Closed paths, JSON, fail-closed. A request when API `group_chat` is off, when `w
 
 Field encodings: `group_id` is an opaque UTF-8 string local to this node; `nostr_group_id`, `op_pubkey`, `d`, `i`, and `message_id` are lowercase hex; `epoch` is a JSON number (`u64`); `role` is the closed string `"admin"` or `"member"`; `title` and `content` are UTF-8 strings; `created_at` is a `u64` Unix timestamp; `relays` is a JSON array of relay URL strings.
 
-An unknown `group_id` **MUST** return `404`. A membership action by a non-admin **MUST** return `403` and **MUST NOT** mutate group state. A Welcome publish **MUST** fail closed when the invitee has no kind `10050`.
+An unknown `group_id` **MUST** return `404`. Invite and `members/remove` are admin-only: a non-admin **MUST** get HTTP `403` with `{ "error": "not_group_admin", "message": "…" }` and **MUST NOT** mutate group state. `leave` is a self-action and **MUST** succeed for both `admin` and `member`. A Welcome publish **MUST** fail closed when the invitee has no kind `10050`.
 
 ## Negative controls
 
