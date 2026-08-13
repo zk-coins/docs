@@ -26,7 +26,7 @@ zkCoins spans several repositories; the specification in this repo covers all of
 |---|---|---|
 | **App · Explorer** | end-user wallet (NIP-05 `user@domain` receive identity) · public explorer web-app | [`zk-coins/app`](https://github.com/zk-coins/app) · `zk-coins/explorer` *(planned)* |
 | **SDK** | thin TypeScript client — on-device keys, signing, node/API calls | [`zk-coins/sdk`](https://github.com/zk-coins/sdk) |
-| **zkCoins API** | the sole public REST surface — features `wallet`, `explorer`, `publisher`, Lightning and mail bridges, each switched on by the operator | [`zk-coins/api`](https://github.com/zk-coins/api) |
+| **zkCoins API** | the sole public REST surface — features `wallet`, `explorer`, `publisher`, Lightning and mail bridges, and `group_chat`, each switched on by the operator | [`zk-coins/api`](https://github.com/zk-coins/api) |
 | **zkCoins node** | trustless kernel, gRPC only — scan · accumulator · verify · prove · store · publisher · Nostr transport | [`zk-coins/node`](https://github.com/zk-coins/node) |
 | **bitcoind · Nostr relay** | Bitcoin L1 settlement and ordering · off-chain transport and data availability | upstream (own or external) |
 

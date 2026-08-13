@@ -3081,8 +3081,8 @@ The `GET /v1/jobs/<job_id>/stream` `complete`/`error` frames (above) carry the s
 | `GET` | `/v1/groups/:group_id` | members, epoch, routing relays |
 | `POST` | `/v1/groups/:group_id/messages` | body `{ content }` — plaintext UTF-8 string |
 | `GET` | `/v1/groups/:group_id/messages` | decrypted application texts the node has already processed |
-| `POST` | `/v1/groups/:group_id/invites` | body `{ op_pubkey }` of the invitee |
-| `POST` | `/v1/groups/:group_id/members/remove` | body `{ op_pubkey }` — admin-only remove; non-admin → `403 not_group_admin` |
+| `POST` | `/v1/groups/:group_id/invites` | body `{ op_pubkey }` of the invitee → `{ invited: true }` |
+| `POST` | `/v1/groups/:group_id/members/remove` | body `{ op_pubkey }` — admin-only remove → `{ removed: true }`; non-admin → `403 not_group_admin` |
 | `POST` | `/v1/groups/:group_id/leave` | leave |
 | `POST` | `/v1/groups/keypackages` | publish or rotate a KeyPackage slot |
 

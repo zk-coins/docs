@@ -156,14 +156,14 @@ Closed paths, JSON, fail-closed. A request when API `group_chat` is off, when `w
 | `GET` | `/v1/groups/:group_id` | `{ group_id, nostr_group_id, epoch, role, title, members: [ { op_pubkey, role } ], relays: [<relay URL>] }` |
 | `POST` | `/v1/groups/:group_id/messages` | body `{ content }` — a plaintext UTF-8 string → `{ message_id }` — the recovered MLS message id after the node processes the send |
 | `GET` | `/v1/groups/:group_id/messages` | `{ messages: [ { message_id, sender_op_pubkey, content, created_at } ] }` — decrypted application texts the node has already processed |
-| `POST` | `/v1/groups/:group_id/invites` | body `{ op_pubkey }` — invitee identity; the node fetches a valid kind `30443` and publishes a Welcome |
-| `POST` | `/v1/groups/:group_id/members/remove` | body `{ op_pubkey }` — admin-only MLS remove commit; a non-admin **MUST** get `403` and **MUST NOT** mutate group state |
+| `POST` | `/v1/groups/:group_id/invites` | body `{ op_pubkey }` — invitee identity; the node fetches a valid kind `30443` and publishes a Welcome → `{ invited: true }` |
+| `POST` | `/v1/groups/:group_id/members/remove` | body `{ op_pubkey }` — admin-only MLS remove commit → `{ removed: true }`; a non-admin **MUST** get `403` and **MUST NOT** mutate group state |
 | `POST` | `/v1/groups/:group_id/leave` | `{ left: true }` |
 | `POST` | `/v1/groups/keypackages` | publish or rotate a KeyPackage slot → `{ d, i }` — slot id and KeyPackageRef, both lowercase hex |
 
 Field encodings: `group_id` is an opaque UTF-8 string local to this node; `nostr_group_id`, `op_pubkey`, `d`, `i`, and `message_id` are lowercase hex; `epoch` is a JSON number (`u64`); `role` is the closed string `"admin"` or `"member"`; `title` and `content` are UTF-8 strings; `created_at` is a `u64` Unix timestamp; `relays` is a JSON array of relay URL strings.
 
-An unknown `group_id` **MUST** return `404` `{ "error": "not_found", … }`. Invite and `members/remove` are admin-only: a non-admin **MUST** get HTTP `403` with `{ "error": "not_group_admin", "message": "…" }` and **MUST NOT** mutate group state. `leave` is a self-action and **MUST** succeed for both `admin` and `member`. The API maps `LeaveGroup` `GroupAck.ok == true` to `{ "left": true }`. A Welcome publish **MUST** fail closed with HTTP `409` `{ "error": "invitee_not_ready", … }` when the invitee has no kind `10050`, before every network write.
+An unknown `group_id` **MUST** return `404` `{ "error": "not_found", … }`. Invite and `members/remove` are admin-only: a non-admin **MUST** get HTTP `403` with `{ "error": "not_group_admin", "message": "…" }` and **MUST NOT** mutate group state. `leave` is a self-action and **MUST** succeed for both `admin` and `member`. The API maps `InviteGroupMember` / `RemoveGroupMember` / `LeaveGroup` `GroupAck.ok == true` to `{ "invited": true }`, `{ "removed": true }`, and `{ "left": true }` respectively. A successful RPC **MUST NOT** return `ok == false`; failure uses only the closed machine codes. A Welcome publish **MUST** fail closed with HTTP `409` `{ "error": "invitee_not_ready", … }` when the invitee has no kind `10050`, before every network write.
 
 ## Negative controls
 
