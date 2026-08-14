@@ -3059,6 +3059,7 @@ Additional codes (closing the enumeration across §7.4–§7.7 surfaces):
 | `rate_limited` | 429 | API-layer rate limit (operator policy, [§7.8](#78-kernel-rpc--the-internal-interface-normative)) |
 | `dependency_not_final` | 409 | a submitted transition depends on a nullifier position `≥ size_final` (not yet 6-confirmation-final) or on a fork-loser that can never finalize; the wallet must wait for finality (or abandon a fork-loser dependency) and resubmit |
 | `network_unavailable` | 404 | the request's `/v1/{network}/` segment names a network this deployment does not serve (or it serves none); there is no default network and no fallback to another ([§7.5 *Multi-network projection*](#75-node-rest-api-normative)) |
+| `feature_disabled` | 404 | the request targets a `features`-gated surface of a **served** network whose feature is off ([§6.1](#61-components-and-responsibilities), [§7.5 *Multi-network projection*](#75-node-rest-api-normative) *Error precedence*); API-only — an unserved `{network}` is `network_unavailable` and never reaches this check |
 | `network_not_ready` | 503 | the target network is served but its upstream is not ready to answer this consensus-dependent request; the specific reason (`syncing` \| `scanner_lag` \| `deep_reorg` \| `circuit_mismatch` \| `dependency_unavailable`) is on its `GET /v1/{network}/health/ready` ([§7.5 *Multi-network projection*](#75-node-rest-api-normative)) |
 | `internal_error` | 500 | any condition not covered by a listed code |
 
