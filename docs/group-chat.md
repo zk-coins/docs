@@ -157,7 +157,7 @@ Closed paths, JSON, fail-closed. The MLS group id **MUST NOT** appear on the pub
 
 | Method | Path | Body / Returns |
 |---|---|---|
-| `GET` | `/v1/groups` | `{ groups: [ { group_id, nostr_group_id, epoch, role, title } ] }` — local groups this node already holds; `members` and `relays` **MUST** be empty / omitted |
+| `GET` | `/v1/groups` | `{ groups: [ { group_id, nostr_group_id, epoch, role, title } ] }` — local groups this node already holds; the API **MUST omit** `members` and `relays` |
 | `POST` | `/v1/groups` | body `{ title }` → `{ group_id, nostr_group_id }` — create; `nostr_group_id` is lowercase hex of 32 CSPRNG bytes |
 | `GET` | `/v1/groups/:group_id` | `{ group_id, nostr_group_id, epoch, role, title, members: [ { op_pubkey, role } ], relays: [<relay URL>] }` |
 | `POST` | `/v1/groups/:group_id/messages` | body `{ content }` — a plaintext UTF-8 string → `{ message_id }` — the recovered MLS message id after the node processes the send |
@@ -165,13 +165,13 @@ Closed paths, JSON, fail-closed. The MLS group id **MUST NOT** appear on the pub
 | `POST` | `/v1/groups/:group_id/invites` | body `{ op_pubkey }` — invitee identity; the node fetches a valid kind `30443` and publishes a Welcome → `{ invited: true }` |
 | `POST` | `/v1/groups/:group_id/members/remove` | body `{ op_pubkey }` — admin-only MLS remove commit → `{ removed: true }`; a non-admin **MUST** get `403` and **MUST NOT** mutate group state |
 | `POST` | `/v1/groups/:group_id/leave` | `{ left: true }` |
-| `POST` | `/v1/groups/keypackages` | body `{ d?: <hex> }` — omit `d` to create a new CSPRNG slot; set `d` to rotate that slot (reuse `d`) → `{ d, i }`; unknown `d` → `404 not_found` |
+| `POST` | `/v1/groups/keypackages` | body `{ d?: <hex> }` — omit `d` to create a new CSPRNG slot; if `d` is present it **MUST** be 64-char lowercase hex (empty string → `400 malformed_request`) and rotates that slot → `{ d, i }`; unknown `d` → `404 not_found` |
 
 Field encodings: `group_id` is an opaque UTF-8 string local to this node; `nostr_group_id`, `op_pubkey`, `d`, `i`, and `message_id` are lowercase hex; `epoch` is a JSON number (`u64`); `role` is the closed string `"admin"` or `"member"`; `title` and `content` are UTF-8 strings; `created_at` is a `u64` Unix timestamp taken from the inner unsigned application event; `relays` is a JSON array of relay URL strings.
 
 **Publication success.** For `messages`, `invites`, `members/remove`, `leave`, and `keypackages`, HTTP 200 **MUST** mean: the node durably persisted the local MLS/group mutation and made the required **first** publication attempt to every snapshotted target. It **MUST NOT** wait for a relay `OK`. Remaining first-attempt retries stay outstanding as Marmot transport work and **MUST NOT** undo the HTTP 200. A later relay failure is availability, not a REST error.
 
-An unknown `group_id` **MUST** return `404` `{ "error": "not_found", … }`. Invite and `members/remove` are admin-only: a non-admin **MUST** get HTTP `403` with `{ "error": "not_group_admin", "message": "…" }` and **MUST NOT** mutate group state. `leave` is a self-action and **MUST** succeed for both `admin` and `member`. The API maps `InviteGroupMember` / `RemoveGroupMember` / `LeaveGroup` `GroupAck.ok == true` to `{ "invited": true }`, `{ "removed": true }`, and `{ "left": true }` respectively. A successful RPC **MUST NOT** return `ok == false`; failure uses only the closed machine codes. A Welcome publish **MUST** fail closed with HTTP `409` `{ "error": "invitee_not_ready", … }` when the invitee has no kind `10050`, before every network write.
+An unknown `group_id` **MUST** return `404` `{ "error": "not_found", … }`. Invite and `members/remove` are admin-only. After the three request gates, the node **MUST** decide in this order and stop at the first failure: resolve `group_id` (`404 not_found`) → caller role (`403 not_group_admin` if not admin) → invitee kind-10050 (`409 invitee_not_ready`, before every network write). `leave` is a self-action and **MUST** succeed for both `admin` and `member`. The API maps `InviteGroupMember` / `RemoveGroupMember` / `LeaveGroup` `GroupAck.ok == true` to `{ "invited": true }`, `{ "removed": true }`, and `{ "left": true }` respectively. A successful RPC **MUST NOT** return `ok == false`; failure uses only the closed machine codes.
 
 ## Negative controls
 
@@ -181,7 +181,7 @@ Each case **MUST** reject with no conversation mutation:
 |---|---|---|
 | G-01 | extra recipient `p` on a kind-14 rumor used as a “group” | reject as outside the one-to-one NIP-17 profile; no Marmot group is created |
 | G-02 | treating NIP-29 / kind 9 / kind 42 as E2E group chat | reject; those kinds are not this overlay |
-| G-03 | deriving MLS leaf, HPKE-init, epoch, exporter, or `group_event_key` material from `op` / seed / `op_secret` / SPEND / a §1 HKDF tag | reject the construction; leaf and HPKE-init MUST be CSPRNG; epoch / exporter / `group_event_key` MUST be MLS-derived |
+| G-03 | deriving MLS leaf, HPKE-init, epoch, exporter, or `group_event_key` material from `op` / seed / `op_secret` / `nk` / `ivk` / `ovk` / SPEND / a §1 HKDF tag | reject the construction; leaf and HPKE-init MUST be CSPRNG; epoch / exporter / `group_event_key` MUST be MLS-derived |
 | G-04 | kind 445 authored by `op_pubkey` or with a reused ephemeral key | reject the event |
 | G-05 | kind 445 missing, duplicate, or `h` not 32-byte lowercase hex | reject the event |
 | G-06 | Welcome not addressed to the local `op_pubkey` | reject before join |

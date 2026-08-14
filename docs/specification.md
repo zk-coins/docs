@@ -3076,7 +3076,7 @@ The `GET /v1/jobs/<job_id>/stream` `complete`/`error` frames (above) carry the s
 
 | Method | Path | Body / Returns |
 |---|---|---|
-| `GET` | `/v1/groups` | `{ groups: [ { group_id, nostr_group_id, epoch, role, title } ] }` — `members`/`relays` empty |
+| `GET` | `/v1/groups` | `{ groups: [ { group_id, nostr_group_id, epoch, role, title } ] }` — API **MUST omit** `members`/`relays` |
 | `POST` | `/v1/groups` | body `{ title }` → `{ group_id, nostr_group_id }` |
 | `GET` | `/v1/groups/:group_id` | members, epoch, routing relays |
 | `POST` | `/v1/groups/:group_id/messages` | body `{ content }` — plaintext UTF-8 string |
@@ -3084,7 +3084,7 @@ The `GET /v1/jobs/<job_id>/stream` `complete`/`error` frames (above) carry the s
 | `POST` | `/v1/groups/:group_id/invites` | body `{ op_pubkey }` of the invitee → `{ invited: true }` |
 | `POST` | `/v1/groups/:group_id/members/remove` | body `{ op_pubkey }` — admin-only remove → `{ removed: true }`; non-admin → `403 not_group_admin` |
 | `POST` | `/v1/groups/:group_id/leave` | leave |
-| `POST` | `/v1/groups/keypackages` | body `{ d?: <hex> }` — omit to create, set to rotate → `{ d, i }` |
+| `POST` | `/v1/groups/keypackages` | body `{ d?: <hex> }` — omit to create; present `d` MUST be 64-char hex (empty → `400 malformed_request`); unknown `d` → `404 not_found` |
 
 Shapes, encodings, and fail-closed rules are normative on [Group chat](/group-chat).
 
@@ -4321,7 +4321,7 @@ This group tests the optional Marmot/MLS overlay ([Group chat](/group-chat)). It
 |---|---|---|
 | G-01 | extra recipient `p` on a kind-14 rumor used as a “group” | reject as outside the one-to-one NIP-17 profile; no Marmot group is created |
 | G-02 | treating NIP-29 / kind 9 / kind 42 as E2E group chat | reject; those kinds are not this overlay |
-| G-03 | deriving MLS leaf, HPKE-init, epoch, exporter, or `group_event_key` material from `op` / seed / `op_secret` / SPEND / a §1 HKDF tag | reject the construction; leaf and HPKE-init MUST be CSPRNG; epoch / exporter / `group_event_key` MUST be MLS-derived |
+| G-03 | deriving MLS leaf, HPKE-init, epoch, exporter, or `group_event_key` material from `op` / seed / `op_secret` / `nk` / `ivk` / `ovk` / SPEND / a §1 HKDF tag | reject the construction; leaf and HPKE-init MUST be CSPRNG; epoch / exporter / `group_event_key` MUST be MLS-derived |
 | G-04 | kind 445 authored by `op_pubkey` or with a reused ephemeral key | reject the event |
 | G-05 | kind 445 missing, duplicate, or `h` not 32-byte lowercase hex | reject the event |
 | G-06 | Welcome not addressed to the local `op_pubkey` | reject before join |
