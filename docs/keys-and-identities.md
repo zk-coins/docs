@@ -324,7 +324,7 @@ For an account-wide disclosure, prefer a scoped `zkgrant` over `zkavk` — not b
 | `addr_sig` | **`sk₀`** | that the address holder authorised exactly these payment fields, including the choice of `ivpk` and `op_pubkey` |
 | `name_sig` | **`sk₀`** | that the seed holder consented to this name |
 | `sig` (on an `Invoice`) | `op` | the per-issuance authorisation by the recipient's online key |
-| Event signatures | `op` | kinds 0, 10050, 30421, and the NIP-59 kind-13 seal; when `group_chat` is on, kind 30443 and Marmot account-identity proofs |
+| Event signatures | `op` | kinds 0, 10050, 30421, and the NIP-59 kind-13 seal; when `group_chat` is on, kinds 10002 and 30443 and Marmot account-identity proofs |
 | Gift-wrap signature | a **fresh one-time key**, per event | the kind-1059 wrapper — never `op`, which is what keeps the two copies unlinkable |
 | `op_sig` | `op` | that the recipient acknowledged a delivery (kind-1421 ACK) |
 | `op_signature` (in a `ViewGrant`) | `op` | the scope and window of a delegation |

@@ -165,7 +165,7 @@ Closed paths, JSON, fail-closed. The MLS group id **MUST NOT** appear on the pub
 | `POST` | `/v1/groups/:group_id/invites` | body `{ op_pubkey }` — invitee identity; the node fetches a valid kind `30443` and publishes a Welcome → `{ invited: true }` |
 | `POST` | `/v1/groups/:group_id/members/remove` | body `{ op_pubkey }` — admin-only MLS remove commit → `{ removed: true }`; a non-admin **MUST** get `403` and **MUST NOT** mutate group state |
 | `POST` | `/v1/groups/:group_id/leave` | `{ left: true }` |
-| `POST` | `/v1/groups/keypackages` | body `{ d?: <hex> }` — omit `d` to create a new CSPRNG slot; set `d` to rotate that slot (reuse `d`) → `{ d, i }` |
+| `POST` | `/v1/groups/keypackages` | body `{ d?: <hex> }` — omit `d` to create a new CSPRNG slot; set `d` to rotate that slot (reuse `d`) → `{ d, i }`; unknown `d` → `404 not_found` |
 
 Field encodings: `group_id` is an opaque UTF-8 string local to this node; `nostr_group_id`, `op_pubkey`, `d`, `i`, and `message_id` are lowercase hex; `epoch` is a JSON number (`u64`); `role` is the closed string `"admin"` or `"member"`; `title` and `content` are UTF-8 strings; `created_at` is a `u64` Unix timestamp taken from the inner unsigned application event; `relays` is a JSON array of relay URL strings.
 
@@ -187,7 +187,7 @@ Each case **MUST** reject with no conversation mutation:
 | G-06 | Welcome not addressed to the local `op_pubkey` | reject before join |
 | G-07 | signed kind-444 rumor | reject as a non-Marmot rumor |
 | G-08 | silent fallback NIP-17 ↔ Marmot ↔ SMTP | abort; conversations stay separate |
-| G-09 | advertising API `group_chat` without `wallet`, or enabling API `group_chat` without the kernel `group_chat` part | do not advertise `group_chat` without `wallet`; every `/v1/groups*` request answers `404 feature_disabled` |
+| G-09 | advertising API `group_chat` without `wallet`, or calling `/v1/groups*` while the kernel `group_chat` part is off | do not advertise `group_chat` without `wallet`; after the session checks, every `/v1/groups*` request answers `404 feature_disabled` |
 | G-10 | publishing a Welcome to a guessed relay when kind 10050 is absent | abort before every network write; HTTP `409` `{ "error": "invitee_not_ready" }` |
 
 ## Privacy and trust

@@ -3587,7 +3587,7 @@ message GroupMessage {
   string message_id = 1; string sender_op_pubkey = 2; string content = 3;
   uint64 created_at = 4;                   // inner unsigned application event created_at
 }
-message GroupMessageList { repeated GroupMessage messages = 1; }
+message GroupMessageList { repeated GroupMessage messages = 1; } // MUST be sorted ascending (created_at, message_id)
 message GroupMemberRequest { string session = 1; bytes chan_bind = 2; string group_id = 3; string op_pubkey = 4; }
 message GroupAck { bool ok = 1; }
 message KeyPackageHandle { string d = 1; string i = 2; }     // slot id and KeyPackageRef, lowercase hex
@@ -3653,7 +3653,7 @@ An independent API layer **MUST** map each kernel error onto the §7.5 REST surf
 | `InviteGroupMember` | `malformed_request`/`400` | `not_found`/`404`, `feature_disabled`/`404` | `invitee_not_ready`/`409` | `unauthorized`/`401`, `session_expired`/`410` | `not_group_admin`/`403` | `rate_limited`/`429` | — | `internal_error`/`500` |
 | `RemoveGroupMember` | `malformed_request`/`400` | `not_found`/`404`, `feature_disabled`/`404` | — | `unauthorized`/`401`, `session_expired`/`410` | `not_group_admin`/`403` | `rate_limited`/`429` | — | `internal_error`/`500` |
 | `LeaveGroup` | `malformed_request`/`400` | `not_found`/`404`, `feature_disabled`/`404` | — | `unauthorized`/`401`, `session_expired`/`410` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
-| `PublishKeyPackage` | `malformed_request`/`400` | `feature_disabled`/`404` | — | `unauthorized`/`401`, `session_expired`/`410` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
+| `PublishKeyPackage` | `malformed_request`/`400` | `feature_disabled`/`404`, `not_found`/`404` | — | `unauthorized`/`401`, `session_expired`/`410` | — | `rate_limited`/`429` | — | `internal_error`/`500` |
 
 (`Publish` policy/crypto rejections remain **successful** RPC responses with `PublishResult.accepted == false` and a closed `reason`, mirroring §7.6 HTTP 200 — they are not gRPC Status failures.)
 
@@ -4311,6 +4311,7 @@ This group tests the optional Marmot/MLS overlay ([Group chat](/group-chat)). It
 - emit and accept kind `30443` KeyPackages with the Marmot tag set (`d`, `mls_protocol_version=1.0`, `i`, `mls_ciphersuite`, `mls_extensions`, `mls_proposals`, `app_components` including `0x8009`), standard-base64 `mls_key_package` content, authored by `op_pubkey`;
 - emit and accept kind `1059` → `13` → unsigned kind `444` Welcomes with exactly one `e` and exactly one `relays` tag, standard-base64 `mls_welcome`, no rumor `sig`;
 - emit and accept kind `445` with exactly one lowercase-hex 32-byte `h`, a fresh unused ephemeral `pubkey` that is not `op`, and standard-base64(`nonce_12 || ChaCha20-Poly1305(group_event_key, nonce, mls_message_bytes, aad="")`) where `group_event_key = MLS-Exporter("marmot", "group-event", 32)`;
+- emit a valid `op`-signed kind `10002` NIP-65 list whose write-capable set (`r` marker `write` or omitted) is where KeyPackages are published;
 - publish KeyPackages to the account's NIP-65 write-capable set, Welcomes to the invitee's kind-10050 set, and group messages to the routing relay list under Marmot's first-attempt obligation;
 - deduplicate on the recovered MLS message id, never on the Nostr event id.
 
@@ -4326,7 +4327,7 @@ This group tests the optional Marmot/MLS overlay ([Group chat](/group-chat)). It
 | G-06 | Welcome not addressed to the local `op_pubkey` | reject before join |
 | G-07 | signed kind-444 rumor | reject as a non-Marmot rumor |
 | G-08 | silent fallback NIP-17 ↔ Marmot ↔ SMTP | abort; conversations stay separate |
-| G-09 | advertising API `group_chat` without `wallet`, or enabling API `group_chat` without the kernel `group_chat` part | do not advertise `group_chat` without `wallet`; every `/v1/groups*` request answers `404 feature_disabled` |
+| G-09 | advertising API `group_chat` without `wallet`, or calling `/v1/groups*` while the kernel `group_chat` part is off | do not advertise `group_chat` without `wallet`; after the session checks, every `/v1/groups*` request answers `404 feature_disabled` |
 | G-10 | publishing a Welcome to a guessed relay when kind 10050 is absent | abort before every network write; HTTP `409` `{ "error": "invitee_not_ready" }` |
 
 **Live interoperability matrix (evaluated at the `app`/SDK layer, only when `group_chat` is on).** Bidirectional application-text exchange against a current White Noise / Marmot client that speaks `marmot.transport.nostr` v1 at git commit `4a2bc65f8db5`: create, invite via KeyPackage, send, receive, remove a member, leave. A failure attributable to zkCoins is a V.13 fail, not a V.12 fail.
