@@ -3051,7 +3051,7 @@ Additional codes (closing the enumeration across §7.4–§7.7 surfaces):
 | `challenge_expired` | 410 | pull/bootstrap/attest/grants `nonce` expired, already consumed, or unknown |
 | `session_expired` | 410 | pull-session token expired, unknown, or presented over a channel whose `chan_bind` does not match (incl. `GET /v1/receipts/stream`, `GET /v1/record/<record_id>`, `GET /v1/proof/<coin_id>`, `GET /v1/account/state`, and (v2 only) `/v2/groups*`) |
 | `not_found` | 404 | unknown `blob_id`, `record_id`/`coin_id` outside the session's scope-visible set, unknown job (`job_not_found` stays canonical for the jobs family), or unknown `group_id` |
-| `feature_disabled` | 404 | (v2 only — a v1 API never serves these routes) API or kernel `group_chat` part is off (G-09), or `wallet` is off while a `/v2/groups*` route is called |
+| `feature_disabled` | 404 | API or kernel feature/part is off. v1: a request against a disabled member of the closed set `{wallet, explorer, publisher, lightning_bridge, mail_bridge}` ([§6.1](#61-components-and-responsibilities)). v2 additionally: API or kernel `group_chat` part is off (G-09), or `wallet` is off, while a `/v2/groups*` route is called. A v1 API that has no `/v2/groups*` surface still answers those paths 404 without serving group state. |
 | `invitee_not_ready` | 409 | invitee has no valid kind-10050 list; Welcome is not published (G-10) |
 | `payload_too_large` | 413 | Blossom body over the advertised limit |
 | `rate_limited` | 429 | API-layer rate limit (operator policy, [§7.8](#78-kernel-rpc--the-internal-interface-normative)) |
@@ -3224,7 +3224,7 @@ A node MUST verify `chan_bind` and `chal` for these two endpoints exactly as [§
 | `LeaveGroup` | unary | self-leave; allowed for `admin` and `member` (**v2 only**) | `POST /v2/groups/:group_id/leave` |
 | `PublishKeyPackage` | unary | publish or rotate a kind-30443 slot (**v2 only**) | `POST /v2/groups/keypackages` |
 
-**`kernel.v1` message contract (normative).** The following Protocol-Buffers definition is the complete, normative `kernel.v1` contract. Conventions: every 32-byte protocol value is `bytes` and its length **MUST** be exactly 32 (a violation is `INVALID_ARGUMENT`); `block_anchor.height` is `uint32`, matching the on-chain 4-byte field ([§1.7.3](#173-fixed-widths)) — a value outside `[0, 2^32−1]` is `INVALID_ARGUMENT`; `u128` amounts are decimal strings (mirroring [§7.1](#71-serialization-conventions-normative)); timestamps are `uint64` Unix seconds; enumerated states use the literal §7.5 strings. The API layer performs the entire §5.1 capability gate ([§7.8 *Who enforces the capability gate*](#78-kernel-rpc--the-internal-interface-normative)); the kernel receives `chan_bind` only as an **opaque 32-byte equality token** to bind sessions — it never derives or interprets it.
+**`kernel.v1` message contract (normative).** The following Protocol-Buffers definition is the complete, normative `kernel.v1` contract. It **MUST NOT** contain the group-chat procedures. Those are recorded immediately after it as a `kernel.v2` preview. Conventions: every 32-byte protocol value is `bytes` and its length **MUST** be exactly 32 (a violation is `INVALID_ARGUMENT`); `block_anchor.height` is `uint32`, matching the on-chain 4-byte field ([§1.7.3](#173-fixed-widths)) — a value outside `[0, 2^32−1]` is `INVALID_ARGUMENT`; `u128` amounts are decimal strings (mirroring [§7.1](#71-serialization-conventions-normative)); timestamps are `uint64` Unix seconds; enumerated states use the literal §7.5 strings. The API layer performs the entire §5.1 capability gate ([§7.8 *Who enforces the capability gate*](#78-kernel-rpc--the-internal-interface-normative)); the kernel receives `chan_bind` only as an **opaque 32-byte equality token** to bind sessions — it never derives or interprets it.
 
 ```proto
 syntax = "proto3";
@@ -3252,15 +3252,6 @@ service Kernel {
   rpc AttestBalance(AttestRequest) returns (JobHandle);
   rpc IssueViewGrant(GrantRequest) returns (GrantResult);
   rpc GetTokenProvenance(GetTokenProvenanceRequest) returns (TokenProvenance);
-  rpc ListGroups(GroupAccountRequest) returns (GroupList);
-  rpc CreateGroup(CreateGroupRequest) returns (GroupHandle);
-  rpc GetGroup(GroupRequest) returns (GroupDetail);
-  rpc SendGroupMessage(SendGroupMessageRequest) returns (GroupMessageHandle);
-  rpc ListGroupMessages(GroupRequest) returns (GroupMessageList);
-  rpc InviteGroupMember(GroupMemberRequest) returns (GroupAck);
-  rpc RemoveGroupMember(GroupMemberRequest) returns (GroupAck);
-  rpc LeaveGroup(GroupRequest) returns (GroupAck);
-  rpc PublishKeyPackage(GroupAccountRequest) returns (KeyPackageHandle);
 }
 
 message GetInfoRequest {}
@@ -3571,6 +3562,26 @@ message TokenProvenance {
   string cap_total = 5;                    // decimal u128; set iff issuance_version == 2
   bytes terms_salt = 6;                    // 32B; set iff issuance_version == 2
 }
+```
+
+**`kernel.v2` group-chat preview (normative for protocol v2 — NOT applicable in v1).** Recorded here for continuity. A **v1** kernel **MUST NOT** include, generate, or expose these procedures. A **v1** API **MUST NOT** call them.
+
+```proto
+syntax = "proto3";
+package kernel.v2;
+
+service KernelV2 {
+  rpc ListGroups(GroupAccountRequest) returns (GroupList);
+  rpc CreateGroup(CreateGroupRequest) returns (GroupHandle);
+  rpc GetGroup(GroupRequest) returns (GroupDetail);
+  rpc SendGroupMessage(SendGroupMessageRequest) returns (GroupMessageHandle);
+  rpc ListGroupMessages(GroupRequest) returns (GroupMessageList);
+  rpc InviteGroupMember(GroupMemberRequest) returns (GroupAck);
+  rpc RemoveGroupMember(GroupMemberRequest) returns (GroupAck);
+  rpc LeaveGroup(GroupRequest) returns (GroupAck);
+  rpc PublishKeyPackage(GroupAccountRequest) returns (KeyPackageHandle);
+}
+
 // ownership pull session only — grant sessions are UNAUTHENTICATED/unauthorized (§7.5)
 message GroupAccountRequest { string session = 1; bytes chan_bind = 2; string d = 3; } // d empty ⇒ new slot; set ⇒ rotate that slot
 message CreateGroupRequest { string session = 1; bytes chan_bind = 2; string title = 3; }
@@ -3597,13 +3608,15 @@ message KeyPackageHandle { string d = 1; string i = 2; }     // slot id and KeyP
 
 **Wire-completeness fields (normative).** `Issuance.creator_pubkey = 7` and `TransitionRequest.genesis_pubkey = 12` ratify the base-pubkey values the reference node proto already carries, with the same presence rules as [§7.5](#75-node-rest-api-normative): `creator_pubkey` is required for a mint, while `genesis_pubkey` is required for a genesis receive and absent otherwise. A presence-rule violation, including the genesis-receive case, is `INVALID_ARGUMENT` / `malformed_request` / `400` under the `SubmitTransition` row of the per-procedure error table. `PullRequest.authority` is a closed string, `"ownership"` or `"grant"`, that carries which capability the API layer verified at [§5.1](#51-capability-gated-pull); the kernel records it on the pull session so `GetAccountState` can admit an ownership session only, as stated above under **Who enforces the capability gate.** Its absence or any other value is `INVALID_ARGUMENT` / `malformed_request` / `400` under the `Pull` row of the per-procedure error table. The field retires the out-of-contract `x-zkcoins-session-authority` gRPC metadata key: the discriminator is now a first-class part of the `kernel.v1` contract, so a client built from the `.proto` alone can open a session the kernel accepts. [§1.7.8](#178-reference-instantiation-status-final-for-v1) makes an addition to the §7 wire formats between runbook step 3 and step 7 — spanning both the §7.5 REST body and the §7.8 gRPC messages — not a new protocol version when it touches no circuit element, pinned vector, or digest, provided a specification PR states why; this amendment supplies that statement. `authority` has no circuit involvement, and the two pubkey fields transport values the circuit or account model already binds, as the §7.5 paragraph above explains. None changes a circuit element, a pinned vector, or a digest, and the API layer continues to perform the entire capability gate, so none moves a trust boundary.
 
-A breaking change to any message or procedure is a new package (`kernel.v2`), never an in-place edit ([§1.7.8 v1 freeze](#178-reference-instantiation-status-final-for-v1)). The `ListGroups` … `PublishKeyPackage` procedures are **normative for protocol v2** / `kernel.v2` (the `group_chat` kernel part). A **v1** kernel **MUST NOT** expose them. A **v1** API **MUST NOT** call them. When the v2 API feature is off, omit the REST keys and answer `/v2/groups*` as `404 feature_disabled` without calling the kernel. A v2 kernel whose `group_chat` part is off **MUST** reject those procedures as `NOT_FOUND` / `feature_disabled` / `404`. The API layer **MUST NOT** remap `ErrorInfo.reason`: it forwards `feature_disabled` as HTTP 404 with that machine_code.
+A breaking change to any message or procedure is a new package (`kernel.v2`), never an in-place edit ([§1.7.8 v1 freeze](#178-reference-instantiation-status-final-for-v1)). The `ListGroups` … `PublishKeyPackage` procedures are **normative for protocol v2** / `kernel.v2` (the `group_chat` kernel part). A **v1** kernel **MUST NOT** expose them. A **v1** API **MUST NOT** call them. When the v2 API feature is off, omit the REST keys and answer `/v2/groups*` as `404 feature_disabled` without calling the kernel. A v2 kernel whose `group_chat` part is off **MUST** reject those procedures as `NOT_FOUND` / `feature_disabled` / `404`. The API layer **MUST NOT** remap `ErrorInfo.reason`: it forwards `feature_disabled` as HTTP 404 with that machine_code. Failed v2 group procedures use `ErrorInfo.domain = "kernel.v2"` with the same reason/http_status mapping as `kernel.v1`.
 
 **Error contract (normative, closed, deterministic).** Every failed `kernel.v1` procedure returns a `google.rpc.Status` whose primary `code` is one of the eight gRPC codes below and whose `details` **MUST** include exactly one `google.rpc.ErrorInfo` with:
 
 - `ErrorInfo.reason` = the §7.5 `machine_code` string for that condition (closed enumeration; never invent codes);
 - `ErrorInfo.domain` = `"kernel.v1"`;
 - `ErrorInfo.metadata["http_status"]` = the decimal HTTP status string that pins the REST mapping (e.g. `"400"`, `"401"`, `"410"`, `"503"`) — including the **410 special cases** `challenge_expired` / `session_expired`, which share gRPC `UNAUTHENTICATED` with `unauthorized` but **MUST NOT** collapse to HTTP 401.
+
+When the v2 group procedures exist, the same contract applies with `ErrorInfo.domain = "kernel.v2"`.
 
 The eight admissible gRPC codes and their §7.5 meaning classes:
 
