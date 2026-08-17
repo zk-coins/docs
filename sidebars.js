@@ -10,6 +10,7 @@ const sidebars = {
     'protocol',
     'lightning-bridge',
     'mail-bridge',
+    'group-chat',
     'comparisons',
     'risks',
     'assurance',

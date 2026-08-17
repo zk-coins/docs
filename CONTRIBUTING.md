@@ -60,7 +60,8 @@ docs/
 │   ├── paper-conformance-analysis.md    # Living deviation register + pinned audit snapshot
 │   ├── paper-conformance-remediation.md # Gates A–C
 │   ├── lightning-bridge.md       # Off-by-default operator extension (Lightning)
-│   └── mail-bridge.md            # Off-by-default operator extension (mail)
+│   ├── mail-bridge.md            # Off-by-default operator extension (mail)
+│   └── group-chat.md             # v2 Marmot/MLS group overlay — NOT applicable in v1
 ├── src/css/custom.css            # Theme overrides (Bitcoin orange)
 ├── static/img/                   # Favicon, logos
 ├── docusaurus.config.js          # Site config
