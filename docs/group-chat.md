@@ -4,8 +4,8 @@ title: Group Chat
 
 # Group Chat
 
-:::info Optional operator service
-The Marmot/MLS group overlay is an **API-layer feature**, **off by default**, and independent of the Lightning bridge, the mail bridge, and mandatory NIP-17 one-to-one messaging. An operator enables it as `group_chat` in the closed `features` set of [spec §6.1](/specification#61-components-and-responsibilities). It moves messages, never zkCoins value. Enabling it **MUST NOT** change NIP-17 event formats, relay selection, or one-to-one interoperability.
+:::info v2 feature — NOT applicable in v1
+The Marmot/MLS group overlay is a **v2 feature**. This page is **normative for protocol version v2** and is recorded here for continuity ([spec · Protocol versions](/specification#protocol-versions-token-standards-and-document-editions)). A **v1** node, API, SDK, or app **MUST NOT** advertise `group_chat`, **MUST NOT** add it to the v1 `features` or `kernel_parts` sets, **MUST NOT** serve `/v1/groups*` or `/v2/groups*` (when v2 activates, the routes are `/v2/groups*`), **MUST NOT** expose the group kernel procedures, and **MUST NOT** process kinds `444` / `445` / `30443` as group chat. V.12, A-to-Z, and payment conformance do not depend on this overlay. When v2 activates it, an operator enables `group_chat` independently of the Lightning and mail bridges and of mandatory NIP-17 one-to-one messaging. It moves messages, never zkCoins value. Enabling it **MUST NOT** change NIP-17 event formats, relay selection, or one-to-one interoperability.
 :::
 
 ## Adoption, not a fork
@@ -44,7 +44,7 @@ A hosted provider who holds `op` can decrypt group application messages and impe
 
 MLS state is **non-value-bearing operational state**. Losing it loses group membership and history, never coins. Group state **MUST** be listed among the [spec §6.3](/specification#63-node-portability-and-multi-node-operation) residuals: a node switch does not reconstruct it from seed + Bitcoin.
 
-[Requirement 12](/requirements#12-data-permanence) and [spec §4.8](/specification#48-durability--the-store-everything-invariant) apply in full to every value-bearing artefact, to NIP-17 messages the node stores, and to Marmot **commits and proposals**. Those **MUST NOT** expire. The sole carve-out is Marmot MLS **application** messages when `group_chat` is on: those **MAY** follow the group's Marmot `message-retention` / NIP-40 expiry. A relay the node operates **MAY** honour that tag on a kind-`445` application message only.
+[Requirement 12](/requirements#12-data-permanence) and [spec §4.8](/specification#48-durability--the-store-everything-invariant) apply in full to every value-bearing artefact, to NIP-17 messages the node stores, and to Marmot **commits and proposals**. Those **MUST NOT** expire. The sole carve-out is Marmot MLS **application** messages when `group_chat` is on **(v2 only — NOT applicable in v1)**: those **MAY** follow the group's Marmot `message-retention` / NIP-40 expiry. A relay the node operates **MAY** honour that tag on a kind-`445` application message only.
 
 ## Wire kinds
 
@@ -115,7 +115,7 @@ Dedup on the recovered MLS message id, never on the Nostr event id. Relay `creat
 
 Publish each signed kind-`445` event to every relay in the routing relay list. The first accepted acknowledgement does not cancel the remaining first-attempt obligation (Marmot publish lifecycle).
 
-Kinds `444`, `445`, `30443`, and `10002` are **inert** unless the kernel `group_chat` part is on. A kernel that does not run that part **MUST** ignore them for group-chat processing and **MUST NOT** mutate conversation state from them. The API feature only opens the REST door.
+Kinds `444`, `445`, `30443`, and `10002` are **inert in v1**; in v2, inert unless the kernel `group_chat` part is on. A kernel that does not run that part **MUST** ignore them for group-chat processing and **MUST NOT** mutate conversation state from them. The API feature only opens the REST door.
 
 ## Membership
 
@@ -135,19 +135,19 @@ Group content **MUST NOT** be shown as authenticated NIP-17. There is no silent 
 
 ## Interoperability
 
-A conforming `group_chat` implementation **MUST** exchange application text with a current White Noise / Marmot client that speaks `marmot.transport.nostr` v1 at the pinned revision: create a group, invite via KeyPackage, send, receive, remove a member, and leave. Failure of that interop is a [V.13](/specification#v13-group-chat--marmot-overlay) fail, not a V.12 fail.
+A conforming v2 `group_chat` implementation **MUST** exchange application text with a current White Noise / Marmot client that speaks `marmot.transport.nostr` v1 at the pinned revision: create a group, invite via KeyPackage, send, receive, remove a member, and leave. Failure of that interop is a [V.13](/specification#v13-group-chat--marmot-overlay) fail, not a V.12 fail.
 
-V.12, A-to-Z, and payment conformance **MUST NOT** depend on this overlay. A release that does not advertise `group_chat` skips V.13 and still ships.
+V.13 is a **v2 only** conformance target — **not a v1 target**. V.12, A-to-Z, and payment conformance **MUST NOT** depend on this overlay. A **v1** release **MUST NOT** advertise `group_chat` and skips V.13.
 
 ## REST
 
-The API **MUST NOT** advertise `group_chat` in `GET /v1/info` unless `wallet` is also advertised. When both are on and the kernel `group_chat` part is on, the API exposes the routes below. Crypto stays node-side. The SDK and app **MUST NOT** implement MLS; they call these routes.
+Normative for protocol v2. A **v1** API **MUST NOT** serve these routes. A **v1** API **MUST NOT** advertise `group_chat` in `GET /v1/info` (it is not in the v1 closed `features` set). When protocol v2 activates, advertise `group_chat` only together with `wallet`, and only in the v2 info surface. When both are on and the kernel `group_chat` part is on, the API exposes the routes below. Crypto stays node-side. The SDK and app **MUST NOT** implement MLS; they call these routes.
 
-Auth is the same as `GET /v1/account/state`: a still-valid **ownership** pull session (`Authorization: Bearer <token>`, [spec §5.1](/specification#51-capability-gated-pull), [§7.5](/specification#75-node-rest-api-normative)). A GrantProof session **MUST** be rejected as HTTP `401` `{ "error": "unauthorized" }`. An expired, unknown, or `chan_bind`-mismatching token **MUST** be HTTP `410` `{ "error": "session_expired" }`. No SPEND material is involved. The kernel procedures take `session` + `chan_bind`; the subject comes from the server-side session, never from a client-supplied field.
+Auth is the same as `GET /v1/account/state`: a still-valid **ownership** pull session (`Authorization: Bearer <token>`, [spec §5.1](/specification#51-capability-gated-pull), [§7.5](/specification#75-node-rest-api-normative)) — the v1 pull-session mechanism, used on v2 group routes. A GrantProof session **MUST** be rejected as HTTP `401` `{ "error": "unauthorized" }`. An expired, unknown, or `chan_bind`-mismatching token **MUST** be HTTP `410` `{ "error": "session_expired" }`. No SPEND material is involved. The kernel procedures take `session` + `chan_bind`; the subject comes from the server-side session, never from a client-supplied field. A v1 implementation still **MUST NOT** serve these routes.
 
-**Check order (normative).** For every `/v1/groups*` request the API **MUST** decide in this order and **MUST NOT** continue after the first failure:
+**Check order (normative).** For every `/v2/groups*` request the API **MUST** decide in this order and **MUST NOT** continue after the first failure:
 
-1. If API `group_chat` is off or `wallet` is off → `404 feature_disabled` without calling the kernel.
+1. If this is a v1 API, or API `group_chat` is off, or `wallet` is off → `404 feature_disabled` without calling the kernel. A v1 API hitting `/v2/groups*` also answers 404 (no such v1 surface).
 2. Then the ownership-session checks above → `401 unauthorized` or `410 session_expired`.
 3. Then, if the kernel `group_chat` part is off → `404 feature_disabled` (G-09).
 
@@ -157,15 +157,15 @@ Closed paths, JSON, fail-closed. The MLS group id **MUST NOT** appear on the pub
 
 | Method | Path | Body / Returns |
 |---|---|---|
-| `GET` | `/v1/groups` | `{ groups: [ { group_id, nostr_group_id, epoch, role, title } ] }` — local groups this node already holds; the API **MUST omit** `members` and `relays` |
-| `POST` | `/v1/groups` | body `{ title }` → `{ group_id, nostr_group_id }` — create; `nostr_group_id` is lowercase hex of 32 CSPRNG bytes |
-| `GET` | `/v1/groups/:group_id` | `{ group_id, nostr_group_id, epoch, role, title, members: [ { op_pubkey, role } ], relays: [<relay URL>] }` |
-| `POST` | `/v1/groups/:group_id/messages` | body `{ content }` — a plaintext UTF-8 string → `{ message_id }` — the recovered MLS message id after the node processes the send |
-| `GET` | `/v1/groups/:group_id/messages` | `{ messages: [ { message_id, sender_op_pubkey, content, created_at } ] }` — decrypted application texts the node has already processed; `created_at` **MUST** be the inner unsigned application event's `created_at`; list order **MUST** be ascending `(created_at, message_id)` |
-| `POST` | `/v1/groups/:group_id/invites` | body `{ op_pubkey }` — invitee identity; the node fetches a valid kind `30443` and publishes a Welcome → `{ invited: true }` |
-| `POST` | `/v1/groups/:group_id/members/remove` | body `{ op_pubkey }` — admin-only MLS remove commit → `{ removed: true }`; a non-admin **MUST** get `403` and **MUST NOT** mutate group state |
-| `POST` | `/v1/groups/:group_id/leave` | `{ left: true }` |
-| `POST` | `/v1/groups/keypackages` | body `{ d?: <hex> }` — omit `d` to create a new CSPRNG slot; if `d` is present it **MUST** be 64-char lowercase hex (empty string → `400 malformed_request`) and rotates that slot → `{ d, i }`; unknown `d` → `404 not_found` |
+| `GET` | `/v2/groups` | `{ groups: [ { group_id, nostr_group_id, epoch, role, title } ] }` — local groups this node already holds; the API **MUST omit** `members` and `relays` |
+| `POST` | `/v2/groups` | body `{ title }` → `{ group_id, nostr_group_id }` — create; `nostr_group_id` is lowercase hex of 32 CSPRNG bytes |
+| `GET` | `/v2/groups/:group_id` | `{ group_id, nostr_group_id, epoch, role, title, members: [ { op_pubkey, role } ], relays: [<relay URL>] }` |
+| `POST` | `/v2/groups/:group_id/messages` | body `{ content }` — a plaintext UTF-8 string → `{ message_id }` — the recovered MLS message id after the node processes the send |
+| `GET` | `/v2/groups/:group_id/messages` | `{ messages: [ { message_id, sender_op_pubkey, content, created_at } ] }` — decrypted application texts the node has already processed; `created_at` **MUST** be the inner unsigned application event's `created_at`; list order **MUST** be ascending `(created_at, message_id)` |
+| `POST` | `/v2/groups/:group_id/invites` | body `{ op_pubkey }` — invitee identity; the node fetches a valid kind `30443` and publishes a Welcome → `{ invited: true }` |
+| `POST` | `/v2/groups/:group_id/members/remove` | body `{ op_pubkey }` — admin-only MLS remove commit → `{ removed: true }`; a non-admin **MUST** get `403` and **MUST NOT** mutate group state |
+| `POST` | `/v2/groups/:group_id/leave` | `{ left: true }` |
+| `POST` | `/v2/groups/keypackages` | body `{ d?: <hex> }` — omit `d` to create a new CSPRNG slot; if `d` is present it **MUST** be 64-char lowercase hex (empty string → `400 malformed_request`) and rotates that slot → `{ d, i }`; unknown `d` → `404 not_found` |
 
 Field encodings: `group_id` is an opaque UTF-8 string local to this node; `nostr_group_id`, `op_pubkey`, `d`, `i`, and `message_id` are lowercase hex; `epoch` is a JSON number (`u64`); `role` is the closed string `"admin"` or `"member"`; `title` and `content` are UTF-8 strings; `created_at` is a `u64` Unix timestamp taken from the inner unsigned application event; `relays` is a JSON array of relay URL strings.
 
@@ -187,7 +187,7 @@ Each case **MUST** reject with no conversation mutation:
 | G-06 | Welcome not addressed to the local `op_pubkey` | reject before join |
 | G-07 | signed kind-444 rumor | reject as a non-Marmot rumor |
 | G-08 | silent fallback NIP-17 ↔ Marmot ↔ SMTP | abort; conversations stay separate |
-| G-09 | advertising API `group_chat` without `wallet`, or calling `/v1/groups*` while the kernel `group_chat` part is off | do not advertise `group_chat` without `wallet`; after the session checks, every `/v1/groups*` request answers `404 feature_disabled` |
+| G-09 | advertising API `group_chat` without `wallet`, or calling `/v2/groups*` while the kernel `group_chat` part is off | do not advertise `group_chat` without `wallet`; after the session checks, every `/v2/groups*` request answers `404 feature_disabled` |
 | G-10 | publishing a Welcome to a guessed relay when kind 10050 is absent | abort before every network write; HTTP `409` `{ "error": "invitee_not_ready" }` |
 
 ## Privacy and trust
