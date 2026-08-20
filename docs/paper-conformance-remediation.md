@@ -216,7 +216,7 @@ Desirable post-v1 cryptographic write-ups (a quality goal, **not** a v1 release 
 - privacy under the now chain-visible transaction count, rotating keys and commitments;
 - correctness of the concrete recursive circuit and implementation.
 
-Model checking cannot replace primitive proofs; v1 ships without an implementation audit or gating formal proofs by project decision — the executable harness (Gate B) and the in-spec arguments are the v1 assurance basis ([Assurance Roadmap](/assurance)).
+Model checking cannot replace primitive proofs; the executable harness (Gate B) and the in-spec arguments are the v1 assurance basis ([Assurance Roadmap](/assurance)).
 
 ## 8. Required negative controls
 
