@@ -336,7 +336,7 @@ The existing Apalache certificate targets [`docs@ed7fdece`](https://github.com/z
 
 Model checking also composes axiomatized cryptographic properties; it does not establish that Poseidon, Plonky2 recursion, non-native BIP-340 gadgets or the implementation satisfy those axioms. Liveness and indistinguishability properties have explicit scope reductions.
 
-The project’s own [Assurance Roadmap](/assurance) requires security definitions, paper reductions, machine checking, and implementation conformance before real value. There is no external-audit gate.
+The project’s own [Assurance Roadmap](/assurance) lists security definitions, paper reductions, and machine checking as the verification staircase; for v1 the release-gating artefacts are the in-spec soundness argument and the executable harness. There is no external-audit gate.
 
 **Required actions:**
 
