@@ -226,9 +226,9 @@ Kind `445` carries a public `h` tag equal to the 32-byte `nostr_group_id`. That 
 
 **Risk: The protocol moves shielded coins, not on-chain BTC.**
 
-zkCoins settles its own coins on Bitcoin L1 for ordering and anchoring, but a coin in the system is not itself on-chain BTC — permissionless native assets are the protocol's value model. Carrying real Bitcoin value in and out requires a **bridge**, which is outside the protocol; a fully trustless bridge is an open research problem (an N-of-M federation at launch, a 1-of-n BitVM bridge as the target — see the [bridge research](https://github.com/zk-coins/research/blob/develop/zkcoins-design/BITVM_BRIDGE.md)).
+zkCoins settles its own coins on Bitcoin L1 for ordering and anchoring, but a coin in the system is not itself on-chain BTC — permissionless native assets are the protocol's value model. Carrying real Bitcoin value in and out is **token standard 3 (zkBTC)** — specified in [`zk-coins/zkbtc`](https://github.com/zk-coins/zkbtc), not in this protocol specification. zkBTC is **effectively trustless**: the holder registers as an operator in a cumulative, growth-only set; every new vault is N-of-N over that full set; a later Sybil club cannot omit them; operators cannot steal under 1-of-N setup honesty plus an honest in-window challenger; the holder can exit themselves. A gatekeeper is optional and only gates new mints. It is **not** an open research problem and **not** a federation. Older notes that framed a trustless BTC bridge as unsolved (federation V0, Glock-only path) are superseded by that specification.
 
-**Mitigation:** The protocol's trustless guarantees do not depend on a bridge, and native assets need none. A bridge is a separate, out-of-protocol component: a federation can censor or, at its threshold, collude, while the BitVM target needs only 1-of-n honesty (funds are burned rather than stolen if all operators cheat).
+**Mitigation:** The protocol's trustless guarantees for native assets do not depend on a bridge. For one-to-one BTC backing, follow [`zk-coins/zkbtc`](https://github.com/zk-coins/zkbtc) §1.1.1 — join the operator set before the first mint; do not describe zkBTC as requiring a trusted gatekeeper or federation.
 
 ## No smart contracts
 
