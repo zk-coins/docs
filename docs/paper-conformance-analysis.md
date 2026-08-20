@@ -205,7 +205,7 @@ The research repository already contains a Plonky3 migration investigation, whil
 **Required actions:**
 
 1. Decide whether v1 intentionally ships on deprecated Plonky2. *(Closed for v1: project decision 2026-07-22 pins `plonky2 = "1.1.0"`; see [Paper-Conformance Remediation](/paper-conformance-remediation) F-05.)*
-2. If yes, vendor and maintain the full trusted code base. v1 assurance is the conformance harness and the in-spec soundness argument.
+2. If yes, vendor and maintain the full trusted code base.
 3. Benchmark the exact `C` and `C_balance` circuits, not proxy circuits, and publish the node `build-report.md` ([Implementation Mandate §4](/implementation-mandate)) — still open; the artefact exists on the open node PR, but is not merged to `develop` and is not yet a benchmark publication.
 4. Publish proof-size/proving-time distributions at maximum supported bounds. *(Verifier-data digests for `C` and `C_balance` per network are already pinned in V.4 from the reference implementation on open [`node#231`](https://github.com/zk-coins/node/pull/231); that branch is not merged to `develop`.)*
 
@@ -463,7 +463,6 @@ A deviation is not adequately supported merely because the specification contain
 1. Complete publisher incentive analysis.
 2. Define and test DA retention/retrievability.
 3. Test independent failure domains rather than replica count alone.
-4. v1 assurance is the conformance harness and the in-spec soundness argument.
 
 ## 10. Release decision
 
