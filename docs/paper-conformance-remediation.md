@@ -41,7 +41,7 @@ A later coordinator lane may offer optional constant-size batching only if the d
 
 ## Findings and mandatory disposition
 
-**F-01, F-02, F-04 and F-06 are resolved in the normative spec** by PR #97: the on-chain `(Pk_i, R_i)` state nullifier ([spec §3.1](/specification#31-the-on-chain-object), [§1.7.10](/specification#1710-half-aggregation-with-commitments-nisshac-normative)), first-occurrence rebuild from Bitcoin alone ([spec §3.6](/specification#36-chain-scanning)), predecessor-nullifier anchoring of every state-advancing transition including issuance ([spec §2.1](/specification#21-the-compliance-predicate), [§2.3.1](/specification#231-mint--issuance), [§3.10](/specification#310-transaction-states)), and replication reserved for private bearer data ([spec §4.6](/specification#46-data-availability)). What remains open is the executable-conformance evidence (canonical vectors, Gate B) and F-08's commit-pinned status matrix; F-05 and F-07 are closed by project decision (see the table below), and Gate C contains no external-review step (project decision 2026-07-22). The **selected disposition** column records the design decision each finding drove; the **release gate** column records what still gates mainnet.
+**F-01, F-02, F-04 and F-06 are resolved in the normative spec** by PR #97: the on-chain `(Pk_i, R_i)` state nullifier ([spec §3.1](/specification#31-the-on-chain-object), [§1.7.10](/specification#1710-half-aggregation-with-commitments-nisshac-normative)), first-occurrence rebuild from Bitcoin alone ([spec §3.6](/specification#36-chain-scanning)), predecessor-nullifier anchoring of every state-advancing transition including issuance ([spec §2.1](/specification#21-the-compliance-predicate), [§2.3.1](/specification#231-mint--issuance), [§3.10](/specification#310-transaction-states)), and replication reserved for private bearer data ([spec §4.6](/specification#46-data-availability)). What remains open is the executable-conformance evidence (canonical vectors, Gate B) and F-08's commit-pinned status matrix; F-05 and F-07 are closed by project decision (see the table below). The **selected disposition** column records the design decision each finding drove; the **release gate** column records what still gates mainnet.
 
 | ID | Severity | Problem | Selected disposition | Release gate |
 |---|---:|---|---|---|
@@ -282,7 +282,7 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 - the reference instantiation and backend are final and frozen for v1 ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1), [§1.7.9](/specification#179-proof-system-parameters-normative));
 - a vulnerability disclosure process is published ([SECURITY.md](https://github.com/zk-coins/docs/blob/develop/SECURITY.md)).
 
-By explicit project decision (2026-07-22) there is **no** human-gated audit or proof-review step in Gate C; the executable Gate-B evidence plus the in-spec arguments above are the v1 assurance basis.
+The executable Gate-B evidence plus the in-spec arguments above are the v1 assurance basis.
 
 No real-value deployment proceeds until all three gates are complete.
 
