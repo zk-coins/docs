@@ -27,7 +27,7 @@ Selected remediation proposal: [`zk-coins/docs#96`](https://github.com/zk-coins/
 
 **Post-baseline architecture decision.** After the specification baseline reviewed here, [`research@f392fa0`](https://github.com/zk-coins/research/blob/f392fa0e4f55d68e6135e7eced15ef719118e545/zkcoins-design/ACCUMULATOR_SELF_PUBLISH.md) accepted on-chain half-aggregated state nullifiers, Bitcoin first occurrence and conditional NAV as the project plan of record. That later decision does not retroactively change this audit's findings against `docs@6816fc3`; it controls their selected remediation. `docs#96` is aligned to it, and the former full-batch-envelope alternative is rejected because it would retain the serialized `prev_root` writer.
 
-**Register maintenance note (2026-07-22).** The audit text on this page is a pinned snapshot against `docs@6816fc3` and is not edited. The **register table below is the living deviation index** the [contribution rule](https://github.com/zk-coins/docs/blob/develop/CONTRIBUTING.md) points to: a **Status (current develop)** column tracks each row against the current normative specification, and rows **D-17–D-20** register the accepted v1 boundaries adopted on 2026-07-22. Where a row's *Current specification* column still describes the retired pre-#97 construction, the **status column is authoritative** for what holds today. Sections 5–12 below (perspectives, evidence tables, recommended status) are part of the pinned snapshot and are **not** release-governing: the v1 release gates are solely the [Paper-Conformance Remediation](/paper-conformance-remediation) Gates A–C, the [Assurance Roadmap](/assurance) gates, and the [implementation-mandate runbook](/implementation-mandate) — none of which contains an external-review step (project decision 2026-07-22). For rows graded AMBER in the historical columns whose Status (current develop) is CURRENT/DECIDED/ACCEPTED, the v1 disposition is the [Risks](/risks) verdict table plus the executable harness — the historical grade is not a v1 gate. In particular, the "obtain an external audit" / "subject to external audit" action items in the pinned Sections 8–10 (e.g. §8 required-actions, §9 P3 step 4, §10 recommended status) are **superseded** and are **not** v1 release gates — an autonomous implementer follows the Gates A–C / Assurance / runbook path, which has no external-audit step (project decision 2026-07-22).
+**Register maintenance note (2026-07-22).** The text on this page is a pinned snapshot against `docs@6816fc3`; superseded v1-gate wording in §§5–10 MAY be corrected so it does not contradict living policy, while remaining historical phrasing stays superseded and is not release-governing. The **register table below is the living deviation index** the [contribution rule](https://github.com/zk-coins/docs/blob/develop/CONTRIBUTING.md) points to: a **Status (current develop)** column tracks each row against the current normative specification, and rows **D-17–D-20** register the accepted v1 boundaries adopted on 2026-07-22. Where a row's *Current specification* column still describes the retired pre-#97 construction, the **status column is authoritative** for what holds today. Sections 5–12 below (perspectives, evidence tables, recommended status) are part of the pinned snapshot and are **not** release-governing: the v1 release gates are solely the [Paper-Conformance Remediation](/paper-conformance-remediation) Gates A–C, the [Assurance Roadmap](/assurance) gates, and the [implementation-mandate runbook](/implementation-mandate) (project decision 2026-07-22). For rows graded AMBER in the historical columns whose Status (current develop) is CURRENT/DECIDED/ACCEPTED, the v1 disposition is the [Risks](/risks) verdict table plus the executable harness — the historical grade is not a v1 gate. An autonomous implementer follows the Gates A–C / Assurance / runbook path (project decision 2026-07-22).
 
 ## 0. Executive summary
 
@@ -146,6 +146,7 @@ Legend:
 | D-19 | Publisher ash-chain linkage on reuse | Not addressed by the papers (no fee coin there). | A v1 hand-off discloses the pre-anchor `Pkᵢ` to the chosen publisher, which correlates that transition with the requester's transport identity and, on reuse, with its other hand-offs; under the deferred fee mechanism a reused publisher additionally links consecutive transitions via fee-coin `CoinProof` fields ([spec §3.8.1](/specification#38-fees-and-economics)). | ACCEPTED-V1 | None — accepted boundary, final for v1; rotation/self-publish removes the edge at no protocol cost ([Risks](/risks)). | ACCEPTED, final for v1 — voided by publisher rotation. |
 | D-20 | Fee pricing is off-protocol | Paper defers fee mechanics similarly. | No fee at all in v1: a publisher sponsors the inscription cost and is not reimbursed, so sustainability rests on a volunteer rather than on pricing. Self-publish is the universal escape ([spec §3.8](/specification#38-fees-and-economics)). | ACCEPTED-V1 | None — incentive verdict **holds under stated assumptions**, recorded in [Risks](/risks). | ACCEPTED, final for v1 — **sponsored**: no price to discover, sustainability rests on a volunteer, and self-publish is the universal escape. Never correctness-relevant. |
 | D-21 | Wallet-verifiable key rotation | not in the papers (wallet ≡ prover there) | a sixth hiding ProofData field `npk_commit = H("zkCoins/v1/NpkCommit" ‖ next_pubkey ‖ npk_rand)` (SHA-256), serialize 192 bytes; the thin wallet recomputes it and refuses to sign a substituted rotation key (fail-closed, [spec §2.1 clause 2](/specification#21-the-compliance-predicate), [§7.5](/specification#75-node-rest-api-normative)) | GREEN (extension) | None for v1 — wallet-native SHA-256, byte-pinned V.8 fixture. | CURRENT — an **extension** closing the hosted-prover rotation-capture ([Requirement 5](/requirements)); not a deviation from a paper construction, and no release gate beyond the executable harness (V.8 192-byte fixture). |
+| D-22 | Marmot/MLS group-chat overlay | Not part of either source. | **v2 feature — NOT applicable in v1**. Adopts Marmot (`marmot.transport.nostr` v1 at git `4a2bc65f8db5`) over MLS RFC 9420. MLS leaf/HPKE-init secrets are CSPRNG-generated node-held operational state; epoch secrets and `group_event_key` come from the MLS key schedule; none are derived from `op`/`seed`/SPEND. A hosted `op` holder can read groups — the same operational-bundle boundary as NIP-17. Does not change NIP-17 one-to-one, V.12, A-to-Z, or payment conformance. | AMBER | None — no paper proof to inherit. Wire + G-01–G-10 + White Noise interop are V.13, a **v2 target** (required only when the v2 layer advertises `group_chat`). | CURRENT — application-layer addition (D-15 class), not a paper-security deviation ([Group chat](/group-chat), [spec §6.1](/specification#61-components-and-responsibilities), [§7.3](/specification#73-nostr-event-kinds-normative), [V.13](/specification#v13-group-chat--marmot-overlay)). |
 
 ## 5. Ten expert perspectives
 
@@ -204,7 +205,7 @@ The research repository already contains a Plonky3 migration investigation, whil
 **Required actions:**
 
 1. Decide whether v1 intentionally ships on deprecated Plonky2. *(Closed for v1: project decision 2026-07-22 pins `plonky2 = "1.1.0"`; see [Paper-Conformance Remediation](/paper-conformance-remediation) F-05.)*
-2. If yes, vendor and maintain the full trusted code base and obtain an external audit. *(Audit is not a v1 release gate by the same decision.)*
+2. If yes, vendor and maintain the full trusted code base.
 3. Benchmark the exact `C` and `C_balance` circuits, not proxy circuits, and publish the node `build-report.md` ([Implementation Mandate §4](/implementation-mandate)) — still open; the artefact exists on the open node PR, but is not merged to `develop` and is not yet a benchmark publication.
 4. Publish proof-size/proving-time distributions at maximum supported bounds. *(Verifier-data digests for `C` and `C_balance` per network are already pinned in V.4 from the reference implementation on open [`node#231`](https://github.com/zk-coins/node/pull/231); that branch is not merged to `develop`.)*
 
@@ -335,7 +336,7 @@ The existing Apalache certificate targets [`docs@ed7fdece`](https://github.com/z
 
 Model checking also composes axiomatized cryptographic properties; it does not establish that Poseidon, Plonky2 recursion, non-native BIP-340 gadgets or the implementation satisfy those axioms. Liveness and indistinguishability properties have explicit scope reductions.
 
-The project’s own [Assurance Roadmap](https://github.com/zk-coins/docs/blob/6816fc398ea35284e640ed8e0b326fa96880cf7d/docs/assurance.md) correctly requires security definitions, paper reductions, machine checking, implementation conformance and external audit before real value.
+The project’s own [Assurance Roadmap](/assurance) lists security definitions, paper reductions, and machine checking as the verification staircase; for v1 the release-gating artefacts are the in-spec soundness argument and the executable harness.
 
 **Required actions:**
 
@@ -383,7 +384,7 @@ The project’s own [Assurance Roadmap](https://github.com/zk-coins/docs/blob/68
 - **Severity:** HIGH before mainnet
 - **Type:** proof-system lifecycle
 - **Impact:** Frozen dependencies accumulate compiler, security and ecosystem risk. Migrating later changes proof encodings, circuit digests and possibly field/hash assumptions.
-- **Fix acceptance:** explicit v1 backend decision, maintained fork and audit, or pre-v1 migration.
+- **Fix acceptance:** explicit v1 backend decision, maintained fork and audit, or pre-v1 migration. *(Closed for v1: project decision 2026-07-22 pins `plonky2 = "1.1.0"`; no fork audit is a v1 gate — see [Paper-Conformance Remediation](/paper-conformance-remediation) F-05.)*
 
 ### F-06 — DA independence and indefinite retention are asserted but not verifiable
 
@@ -462,7 +463,6 @@ A deviation is not adequately supported merely because the specification contain
 1. Complete publisher incentive analysis.
 2. Define and test DA retention/retrievability.
 3. Test independent failure domains rather than replica count alone.
-4. Obtain an external cryptographic and implementation audit.
 
 ## 10. Release decision
 
@@ -476,7 +476,7 @@ The current specification is suitable as a **research target design**. It is not
 
 Recommended public status:
 
-> **zkCoins is a paper-inspired, core-compatible successor design. Its PCD/CSV foundation follows zkCoins and Shielded CSV, while its batching, nullifier accumulator, data-availability, recovery and publisher mechanisms are documented protocol deviations that remain subject to current-baseline proofs, implementation evidence and external audit.**
+> **zkCoins is a paper-inspired, core-compatible successor design. Its PCD/CSV foundation follows zkCoins and Shielded CSV, while its batching, nullifier accumulator, data-availability, recovery and publisher mechanisms are documented protocol deviations that remain subject to current-baseline proofs and implementation evidence.**
 
 ## 11. Primary and project sources
 

@@ -35,7 +35,10 @@ Every incentive/residual verdict for v1, closed per the [Assurance Roadmap](/ass
 | Manifest `blob_store` open recovery-overlap upload (Sybil spam) | **accepted operational residual** | per-source admission control bounds but cannot cryptographically prevent Sybil-rotated spam — the same open-acceptance surface as an open `seed_relay`; operator admission policy |
 | Operator backup duty enforced operationally, not by protocol | **holds under stated assumptions** | operator MUST keep a real-time backup of the PostgreSQL database and blob store; deliberately an out-of-repo hosting concern |
 | Unobservable total supply (token standard 1) | **accepted v1 boundary** | documented issuer-trust (register D-13); token standard 2 provides the auditable cap |
-| Carrying real Bitcoin requires a bridge | **holds** (out of core scope) | bridges are explicit, off-by-default operator extensions |
+| Hosted `op` holder reads Marmot groups | **holds under stated assumptions** when v2 activates `group_chat` (same operational-bundle boundary as NIP-17, [spec §6.6](/specification#66-threat-model-and-trust-configurations)); **does not apply in v1** | **v2 feature — NOT applicable in v1**; self-host is the private path |
+| Lost MLS state is not lost funds | **holds** when v2 activates `group_chat`; **does not apply in v1** | MLS credentials are non-value-bearing; Requirement 12's sole carve-out is Marmot application-message expiry **(v2 only — NOT applicable in v1)** |
+| Kind 445 metadata (`h` tag, volume) | **accepted operational residual** when v2 activates `group_chat`; **does not apply in v1** | `nostr_group_id` is random, not member-derived; ephemeral pubkey is fresh; plaintext stays under the group-event key |
+| Carrying real Bitcoin | **holds** (out of this protocol catalog) | native assets settle on Bitcoin L1 and need no bridge; 1:1 BTC is specified in [`zk-BTC/zkbtc`](https://github.com/zk-BTC/zkbtc/blob/main/spec/ZKBTC_TOKEN.md) (effectively-trustless claim: §1.1.1), outside this document's token-standard catalog |
 | No smart contracts | **holds** (by scope) | deliberate non-goal of v1 |
 | Regulatory uncertainty | **n/a — not a protocol mechanism** | environment risk, catalogued for operators |
 
@@ -195,13 +198,37 @@ This anchoring closes the mint-fork: two mints advancing from the same prior sta
 
 **Mitigation:** Holders trust the creator as they would any single-issuer asset. Protocol-enforced, auditable supply is available in `IssuanceTerms_v2`, which bounds total emission with an in-circuit `cap_total` ([spec §6.5](/specification#65-issuance--token-standards)).
 
-## Carrying real Bitcoin requires a bridge
+## Hosted operator can read Marmot groups
+
+**Risk: When protocol v2 activates `group_chat`, a hosted provider who holds `op` can decrypt group application messages and impersonate the account in groups.** This risk **does not apply in v1** (`group_chat` is a **v2 feature — NOT applicable in v1**).
+
+When v2 `group_chat` is on, the node that holds the operational bundle also holds the MLS client credential store ([Group chat](/group-chat), [spec §6.6](/specification#66-threat-model-and-trust-configurations)). That is the existing operational-bundle boundary, not a new one. MLS leaf, HPKE, and epoch secrets are not derived from `op`; the holder of `op` still reads groups because it holds those credentials next to the bundle.
+
+**Mitigation:** Self-host. Wallet-held MLS keys are not a hosted end-to-end exception and **MUST NOT** be presented as one.
+
+## Lost MLS state is not lost funds
+
+**Risk: When protocol v2 activates `group_chat`, switching nodes or losing the MLS credential store drops group membership and history.** This risk **does not apply in v1**.
+
+MLS state is non-value-bearing operational state. It is not seed- or chain-derived and is listed as a [spec §6.3](/specification#63-node-portability-and-multi-node-operation) residual. [Requirement 12](/requirements#12-data-permanence) still applies; its sole carve-out is Marmot application-message expiry when `group_chat` is on **(v2 only — NOT applicable in v1)**. Lost credentials are a portability residual, not a retention rule.
+
+**Mitigation:** Transfer the credential store when switching nodes if group continuity is required. Losing it cannot spend, forge, or destroy coins.
+
+## Kind 445 metadata
+
+**Risk: When protocol v2 activates `group_chat`, relays see `nostr_group_id`, a fresh ephemeral pubkey, timing, and volume on every group message.** This residual **does not apply in v1**.
+
+Kind `445` carries a public `h` tag equal to the 32-byte `nostr_group_id`. That id is random and is not derived from member keys or the MLS group id, so it does not link members across groups. Welcomes look like NIP-59 DMs to the invitee. KeyPackages are public and authored by `op_pubkey`.
+
+**Mitigation:** This is transport metadata, not plaintext. The residual is volume and group-routing visibility at the relays on the routing list.
+
+## Carrying real Bitcoin
 
 **Risk: The protocol moves shielded coins, not on-chain BTC.**
 
-zkCoins settles its own coins on Bitcoin L1 for ordering and anchoring, but a coin in the system is not itself on-chain BTC — permissionless native assets are the protocol's value model. Carrying real Bitcoin value in and out requires a **bridge**, which is outside the protocol; a fully trustless bridge is an open research problem (an N-of-M federation at launch, a 1-of-n BitVM bridge as the target — see the [bridge research](https://github.com/zk-coins/research/blob/develop/zkcoins-design/BITVM_BRIDGE.md)).
+zkCoins settles its own coins on Bitcoin L1 for ordering and anchoring, but a coin in the system is not itself on-chain BTC — permissionless native assets are the protocol's value model. One-to-one BTC backing is specified in [`zk-BTC/zkbtc`](https://github.com/zk-BTC/zkbtc/blob/main/spec/ZKBTC_TOKEN.md), outside this protocol catalog. zkBTC is **effectively trustless** in that spec's §1.1.1 sense: the holder registers as an operator **before the first mint** in a cumulative, growth-only set and **must not sign a malicious graph**; every new vault is N-of-N over that full set; a later Sybil club cannot omit them; operators cannot steal under 1-of-N setup honesty, an honest in-window challenger, **and sound circuit/graph crypto** (a critical soundness bug is the theft case); the holder can exit themselves. A private-fork mint (Attack A) is independent of that join and is a Bitcoin-class residual unless a designated gatekeeper honestly performs R-04. A gatekeeper is optional and only gates new mints. It is not a federation.
 
-**Mitigation:** The protocol's trustless guarantees do not depend on a bridge, and native assets need none. A bridge is a separate, out-of-protocol component: a federation can censor or, at its threshold, collude, while the BitVM target needs only 1-of-n honesty (funds are burned rather than stolen if all operators cheat).
+**Mitigation:** The protocol's trustless guarantees for native assets do not depend on a BTC peg. For one-to-one BTC backing, follow [`zk-BTC/zkbtc`](https://github.com/zk-BTC/zkbtc/blob/main/spec/ZKBTC_TOKEN.md) §1.1.1: join the operator set before the first mint to close the Sybil-pool drain; the remaining assumptions (challenger, sound crypto, Attack A / `D_mint`) stay those of that specification.
 
 ## No smart contracts
 

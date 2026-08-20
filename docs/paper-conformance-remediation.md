@@ -41,7 +41,7 @@ A later coordinator lane may offer optional constant-size batching only if the d
 
 ## Findings and mandatory disposition
 
-**F-01, F-02, F-04 and F-06 are resolved in the normative spec** by PR #97: the on-chain `(Pk_i, R_i)` state nullifier ([spec §3.1](/specification#31-the-on-chain-object), [§1.7.10](/specification#1710-half-aggregation-with-commitments-nisshac-normative)), first-occurrence rebuild from Bitcoin alone ([spec §3.6](/specification#36-chain-scanning)), predecessor-nullifier anchoring of every state-advancing transition including issuance ([spec §2.1](/specification#21-the-compliance-predicate), [§2.3.1](/specification#231-mint--issuance), [§3.10](/specification#310-transaction-states)), and replication reserved for private bearer data ([spec §4.6](/specification#46-data-availability)). What remains open is the executable-conformance evidence (canonical vectors, Gate B) and F-08's commit-pinned status matrix; F-05 and F-07 are closed by project decision (see the table below), and Gate C contains no external-review step (project decision 2026-07-22). The **selected disposition** column records the design decision each finding drove; the **release gate** column records what still gates mainnet.
+**F-01, F-02, F-04 and F-06 are resolved in the normative spec** by PR #97: the on-chain `(Pk_i, R_i)` state nullifier ([spec §3.1](/specification#31-the-on-chain-object), [§1.7.10](/specification#1710-half-aggregation-with-commitments-nisshac-normative)), first-occurrence rebuild from Bitcoin alone ([spec §3.6](/specification#36-chain-scanning)), predecessor-nullifier anchoring of every state-advancing transition including issuance ([spec §2.1](/specification#21-the-compliance-predicate), [§2.3.1](/specification#231-mint--issuance), [§3.10](/specification#310-transaction-states)), and replication reserved for private bearer data ([spec §4.6](/specification#46-data-availability)). What remains open is the executable-conformance evidence (canonical vectors, Gate B) and F-08's commit-pinned status matrix; F-05 and F-07 are closed by project decision (see the table below). The **selected disposition** column records the design decision each finding drove; the **release gate** column records what still gates mainnet.
 
 | ID | Severity | Problem | Selected disposition | Release gate |
 |---|---:|---|---|---|
@@ -216,7 +216,7 @@ Desirable post-v1 cryptographic write-ups (a quality goal, **not** a v1 release 
 - privacy under the now chain-visible transaction count, rotating keys and commitments;
 - correctness of the concrete recursive circuit and implementation.
 
-Model checking cannot replace primitive proofs; v1 ships without an implementation audit or gating formal proofs by project decision — the executable harness (Gate B) and the in-spec arguments are the v1 assurance basis ([Assurance Roadmap](/assurance)).
+Model checking cannot replace primitive proofs; the executable harness (Gate B) and the in-spec arguments are the v1 assurance basis ([Assurance Roadmap](/assurance)).
 
 ## 8. Required negative controls
 
@@ -276,13 +276,13 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 ### Gate C — assurance
 
 - the specification's soundness summary ([spec §2.4](/specification#24-soundness-summary)) and security-properties summary ([spec §6.7](/specification#67-security-properties-summary)) exist, every clause reference they cite resolves, every Requirement 1–13 has a row, and D-17–D-19 appear in the [§6.7 precise privacy statement](/specification#67-security-properties-summary), D-16 is stated in [spec §3.9](/specification#39-finality-and-reorg-handling), and D-20 has its row in the [Risks](/risks) verdict table (machine-checkable link/row checks);
-- **D-05** passes its release gate: the **V.11 differential-test** of the in-circuit RFC-6962 log-consistency/inclusion arithmetization against an independent reference ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1), V.11) — executed at the negative-controls / conformance step ([Implementation Mandate](/implementation-mandate) step 5/6) as part of the executable gate, not a separate human review — alongside the existing D-16/D-17–D-20 checks above;
+- **D-05** passes its release gate: the **V.11 differential-test** of the in-circuit RFC-6962 log-consistency/inclusion arithmetization against an independent reference ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1), V.11) — executed at the negative-controls / conformance step ([Implementation Mandate](/implementation-mandate) step 5/6) as part of the executable gate — alongside the existing D-16/D-17–D-20 checks above;
 - **D-05 network-parameter agreement gate:** `network-params.json` is a byte-exact canonical artefact (spec §3.6); every node MUST load the pinned per-network `activation_height` and refuse readiness (`/health/ready` `503`) on mismatch; and a conformance test MUST confirm two independent nodes scanning the same tip from the **same** pinned `activation_height` produce the identical `(size, mth)` / `nav_root`, while a **differing** `activation_height` diverges them **whenever a valid nullifier is admitted in the interval between the two heights** — the conformance fixture **MUST** include at least one such nullifier so the divergence is observably guaranteed — the executable check for the parameter-agreement residual (D-05 (iv)).
 - the [Risks](/risks) verdict table has no open and no broken row;
 - the reference instantiation and backend are final and frozen for v1 ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1), [§1.7.9](/specification#179-proof-system-parameters-normative));
 - a vulnerability disclosure process is published ([SECURITY.md](https://github.com/zk-coins/docs/blob/develop/SECURITY.md)).
 
-By explicit project decision (2026-07-22) there is **no external audit, external proof review, or other human-gated step** in Gate C; the executable Gate-B evidence plus the in-spec arguments above are the v1 assurance basis.
+The executable Gate-B evidence plus the in-spec arguments above are the v1 assurance basis.
 
 No real-value deployment proceeds until all three gates are complete.
 

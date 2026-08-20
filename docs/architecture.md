@@ -79,6 +79,8 @@ Each feature is off until the operator enables it, and `GET /v1/info` advertises
 | `lightning_bridge` | Lightning ⇄ zkCoins swaps at the operator edge ([Lightning bridge](/lightning-bridge)) |
 | `mail_bridge` | SMTP interop for the account's NIP-05 identifier ([Mail bridge](/mail-bridge)) |
 
+`group_chat` is a **v2 feature — NOT applicable in v1** ([Group chat](/group-chat)).
+
 Publishing and proving are kernel work in every case; the feature opens the door, the kernel does the job and owns the state.
 
 ## Deployments

@@ -10,12 +10,14 @@ const sidebars = {
     'protocol',
     'lightning-bridge',
     'mail-bridge',
+    'group-chat',
     'comparisons',
     'risks',
     'assurance',
     'paper-conformance-analysis',
     'paper-conformance-remediation',
     'proposals-v1.3-bootstrap-seeds',
+    'proposals-kernel-v1-wire-completeness',
   ],
 };
 
