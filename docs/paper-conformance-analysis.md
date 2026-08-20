@@ -205,7 +205,7 @@ The research repository already contains a Plonky3 migration investigation, whil
 **Required actions:**
 
 1. Decide whether v1 intentionally ships on deprecated Plonky2. *(Closed for v1: project decision 2026-07-22 pins `plonky2 = "1.1.0"`; see [Paper-Conformance Remediation](/paper-conformance-remediation) F-05.)*
-2. If yes, vendor and maintain the full trusted code base and obtain an external audit. *(Audit is not a v1 release gate by the same decision.)*
+2. If yes, vendor and maintain the full trusted code base. There is no external-audit gate; v1 assurance is the conformance harness and the in-spec soundness argument.
 3. Benchmark the exact `C` and `C_balance` circuits, not proxy circuits, and publish the node `build-report.md` ([Implementation Mandate §4](/implementation-mandate)) — still open; the artefact exists on the open node PR, but is not merged to `develop` and is not yet a benchmark publication.
 4. Publish proof-size/proving-time distributions at maximum supported bounds. *(Verifier-data digests for `C` and `C_balance` per network are already pinned in V.4 from the reference implementation on open [`node#231`](https://github.com/zk-coins/node/pull/231); that branch is not merged to `develop`.)*
 
@@ -336,7 +336,7 @@ The existing Apalache certificate targets [`docs@ed7fdece`](https://github.com/z
 
 Model checking also composes axiomatized cryptographic properties; it does not establish that Poseidon, Plonky2 recursion, non-native BIP-340 gadgets or the implementation satisfy those axioms. Liveness and indistinguishability properties have explicit scope reductions.
 
-The project’s own [Assurance Roadmap](https://github.com/zk-coins/docs/blob/6816fc398ea35284e640ed8e0b326fa96880cf7d/docs/assurance.md) correctly requires security definitions, paper reductions, machine checking, implementation conformance and external audit before real value.
+The project’s own [Assurance Roadmap](https://github.com/zk-coins/docs/blob/6816fc398ea35284e640ed8e0b326fa96880cf7d/docs/assurance.md) requires security definitions, paper reductions, machine checking, and implementation conformance before real value. There is no external-audit gate.
 
 **Required actions:**
 
@@ -477,7 +477,7 @@ The current specification is suitable as a **research target design**. It is not
 
 Recommended public status:
 
-> **zkCoins is a paper-inspired, core-compatible successor design. Its PCD/CSV foundation follows zkCoins and Shielded CSV, while its batching, nullifier accumulator, data-availability, recovery and publisher mechanisms are documented protocol deviations that remain subject to current-baseline proofs, implementation evidence and external audit.**
+> **zkCoins is a paper-inspired, core-compatible successor design. Its PCD/CSV foundation follows zkCoins and Shielded CSV, while its batching, nullifier accumulator, data-availability, recovery and publisher mechanisms are documented protocol deviations that remain subject to current-baseline proofs and implementation evidence.**
 
 ## 11. Primary and project sources
 

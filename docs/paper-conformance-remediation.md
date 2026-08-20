@@ -282,7 +282,7 @@ PR #97 applied the following edits to the normative spec; this map remains the t
 - the reference instantiation and backend are final and frozen for v1 ([spec §1.7.8](/specification#178-reference-instantiation-status-final-for-v1), [§1.7.9](/specification#179-proof-system-parameters-normative));
 - a vulnerability disclosure process is published ([SECURITY.md](https://github.com/zk-coins/docs/blob/develop/SECURITY.md)).
 
-By explicit project decision (2026-07-22) there is **no external audit, external proof review, or other human-gated step** in Gate C; the executable Gate-B evidence plus the in-spec arguments above are the v1 assurance basis.
+By explicit project decision (2026-07-22) there is **no** human-gated audit or proof-review step in Gate C; the executable Gate-B evidence plus the in-spec arguments above are the v1 assurance basis.
 
 No real-value deployment proceeds until all three gates are complete.
 
